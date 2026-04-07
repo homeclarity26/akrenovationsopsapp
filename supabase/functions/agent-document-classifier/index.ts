@@ -1,0 +1,212 @@
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const res = await fetch(`${supabaseUrl}/functions/v1/assemble-context`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+      body: JSON.stringify({
+        user_id: 'system', user_role: 'admin', agent_name: agentName,
+        capability_required: 'query_financials', query,
+      }),
+    })
+    if (!res.ok) return null
+    const ctx = await res.json()
+    return ctx.denied ? null : (ctx.system_prompt ?? null)
+  } catch { return null }
+}
+
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': Deno.env.get('ANTHROPIC_API_KEY') ?? '',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+  })
+  if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
+  const data = await res.json()
+  return data.content?.[0]?.text ?? ''
+}
+
+async function callClaudeVision(systemPrompt: string, imageUrl: string, userMessage: string, maxTokens = 800): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': Deno.env.get('ANTHROPIC_API_KEY') ?? '',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: [
+            { type: 'image', source: { type: 'url', url: imageUrl } },
+            { type: 'text', text: userMessage },
+          ],
+        },
+      ],
+    }),
+  })
+  if (!res.ok) throw new Error(`Claude vision error: ${await res.text()}`)
+  const data = await res.json()
+  return data.content?.[0]?.text ?? ''
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
+
+    const body = await req.json().catch(() => ({}))
+    const { file_id } = body
+
+    if (!file_id) {
+      return new Response(JSON.stringify({ error: 'file_id required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    await callAssembleContext('agent-document-classifier', 'classify uploaded document type and update project files record')
+
+    const systemPrompt = `You are an AI document classifier for AK Renovations, a residential remodeling contractor.
+Classify the document and return ONLY a valid JSON object:
+{
+  "document_type": "sub_quote|invoice|receipt|permit|blueprint|contract|spec_sheet|photo|unknown",
+  "file_category": "blueprint|spec_sheet|permit|contract|proposal|invoice|insurance|photo|other",
+  "budget_category": "materials|labor|subcontractor|equipment_rental|permit|delivery|misc|null",
+  "is_permit": true or false,
+  "permit_details": {
+    "permit_type": "building|electrical|plumbing|mechanical|demo or null",
+    "permit_number": "if visible",
+    "jurisdiction": "city/county if visible",
+    "status": "applied|approved|expired or null"
+  },
+  "confidence": "high|medium|low",
+  "notes": "brief description of what the document appears to be"
+}
+Return ONLY the JSON.`
+
+    // Get file record
+    const { data: file, error: fileError } = await supabase
+      .from('project_files')
+      .select('id,file_url,project_id,file_name,file_type,category')
+      .eq('id', file_id)
+      .single()
+
+    if (fileError || !file) throw fileError ?? new Error('File not found')
+
+    const isImage = file.file_type?.startsWith('image') || /\.(jpg|jpeg|png|webp|gif)$/i.test(file.file_url)
+
+    let classificationResult: string
+    if (isImage) {
+      classificationResult = await callClaudeVision(
+        systemPrompt,
+        file.file_url,
+        `Classify this document. File name: ${file.file_name}. Return JSON.`,
+        600,
+      )
+    } else {
+      classificationResult = await callClaude(
+        systemPrompt,
+        `Classify this document based on its file name and URL.\nFile name: ${file.file_name}\nFile type: ${file.file_type}\nURL: ${file.file_url}\nReturn JSON.`,
+        600,
+      )
+    }
+
+    let classification: Record<string, unknown> = {}
+    try {
+      classification = JSON.parse(classificationResult.replace(/```json\n?|\n?```/g, '').trim())
+    } catch {
+      const jsonMatch = classificationResult.match(/\{[\s\S]+\}/)
+      if (jsonMatch) {
+        try { classification = JSON.parse(jsonMatch[0]) } catch { classification = {} }
+      }
+    }
+
+    // Update project_files record
+    const updateData: Record<string, unknown> = {}
+    if (classification.file_category) updateData.category = classification.file_category
+    if (Object.keys(updateData).length > 0) {
+      await supabase.from('project_files').update(updateData).eq('id', file_id)
+    }
+
+    // If it's a permit, create/update permit record
+    if (classification.is_permit && file.project_id) {
+      const permitDetails = classification.permit_details as Record<string, unknown> | undefined
+      if (permitDetails) {
+        // Check if permit record already exists for this project/type
+        const { data: existingPermit } = await supabase
+          .from('permits')
+          .select('id')
+          .eq('project_id', file.project_id)
+          .eq('permit_type', permitDetails.permit_type ?? 'building')
+          .single()
+
+        if (!existingPermit) {
+          await supabase.from('permits').insert({
+            project_id: file.project_id,
+            permit_type: (permitDetails.permit_type as string) ?? 'building',
+            permit_number: (permitDetails.permit_number as string) ?? null,
+            jurisdiction: (permitDetails.jurisdiction as string) ?? null,
+            status: (permitDetails.status as string) ?? 'needed',
+            document_url: file.file_url,
+          })
+        } else {
+          // Update with new document url if we have a permit number now
+          if (permitDetails.permit_number) {
+            await supabase
+              .from('permits')
+              .update({
+                permit_number: permitDetails.permit_number,
+                jurisdiction: permitDetails.jurisdiction ?? null,
+                status: (permitDetails.status as string) ?? 'approved',
+                document_url: file.file_url,
+              })
+              .eq('id', existingPermit.id)
+          }
+        }
+      }
+    }
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        file_id,
+        classification,
+        updates_applied: Object.keys(updateData),
+        permit_created: classification.is_permit === true,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    )
+  } catch (err) {
+    console.error('agent-document-classifier error:', err)
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+})

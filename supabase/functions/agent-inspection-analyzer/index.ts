@@ -1,0 +1,104 @@
+// K54: Inspection analyzer agent (Claude vision)
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const res = await fetch(`${supabaseUrl}/functions/v1/assemble-context`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
+      body: JSON.stringify({
+        user_id: 'system', user_role: 'admin', agent_name: agentName,
+        capability_required: 'analyze_photo', query,
+      }),
+    })
+    if (!res.ok) return null
+    const ctx = await res.json()
+    return ctx.denied ? null : (ctx.system_prompt ?? null)
+  } catch { return null }
+}
+
+async function callClaudeVision(systemPrompt: string, userContent: any[], maxTokens = 1024): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': Deno.env.get('ANTHROPIC_API_KEY') ?? '',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userContent }],
+    }),
+  })
+  if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
+  const data = await res.json()
+  return data.content?.[0]?.text ?? ''
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
+
+    const { inspection_id } = await req.json()
+    const { data: inspection } = await supabase.from('inspection_reports').select('*').eq('id', inspection_id).single()
+    if (!inspection) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: corsHeaders })
+
+    const { data: project } = await supabase.from('projects').select('project_type, title').eq('id', inspection.project_id).single()
+
+    const basePrompt = await callAssembleContext('agent-inspection-analyzer', 'analyze inspection photos')
+    const systemPrompt = (basePrompt ??
+      'You are an AI assistant for AK Renovations, a high-end residential remodeling contractor in Summit County, Ohio.')
+      + `\n\nINSPECTION ANALYZER\nReview job-site photos. Identify issues, code concerns, quality problems.`
+
+    const areas = (inspection.areas as any[]) ?? []
+    const analyses = [] as any[]
+    for (const area of areas) {
+      try {
+        const result = await callClaudeVision(systemPrompt, [
+          { type: 'image', source: { type: 'url', url: area.photo_url } },
+          { type: 'text', text: `Photo of: ${area.area_name}
+Inspector condition: ${area.condition}
+Inspector notes: ${area.notes ?? ''}
+Project type: ${project?.project_type}
+Inspection stage: ${inspection.inspection_type}
+
+Identify issues, code concerns, quality problems. Return JSON: {issues_found: [], quality_rating: 1-5, code_concerns: [], recommendation}` },
+        ])
+        analyses.push({ area: area.area_name, result })
+      } catch (err) {
+        analyses.push({ area: area.area_name, error: String(err) })
+      }
+    }
+
+    const summary = await callClaudeVision(systemPrompt, [
+      { type: 'text', text: `Generate a professional inspection report summary for the ${inspection.inspection_type} inspection on ${project?.title}.
+Findings: ${JSON.stringify(analyses)}
+Write factually, like documentation for a client or insurance record.` },
+    ], 2048)
+
+    const flags = analyses.filter((a) => typeof a.result === 'string' && a.result.includes('issues_found'))
+
+    await supabase.from('inspection_reports').update({
+      ai_summary: summary,
+      ai_flags: flags,
+    }).eq('id', inspection_id)
+
+    return new Response(JSON.stringify({ summary, analyses }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  } catch (err) {
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  }
+})

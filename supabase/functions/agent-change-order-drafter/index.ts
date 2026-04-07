@@ -1,0 +1,212 @@
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+}
+
+async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
+  try {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+    const res = await fetch(`${supabaseUrl}/functions/v1/assemble-context`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey}` },
+      body: JSON.stringify({
+        user_id: 'system', user_role: 'admin', agent_name: agentName,
+        capability_required: 'query_financials', query,
+      }),
+    })
+    if (!res.ok) return null
+    const ctx = await res.json()
+    return ctx.denied ? null : (ctx.system_prompt ?? null)
+  } catch { return null }
+}
+
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<string> {
+  const res = await fetch('https://api.anthropic.com/v1/messages', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': Deno.env.get('ANTHROPIC_API_KEY') ?? '',
+      'anthropic-version': '2023-06-01',
+    },
+    body: JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: maxTokens,
+      system: systemPrompt,
+      messages: [{ role: 'user', content: userMessage }],
+    }),
+  })
+  if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
+  const data = await res.json()
+  return data.content?.[0]?.text ?? ''
+}
+
+async function writeOutput(
+  supabase: ReturnType<typeof createClient>,
+  agentName: string,
+  outputType: string,
+  title: string,
+  content: string,
+  metadata?: Record<string, unknown>,
+  requiresApproval = false,
+) {
+  await supabase.from('agent_outputs').insert({
+    agent_name: agentName, output_type: outputType, title, content,
+    metadata: metadata ?? null, requires_approval: requiresApproval,
+  })
+}
+
+serve(async (req) => {
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  try {
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
+
+    const body = await req.json().catch(() => ({}))
+    const { change_order_id, project_id, flag_description, flag_photos } = body
+
+    if (!change_order_id && !project_id) {
+      return new Response(JSON.stringify({ error: 'change_order_id or project_id required' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      })
+    }
+
+    const basePrompt = await callAssembleContext('agent-change-order-drafter', 'draft formal change order from field flag')
+    const systemPrompt =
+      (basePrompt ?? 'You are an AI contracts assistant for AK Renovations, a high-end residential remodeling contractor.') +
+      `
+
+CHANGE ORDER DRAFTING TASK
+Write a formal, professional change order description for the client.
+Include:
+1. Title (concise, 5-8 words)
+2. Scope Change Description (what is being added/modified and why — 2-3 sentences)
+3. Reason (why this change was needed — existing conditions, client request, code requirement, etc.)
+
+Write in clear, plain English that a homeowner would understand.
+Be specific about what work is involved. No em dashes.`
+
+    let changeOrder: Record<string, unknown> | null = null
+    let project: { id: string; title: string; project_type: string; client_name: string } | null = null
+
+    if (change_order_id) {
+      const { data: co, error: coError } = await supabase
+        .from('change_orders')
+        .select('id,project_id,title,description,flagged_by,flagged_at,flagged_photos,scope_change,cost_change,schedule_change_days,status')
+        .eq('id', change_order_id)
+        .single()
+
+      if (coError || !co) throw coError ?? new Error('Change order not found')
+      changeOrder = co
+
+      const { data: proj } = await supabase
+        .from('projects')
+        .select('id,title,project_type,client_name')
+        .eq('id', co.project_id)
+        .single()
+      project = proj
+    } else {
+      const { data: proj } = await supabase
+        .from('projects')
+        .select('id,title,project_type,client_name')
+        .eq('id', project_id)
+        .single()
+      project = proj
+    }
+
+    if (!project) throw new Error('Project not found')
+
+    // Get project scope from most recent proposal
+    const { data: proposal } = await supabase
+      .from('proposals')
+      .select('sections,overview_body')
+      .eq('project_id', project.id)
+      .in('status', ['accepted', 'sent'])
+      .order('created_at', { ascending: false })
+      .limit(1)
+      .single()
+
+    const flagDesc = (changeOrder?.description as string) ?? flag_description ?? 'No description provided'
+    const photos = (changeOrder?.flagged_photos as string[]) ?? flag_photos ?? []
+
+    const draftPrompt = `Project: ${project.title} (${project.client_name})
+Project Type: ${project.project_type}
+Original Scope Summary: ${proposal?.overview_body ?? 'Not available'}
+Field Flag / Issue Described: ${flagDesc}
+Number of Photos Attached: ${photos.length}
+
+Draft the formal change order content (title + scope description + reason).`
+
+    const draftContent = await callClaude(systemPrompt, draftPrompt, 600)
+
+    // Parse title from draft
+    const titleMatch = draftContent.match(/^(?:title[:\s]+)?(.+?)(?:\n|$)/im)
+    const draftTitle = titleMatch?.[1]?.replace(/^[*_#\s]+|[*_#\s]+$/g, '').trim() ?? `Change Order — ${project.title}`
+
+    if (change_order_id && changeOrder) {
+      // Update existing change order
+      await supabase
+        .from('change_orders')
+        .update({
+          title: draftTitle,
+          scope_change: draftContent,
+          status: 'draft',
+        })
+        .eq('id', change_order_id)
+    } else {
+      // Create new change order
+      const { data: newCo } = await supabase
+        .from('change_orders')
+        .insert({
+          project_id: project.id,
+          title: draftTitle,
+          description: flagDesc,
+          flagged_photos: photos,
+          scope_change: draftContent,
+          status: 'draft',
+        })
+        .select()
+        .single()
+
+      changeOrder = newCo
+    }
+
+    await writeOutput(
+      supabase,
+      'agent-change-order-drafter',
+      'draft',
+      `Change Order Draft: ${draftTitle}`,
+      draftContent,
+      {
+        change_order_id: change_order_id ?? changeOrder?.id,
+        project_id: project.id,
+        project_title: project.title,
+        client_name: project.client_name,
+        photo_count: photos.length,
+      },
+      true,
+    )
+
+    return new Response(
+      JSON.stringify({
+        success: true,
+        change_order_id: change_order_id ?? changeOrder?.id,
+        draft_title: draftTitle,
+        draft_content: draftContent,
+      }),
+      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    )
+  } catch (err) {
+    console.error('agent-change-order-drafter error:', err)
+    return new Response(JSON.stringify({ error: String(err) }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    })
+  }
+})
