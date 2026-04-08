@@ -3,6 +3,7 @@
 // NOW calls assemble-context first for memory-enriched base, then runs extraction.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -65,6 +66,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
+
+  const rl = await checkRateLimit(req, 'process-budget-document')
+  if (!rl.allowed) return rateLimitResponse(rl)
 
   try {
     const body: RequestBody = await req.json()

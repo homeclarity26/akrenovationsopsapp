@@ -1,6 +1,7 @@
 // H5: agent-generate-scope — generates scope of work for a subcontractor trade
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -209,6 +210,9 @@ function flattenToPlainText(scope: Record<string, unknown>): string {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  const rl = await checkRateLimit(req, 'agent-generate-scope')
+  if (!rl.allowed) return rateLimitResponse(rl)
   try {
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

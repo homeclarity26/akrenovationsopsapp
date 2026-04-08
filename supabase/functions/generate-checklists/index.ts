@@ -8,6 +8,7 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -51,6 +52,9 @@ interface GenerateRequest {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  const rl = await checkRateLimit(req, 'generate-checklists')
+  if (!rl.allowed) return rateLimitResponse(rl)
   try {
     const { trigger_event, entity_id, entity_type } = (await req.json()) as GenerateRequest
     if (!trigger_event || !entity_id || !entity_type) {

@@ -8,6 +8,7 @@
 // CORS is open so the marketing site (or the SPA itself) can call it.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -32,6 +33,9 @@ serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders })
   }
+
+  const rl = await checkRateLimit(req, 'demo-ai')
+  if (!rl.allowed) return rateLimitResponse(rl)
 
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'method not allowed' }), {

@@ -1,8 +1,9 @@
-import { useState } from 'react'
-import { Check, X, Copy } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Check, X, Copy, ExternalLink, GitPullRequest, Loader2 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { supabase } from '@/lib/supabase'
 
 type Priority = 'critical' | 'high' | 'medium' | 'low'
 type Category = 'ux_friction' | 'missing_feature' | 'agent_improvement' | 'workflow_optimization' | 'data_quality' | 'performance'
@@ -20,6 +21,37 @@ interface ImprovementSpec {
   status: Status
   adam_notes?: string
   created_at: string
+}
+
+type PrStatus = 'draft' | 'pr_opened' | 'approved' | 'merged' | 'deployed' | 'closed' | 'failed'
+type ChangeCategory = 'data_insert' | 'data_update' | 'copy_change' | 'claude_code'
+
+interface ImprovementPr {
+  id: string
+  improvement_spec_id: string
+  pr_number?: number | null
+  pr_url?: string | null
+  pr_title: string
+  branch_name: string
+  change_category: ChangeCategory
+  status: PrStatus
+  deployed_at?: string | null
+  error_message?: string | null
+  created_at: string
+}
+
+const MOCK_PRS: Record<string, ImprovementPr> = {
+  'imp-2': {
+    id: 'pr-mock-2',
+    improvement_spec_id: 'imp-2',
+    pr_number: 42,
+    pr_url: 'https://github.com/homeclarity26/akrenovationsopsapp/pull/42',
+    pr_title: '[Auto] Morning brief should be pinned at top of dashboard',
+    branch_name: 'improvement/abc12345-morning-brief',
+    change_category: 'copy_change',
+    status: 'pr_opened',
+    created_at: new Date(Date.now() - 3600_000).toISOString(),
+  },
 }
 
 const MOCK_IMPROVEMENTS: ImprovementSpec[] = [
@@ -81,6 +113,70 @@ export function ImprovementQueuePage() {
   const [filter, setFilter] = useState<FilterOption>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
+  const [prs, setPrs] = useState<Record<string, ImprovementPr>>(MOCK_PRS)
+  const [openingPrId, setOpeningPrId] = useState<string | null>(null)
+
+  // Best-effort real fetch of improvement_prs — falls back to mock data.
+  useEffect(() => {
+    let cancelled = false
+    const load = async () => {
+      try {
+        const { data, error } = await supabase
+          .from('improvement_prs')
+          .select('*')
+          .order('created_at', { ascending: false })
+        if (error || !data) return
+        if (cancelled) return
+        const map: Record<string, ImprovementPr> = {}
+        for (const row of data as ImprovementPr[]) {
+          // Keep most recent per spec
+          if (!map[row.improvement_spec_id]) map[row.improvement_spec_id] = row
+        }
+        if (Object.keys(map).length) setPrs(map)
+      } catch {
+        // stub db or offline — keep mock data
+      }
+    }
+    load()
+    return () => { cancelled = true }
+  }, [])
+
+  const openAutoPr = async (item: ImprovementSpec) => {
+    setOpeningPrId(item.id)
+    try {
+      const { data, error } = await supabase.functions.invoke('meta-agent-open-pr', {
+        body: { improvement_spec_id: item.id },
+      })
+      if (error) throw error
+      if (data?.needs_claude_code) {
+        setImprovements(prev => prev.map(i => i.id === item.id ? {
+          ...i,
+          adam_notes: 'This improvement requires Claude Code. Copy the spec and paste it to Claude Code to build.',
+        } : i))
+      } else if (data?.pr_url) {
+        setPrs(prev => ({
+          ...prev,
+          [item.id]: {
+            id: `pr-local-${item.id}`,
+            improvement_spec_id: item.id,
+            pr_number: data.pr_number,
+            pr_url: data.pr_url,
+            pr_title: `[Auto] ${item.title}`,
+            branch_name: 'auto',
+            change_category: (data.change_category ?? 'copy_change') as ChangeCategory,
+            status: 'pr_opened',
+            created_at: new Date().toISOString(),
+          },
+        }))
+        setImprovements(prev => prev.map(i => i.id === item.id ? { ...i, status: 'in_progress' as Status } : i))
+      }
+    } catch (err) {
+      console.error('openAutoPr failed', err)
+      alert('Failed to open auto-PR. Check the edge function logs.')
+    } finally {
+      setOpeningPrId(null)
+    }
+  }
 
   const approve = (id: string) => setImprovements(prev => prev.map(i => i.id === id ? { ...i, status: 'approved' as Status } : i))
   const dismiss = (id: string) => setImprovements(prev => prev.filter(i => i.id !== id))
@@ -184,13 +280,93 @@ export function ImprovementQueuePage() {
                   {isExpanded ? 'Show less' : 'View proposed solution →'}
                 </button>
 
+                {/* PR status block */}
+                {(() => {
+                  const pr = prs[item.id]
+                  if (!pr) return null
+                  if (pr.status === 'pr_opened' || pr.status === 'approved') {
+                    return (
+                      <div className="mb-3 flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-blue-50 text-blue-700">
+                          <GitPullRequest size={10} /> Auto-PR opened
+                        </span>
+                        {pr.pr_url && (
+                          <a
+                            href={pr.pr_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--navy)] underline"
+                          >
+                            Review on GitHub <ExternalLink size={10} />
+                          </a>
+                        )}
+                      </div>
+                    )
+                  }
+                  if (pr.status === 'merged' || pr.status === 'deployed') {
+                    return (
+                      <div className="mb-3 flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[var(--success-bg)] text-[var(--success)]">
+                          <Check size={10} /> Merged
+                        </span>
+                        {pr.deployed_at && (
+                          <span className="text-[11px] text-[var(--text-tertiary)]">
+                            Deployed at {new Date(pr.deployed_at).toLocaleString()}
+                          </span>
+                        )}
+                      </div>
+                    )
+                  }
+                  if (pr.status === 'closed') {
+                    return (
+                      <div className="mb-3">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[var(--cream-light)] text-[var(--text-secondary)]">
+                          Closed
+                        </span>
+                      </div>
+                    )
+                  }
+                  if (pr.status === 'failed') {
+                    return (
+                      <div className="mb-3 flex items-center gap-2 flex-wrap">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-[var(--danger-bg)] text-[var(--danger)]">
+                          Failed
+                        </span>
+                        {pr.error_message && (
+                          <span className="text-[11px] text-[var(--text-secondary)]">{pr.error_message}</span>
+                        )}
+                      </div>
+                    )
+                  }
+                  if (pr.change_category === 'claude_code') {
+                    return (
+                      <div className="mb-3">
+                        <span className="inline-flex items-center gap-1 text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full bg-orange-50 text-orange-700">
+                          Requires Claude Code
+                        </span>
+                      </div>
+                    )
+                  }
+                  return null
+                })()}
+
                 {/* Actions */}
                 {(item.status === 'draft' || item.status === 'reviewed') ? (
-                  <div className="flex gap-2">
+                  <div className="flex gap-2 flex-wrap">
                     <button onClick={() => approve(item.id)} className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl bg-[var(--navy)] text-white text-xs font-semibold min-h-[44px]">
                       <Check size={13} />
                       Approve for Claude Code
                     </button>
+                    {!prs[item.id] && (
+                      <button
+                        onClick={() => openAutoPr(item)}
+                        disabled={openingPrId === item.id}
+                        className="flex-1 flex items-center justify-center gap-1.5 py-2.5 rounded-xl border border-[var(--navy)]/20 bg-[var(--cream-light)] text-[var(--navy)] text-xs font-semibold min-h-[44px] disabled:opacity-60"
+                      >
+                        {openingPrId === item.id ? <Loader2 size={13} className="animate-spin" /> : <GitPullRequest size={13} />}
+                        {openingPrId === item.id ? 'Opening PR...' : 'Open auto-PR'}
+                      </button>
+                    )}
                     <button onClick={() => dismiss(item.id)} className="px-3 py-2.5 rounded-xl border border-[var(--border)] text-[var(--text-secondary)] flex items-center justify-center min-h-[44px]">
                       <X size={13} />
                     </button>

@@ -5,6 +5,8 @@ import { MOCK_USERS } from '@/data/mock'
 import { Input } from '@/components/ui/Input'
 import { Shield, HardHat, Home, ArrowRight, ArrowLeft } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { createAppSession } from '@/lib/session'
+import { auditLoginFailed } from '@/lib/audit'
 
 const ROLE_OPTIONS = [
   {
@@ -57,11 +59,19 @@ export function LoginPage() {
     if (user) setEmail(user.email)
   }
 
-  const handleLogin = () => {
-    if (!selected) return
-    login(selected)
+  const handleLogin = async () => {
+    if (!selected) {
+      await auditLoginFailed(email || 'unknown')
+      return
+    }
     const user = MOCK_USERS.find(u => u.id === selected)
-    if (!user) return
+    if (!user) {
+      await auditLoginFailed(email || 'unknown')
+      return
+    }
+    login(selected)
+    // Record the application-level session (best effort — swallows errors)
+    await createAppSession(user.id, user.role)
     if (user.role === 'admin') navigate('/admin')
     else if (user.role === 'employee') navigate('/employee')
     else navigate('/client/progress')

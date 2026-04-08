@@ -1,0 +1,12 @@
+# Supabase project config. Only the fields we actually need are set here.
+# See https://supabase.com/docs/guides/cli/config for the full schema.
+
+project_id = "ak-ops"
+
+[functions.demo-ai]
+# Public demo endpoint — no auth required. Anyone can call it.
+# Safe because the function never touches the database and max_tokens is capped at 300.
+verify_jwt = false
+
+# All other 55 functions default to verify_jwt = true
+# (omitted here means default, which is JWT verification ON)
