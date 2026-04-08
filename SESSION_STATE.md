@@ -6,108 +6,146 @@ _Last updated: 2026-04-08_
 ### Frontend (Vercel → https://akrenovationsopsapp.vercel.app)
 - React 18 + TypeScript + Vite + Tailwind + shadcn/ui
 - Real Supabase auth (login, signup, session, role-based routing)
-- Admin dashboard — fully live data (no mock data), real empty states
-- Employee launchpad — Jeff persona, full action card grid
-- Client portal — homeowner demo, progress/photos/invoices/messages/docs/schedule/punch list tabs
-- API Usage Bar — clickable pill in admin header, live cost breakdown by service/agent, range tabs (Today/7d/30d/MTD)
-- Business Context editor — `/admin/settings/context` — inline editing, grouped by category
-- Onboarding wizard — `/admin/onboard` — Client / Employee / Subcontractor flows (3-4 steps each)
-- Meta agent chat — fully aware of entire app, live DB context, proactive suggestions
-- Compliance page (mock data only — not wired to DB yet)
-- `.claude/settings.local.json` → `bypassPermissions` — no approval prompts
+- 75 routes across 3 roles (admin, employee, client)
+- 45 pages built (UI complete on most, data wiring varies)
+- 60 Supabase edge functions deployed
+- `.claude/settings.local.json` → `bypassPermissions` active
 
-### Supabase (project: mebzqfeeiciayxdetteb)
+### Layouts
+- **AdminLayout** — sidebar nav, top bar
+- **EmployeeLayout** — bottom tab nav, mobile-first
+- **ClientLayout** — simple header/footer
+
+---
+
+## Page Inventory by Status
+
+### LIVE (real Supabase data, no mock)
+- `AdminDashboard` — projects, invoices, time entries, warranty claims, portfolio count
+- `BusinessContextPage` — read/write business_context table
+- `OnboardingPage` — inserts profiles, projects, subcontractors
+- `SecurityPage` — Supabase auth settings
+- `APIUsageBar` — live cost data from api_usage_log via get-usage-stats function
+
+### MOCK DATA (UI complete, needs wiring)
+- `CRMPage` — MOCK_LEADS
+- `ProjectsPage` — MOCK_PROJECTS
+- `FinancialsPage` — MOCK_FINANCIALS, MOCK_INVOICES, MOCK_PROJECTS
+- `InvoicesPage` — MOCK_INVOICES, MOCK_TIME_ENTRIES
+- `TimeClockPage` — MOCK_TIME_ENTRIES, MOCK_PROJECTS (both admin + employee views)
+- `EmployeeHome` — MOCK_SCHEDULE, MOCK_TIME_ENTRIES, MOCK_CHECKLIST_INSTANCE_ITEMS
+- `PayrollDashboardPage` — MOCK_PAY_PERIODS, MOCK_PAYROLL_RECORDS
+- `ClientProgress` — hardcoded phases + static updates
+- `ClientInvoices` — hardcoded inline demo data
+- `CompliancePage` — MOCK_COMPLIANCE_ITEMS
+
+### PARTIAL (Supabase wired but incomplete logic)
+- ProjectDetailPage, SubcontractorsPage, ProposalsPage, SchedulePage
+- WalkthroughPage, ChecklistsPage, PortfolioPage, WarrantyPage
+- All payroll sub-pages (PayPeriodDetail, PayrollWorkers, WorkerSetup, etc.)
+- All budget components (BudgetSetup, BudgetTab, QuoteCollection, etc.)
+- All employee pages (ShoppingList, Receipts, Photos, Messages, Notes, Bonus, Schedule, etc.)
+- All client pages (Photos, Selections, Messages, Schedule, PunchList, Docs, Referral)
+- Settings pages (Agents, Approvals, MemoryInspector, Materials, ToolRequests, Rates, Checklists, EstimateTemplates, Backups)
+- MetaAgentPage, ImprovementQueuePage, AICommandPage, FieldLaunchpadPage
+
+### COMPLETE (demo / no real data needed)
+- `EmployeeDemoShell` — interactive demo at /demo/employee
+- `HomeownerDemoShell` — homeowner experience at /experience
+- `LoginPage` — Supabase auth
+
+---
+
+## Edge Functions (60 deployed)
+
+### Proactive Agents (scheduled)
+agent-morning-brief, agent-lead-aging, agent-weekly-client-update,
+agent-risk-monitor, agent-daily-log, agent-invoice-aging,
+agent-bonus-qualification, agent-cash-flow, agent-weekly-financials,
+agent-sub-insurance-alert, agent-review-request, agent-warranty-tracker,
+agent-weather-schedule, agent-social-content, agent-compliance-monitor
+
+### Reactive Agents (event-triggered)
+agent-receipt-processor, agent-photo-tagger, agent-lead-intake,
+agent-change-order-drafter, agent-invoice-generator, agent-document-classifier,
+agent-sub-invoice-matcher, agent-punch-list, agent-voice-transcriber,
+agent-call-summarizer, agent-quote-reader, agent-portfolio-curator,
+agent-referral-intake, agent-warranty-intake, agent-inspection-analyzer,
+agent-tool-request, agent-sms-responder, agent-generate-scope,
+agent-generate-contract, agent-schedule-optimizer, agent-generate-reel,
+agent-conversation-transcriber, agent-calibrate-templates
+
+### Infrastructure
+meta-agent-chat, meta-agent-orchestration, meta-agent-open-pr,
+assemble-context, generate-embedding, update-operational-memory,
+extract-preferences, generate-pdf, get-usage-stats
+
+### Business Logic
+calculate-payroll, generate-payroll-register, budget-ai-action,
+compare-budget-quotes, process-budget-document, generate-checklists,
+generate-improvement-spec, demo-ai, github-webhook, sync-to-drive,
+sync-to-gusto, backup-daily, backup-storage-manifest
+
+---
+
+## Supabase Project
+- **ID:** mebzqfeeiciayxdetteb
+- **URL:** https://mebzqfeeiciayxdetteb.supabase.co
 - Full schema deployed (all tables from CLAUDE.md)
-- RLS policies active
-- `api_usage_log` table live (tracks cost per API call by agent/service)
-- Edge functions deployed:
-  - `meta-agent-chat` — full app knowledge, live DB queries, api_usage_log writes
-  - `extract-preferences` — Haiku-based preference extraction → business_context + operational_memory
-  - `get-usage-stats` — returns cost breakdown for APIUsageBar
-  - `get-daily-brief` — AI morning summary
-  - `agent-runner` — dispatches tool calls
-  - `generate-proposal` — proposal generation
-  - `send-communication` — Twilio/Resend wrapper
-  - `process-receipt` — receipt OCR via Gemini
-  - `analyze-photo` — photo analysis via Gemini
-  - `generate-estimate` — estimate generation from walkthrough data
-  - `process-voice` — voice transcription
-  - `get-social-caption` — social media post generation
-- Supabase secrets set: ANTHROPIC_API_KEY, GEMINI_API_KEY, TWILIO_*, RESEND_API_KEY, STRIPE_*
+- RLS active
+- api_usage_log table live
+- Secrets: ANTHROPIC_API_KEY, GEMINI_API_KEY, TWILIO_*, RESEND_API_KEY, STRIPE_*
 
-### Database state
-- Cleared of all mock/test data (fresh start as of this session)
-- `business_context` table has Adam's company context records
-- No projects, leads, invoices, employees, or clients yet — app starts blank
+## Database State
+- Cleared of all mock/test data (fresh as of 2026-04-08)
+- business_context table has Adam's company context
+- No live projects, leads, invoices, or employees yet
 
 ---
 
-## What's NOT Built Yet
+## What Needs Work (Priority Order)
 
-### Phase 2 — Employee Tools (MUST HAVE BY JULY 1)
-- [ ] Shopping list (add items, check off, grouped by project)
-- [ ] Receipt scanner (camera → AI extract → confirm → save)
-- [ ] Photo upload with category picker
-- [ ] Schedule view (today + this week) — employee-facing
-- [ ] Task management (todo list per project)
-- [ ] Daily log (AI auto-draft + manual edit)
-- [ ] Messages (in-app messaging)
-- [ ] Notes (project notes + change order flagging)
-- [ ] Client info card
-- [ ] Bonus tracker display
+### 1. HIGH — Wire mock pages to real Supabase data
+These have complete UIs but display fake data in production:
+- CRMPage (leads, kanban, activity)
+- ProjectsPage + ProjectDetailPage
+- FinancialsPage
+- InvoicesPage
+- TimeClockPage (clock in/out with real GPS + project assignment)
+- EmployeeHome
 
-### Phase 3 — Financial Core
-- [ ] Expense tracking + job costing per project
-- [ ] Invoice creation + delivery + payment tracking
-- [ ] Purchase orders
-- [ ] P&L per project
-- [ ] Company financial dashboard
-- [ ] Bonus qualification auto-calculation
-- [ ] QuickBooks integration
+### 2. HIGH — Employee tools fully functional
+Pages exist but data isn't wired end-to-end:
+- ShoppingList, Receipts, Photos, Messages, Notes, Bonus, Schedule
 
-### Phase 4 — CRM + Sales Pipeline
-- [ ] Lead management with kanban + list views
-- [ ] Lead activity timeline, AI follow-up drafts
-- [ ] Website inquiry form
-- [ ] Referral tracking
+### 3. MEDIUM — Payroll system (Gusto sync + real pay periods)
+- PayrollDashboard + all sub-pages using mock data
+- calculate-payroll + sync-to-gusto edge functions not hooked up
 
-### Phase 5 — Proposals + Contracts
-- [ ] AI site walk / walkthrough interview system
-- [ ] Estimate generation
-- [ ] Proposal builder + send + tracking
-- [ ] Contract generation + e-signature
-- [ ] Template library
+### 4. MEDIUM — Client portal (real project data)
+- ClientProgress + ClientInvoices hardcoded — need real project_id routing
 
-### Phase 6 — Client Portal
-- [ ] Client auth + real project data (currently demo only)
-- [ ] Selection checklist from proposal
-- [ ] Stripe invoice payments
-- [ ] Punch list with sign-off
+### 5. MEDIUM — Proposals + contracts flow end-to-end
+- ProposalsPage partial, no e-signature flow yet
 
-### Phase 7+ — Advanced / AI Agent
-- [ ] Subcontractor management
-- [ ] Permit tracking
-- [ ] Change order workflow
-- [ ] Warranty tracking
-- [ ] Full AI agent action execution layer
-- [ ] Google Calendar sync, Twilio inbound SMS, QuickBooks sync
-
----
-
-## Known Issues / Tech Debt
-- Compliance page still uses MOCK_COMPLIANCE_ITEMS — not wired to DB
-- Employee screens (shopping, time, photos, etc.) — UI exists but not fully wired to Supabase
-- `api_usage_log` only logs meta-agent-chat calls so far — other edge functions need usage logger added
+### 6. LOW — AI agents hooked to scheduler
+- All 40 agents deployed but none are on a cron schedule yet
 
 ---
 
 ## Recommended Next Sessions
 
-**Option A — Phase 2 employee tools (highest priority, July 1 deadline)**
-> "Read SESSION_STATE.md and BUILD_QUEUE.md. Build Phase 2 employee tools. Start with shopping list and receipt scanner — full Supabase integration, no mock data."
+**Wire CRM + Projects to real data:**
+> "Read SESSION_STATE.md and BUILD_QUEUE.md. Replace all mock data in CRMPage and ProjectsPage with real Supabase queries. Full kanban pipeline, lead details, activity timeline."
 
-**Option B — CRM Pipeline**
-> "Read SESSION_STATE.md and BUILD_QUEUE.md. Build the CRM pipeline: lead management with kanban board, lead detail slide-over, activity timeline, and AI follow-up drafts."
+**Wire Financials + Invoices to real data:**
+> "Read SESSION_STATE.md and BUILD_QUEUE.md. Replace mock data in FinancialsPage and InvoicesPage with real Supabase queries. Real P&L, invoice creation, payment tracking."
 
-**Option C — Financial core**
-> "Read SESSION_STATE.md and BUILD_QUEUE.md. Build the financial core: expense tracking, invoice creation, P&L per project."
+**Wire employee tools end-to-end:**
+> "Read SESSION_STATE.md and BUILD_QUEUE.md. Wire all employee pages to real Supabase: time clock (GPS + project selection), shopping list, receipts, photos, messages."
+
+**Payroll end-to-end:**
+> "Read SESSION_STATE.md and BUILD_QUEUE.md. Wire payroll dashboard to real Supabase data. Hook up calculate-payroll edge function and sync-to-gusto."
+
+**Client portal real data:**
+> "Read SESSION_STATE.md and BUILD_QUEUE.md. Wire client portal (ClientProgress, ClientInvoices) to real project data. Add project_id routing so each client sees their own project."
