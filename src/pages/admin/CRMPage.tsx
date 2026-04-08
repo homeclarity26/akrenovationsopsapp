@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Phone, Mail, ArrowLeft, Calendar, MessageSquare, Sparkles } from 'lucide-react'
+import { Plus, Phone, Mail, ArrowLeft, Calendar, MessageSquare, Sparkles, X } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import { Card } from '@/components/ui/Card'
@@ -88,14 +88,63 @@ function computeDaysInStage(lead: Record<string, unknown>): number {
   return Math.floor((Date.now() - new Date(ref).getTime()) / 86400000)
 }
 
+const SOURCES = ['website', 'google_ads', 'referral', 'manual', 'facebook', 'other'] as const
+const PROJECT_TYPES = ['kitchen', 'bathroom', 'basement', 'addition', 'first_floor', 'other'] as const
+
+interface AddLeadForm {
+  full_name: string
+  phone: string
+  email: string
+  address: string
+  project_type: string
+  source: string
+  estimated_value: string
+  notes: string
+}
+
+const EMPTY_FORM: AddLeadForm = { full_name: '', phone: '', email: '', address: '', project_type: '', source: 'manual', estimated_value: '', notes: '' }
+
 export function CRMPage() {
   const [view, setView] = useState<'list' | 'kanban'>('list')
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [stageOverrides, setStageOverrides] = useState<Record<string, string>>({})
   const [draggingLead, setDraggingLead] = useState<Record<string, unknown> | null>(null)
+  const [showAddLead, setShowAddLead] = useState(false)
+  const [addForm, setAddForm] = useState<AddLeadForm>(EMPTY_FORM)
+  const [saving, setSaving] = useState(false)
   const queryClient = useQueryClient()
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+
+  async function handleAddLead() {
+    if (!addForm.full_name.trim()) return
+    setSaving(true)
+    try {
+      const { data: lead, error } = await supabase.from('leads').insert({
+        full_name: addForm.full_name.trim(),
+        phone: addForm.phone.trim() || null,
+        email: addForm.email.trim() || null,
+        address: addForm.address.trim() || null,
+        project_type: addForm.project_type || null,
+        source: addForm.source,
+        estimated_value: addForm.estimated_value ? parseFloat(addForm.estimated_value) : null,
+        notes: addForm.notes.trim() || null,
+        stage: 'lead',
+        stage_entered_at: new Date().toISOString(),
+      }).select().single()
+      if (error) throw error
+      await supabase.from('lead_activities').insert({
+        lead_id: (lead as any).id,
+        activity_type: 'note',
+        description: 'Lead created',
+      })
+      queryClient.invalidateQueries({ queryKey: ['leads'] })
+      setShowAddLead(false)
+      setAddForm(EMPTY_FORM)
+    } finally {
+      setSaving(false)
+    }
+  }
 
   async function handleDragEnd(event: DragEndEvent) {
     setDraggingLead(null)
@@ -326,7 +375,7 @@ export function CRMPage() {
       <PageHeader
         title="CRM Pipeline"
         subtitle={`${leads.length} active leads`}
-        action={<Button size="sm"><Plus size={15} />Add Lead</Button>}
+        action={<Button size="sm" onClick={() => setShowAddLead(true)}><Plus size={15} />Add Lead</Button>}
       />
 
       {/* View toggle */}
@@ -436,6 +485,130 @@ export function CRMPage() {
             ) : null}
           </DragOverlay>
         </DndContext>
+      )}
+
+      {/* ── Add Lead Sheet ───────────────────────────────────────────────────── */}
+      {showAddLead && (
+        <div className="fixed inset-0 z-50 flex flex-col justify-end" onClick={() => setShowAddLead(false)}>
+          <div className="fixed inset-0 bg-black/40" />
+          <div
+            className="relative bg-white rounded-t-3xl p-5 space-y-4 max-h-[92svh] overflow-y-auto pb-safe"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="w-10 h-1 bg-[var(--border)] rounded-full mx-auto mb-1" />
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-xl text-[var(--navy)]">New Lead</h2>
+              <button onClick={() => setShowAddLead(false)} className="p-2 rounded-xl text-[var(--text-secondary)]">
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Name */}
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5 block">Full Name *</label>
+              <input
+                type="text"
+                placeholder="Jane Smith"
+                value={addForm.full_name}
+                onChange={e => setAddForm(f => ({ ...f, full_name: e.target.value }))}
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-3 text-sm bg-[var(--bg)] min-h-[44px]"
+              />
+            </div>
+
+            {/* Phone + Email */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5 block">Phone</label>
+                <input
+                  type="tel"
+                  placeholder="(330) 555-0100"
+                  value={addForm.phone}
+                  onChange={e => setAddForm(f => ({ ...f, phone: e.target.value }))}
+                  className="w-full border border-[var(--border)] rounded-xl px-3 py-3 text-sm bg-[var(--bg)] min-h-[44px]"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5 block">Email</label>
+                <input
+                  type="email"
+                  placeholder="jane@email.com"
+                  value={addForm.email}
+                  onChange={e => setAddForm(f => ({ ...f, email: e.target.value }))}
+                  className="w-full border border-[var(--border)] rounded-xl px-3 py-3 text-sm bg-[var(--bg)] min-h-[44px]"
+                />
+              </div>
+            </div>
+
+            {/* Address */}
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5 block">Address</label>
+              <input
+                type="text"
+                placeholder="123 Main St, Akron, OH"
+                value={addForm.address}
+                onChange={e => setAddForm(f => ({ ...f, address: e.target.value }))}
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-3 text-sm bg-[var(--bg)] min-h-[44px]"
+              />
+            </div>
+
+            {/* Project type + Source */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5 block">Project Type</label>
+                <select
+                  value={addForm.project_type}
+                  onChange={e => setAddForm(f => ({ ...f, project_type: e.target.value }))}
+                  className="w-full border border-[var(--border)] rounded-xl px-3 py-3 text-sm bg-[var(--bg)] min-h-[44px]"
+                >
+                  <option value="">Select...</option>
+                  {PROJECT_TYPES.map(t => <option key={t} value={t} className="capitalize">{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5 block">Source</label>
+                <select
+                  value={addForm.source}
+                  onChange={e => setAddForm(f => ({ ...f, source: e.target.value }))}
+                  className="w-full border border-[var(--border)] rounded-xl px-3 py-3 text-sm bg-[var(--bg)] min-h-[44px]"
+                >
+                  {SOURCES.map(s => <option key={s} value={s} className="capitalize">{s.replace('_', ' ')}</option>)}
+                </select>
+              </div>
+            </div>
+
+            {/* Estimated value */}
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5 block">Estimated Value</label>
+              <input
+                type="number"
+                placeholder="e.g. 45000"
+                value={addForm.estimated_value}
+                onChange={e => setAddForm(f => ({ ...f, estimated_value: e.target.value }))}
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-3 text-sm bg-[var(--bg)] font-mono min-h-[44px]"
+              />
+            </div>
+
+            {/* Notes */}
+            <div>
+              <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5 block">Notes</label>
+              <textarea
+                placeholder="Interested in full kitchen remodel, has budget..."
+                value={addForm.notes}
+                onChange={e => setAddForm(f => ({ ...f, notes: e.target.value }))}
+                rows={3}
+                className="w-full border border-[var(--border)] rounded-xl px-3 py-3 text-sm bg-[var(--bg)] resize-none"
+              />
+            </div>
+
+            <button
+              onClick={handleAddLead}
+              disabled={saving || !addForm.full_name.trim()}
+              className="w-full py-3.5 rounded-xl bg-[var(--navy)] text-white font-semibold text-sm min-h-[48px] disabled:opacity-50 transition-opacity"
+            >
+              {saving ? 'Saving...' : 'Add Lead'}
+            </button>
+          </div>
+        </div>
       )}
     </div>
   )
