@@ -1,7 +1,13 @@
 // Homeowner demo shell — orchestrates the 9-step Sarah Mitchell walkthrough.
 // Public route. Pure client-side. Reuses the shared AIScene component.
+//
+// Behaviors:
+//  - Scroll-to-top on every step change
+//  - Keyboard shortcuts to advance (Space / Enter / →)
+//  - Always-visible Next button in the footer
+//  - AI scene uses "Skip" so the user can bypass typing
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PhoneFrame } from '../shared/PhoneFrame'
 import { DemoBanner, DemoPromptBar, DemoStage } from '../shared/DemoChrome'
 import { AIScene } from '../shared/AIScene'
@@ -21,7 +27,7 @@ import {
   CompletionScreen,
 } from './screens'
 
-const TOTAL = HOMEOWNER_DEMO_SCRIPT.length // 9
+const TOTAL = HOMEOWNER_DEMO_SCRIPT.length
 
 function ScreenForStep({
   step,
@@ -67,6 +73,12 @@ export default function HomeownerDemoShell() {
   const [index, setIndex] = useState(0)
   const [done, setDone] = useState(false)
 
+  // Scroll-to-top on step change
+  useEffect(() => {
+    const scroller = document.querySelector('[data-demo-scroll]') as HTMLElement | null
+    if (scroller) scroller.scrollTop = 0
+  }, [index, done])
+
   if (done) {
     return (
       <PhoneFrame>
@@ -83,6 +95,7 @@ export default function HomeownerDemoShell() {
   const step = HOMEOWNER_DEMO_SCRIPT[index]
   const isLast = index === HOMEOWNER_DEMO_SCRIPT.length - 1
   const isAIScene = !!step.is_ai_scene
+  const isFirst = index === 0
 
   function advance() {
     if (isLast || step.is_final) {
@@ -92,9 +105,7 @@ export default function HomeownerDemoShell() {
     }
   }
 
-  // The completion step is shown via the "done" branch but the script also
-  // includes a final completion step — short-circuit to the done view when
-  // we hit it.
+  // The script includes a final "completion" screen step. Short-circuit to done.
   if (step.screen === 'completion') {
     return (
       <PhoneFrame>
@@ -107,6 +118,14 @@ export default function HomeownerDemoShell() {
       </PhoneFrame>
     )
   }
+
+  const buttonLabel = isFirst
+    ? 'Start'
+    : isLast
+      ? 'Finish'
+      : isAIScene
+        ? 'Skip'
+        : 'Next'
 
   return (
     <PhoneFrame
@@ -124,9 +143,9 @@ export default function HomeownerDemoShell() {
         <DemoPromptBar
           title={step.headline}
           body={step.subline}
-          actionLabel={step.action_label}
           onAction={advance}
-          hideAction={isAIScene}
+          buttonLabel={buttonLabel}
+          pulse={!isAIScene}
         />
       }
     >

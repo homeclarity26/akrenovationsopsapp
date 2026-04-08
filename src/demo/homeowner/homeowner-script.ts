@@ -1,4 +1,7 @@
-// 9-step homeowner demo walkthrough script
+// 9-step homeowner demo walkthrough script.
+//
+// Narration style: warm and reassuring. Sarah's story. No "Tap X" instructions —
+// the only action is the always-visible Next button in the footer.
 
 export type HomeownerScreen =
   | 'intro'
@@ -16,7 +19,6 @@ export interface HomeownerStep {
   screen: HomeownerScreen
   headline: string
   subline: string
-  action_label: string | null
   is_ai_scene?: boolean
   suggested_prompt?: string
   ai_system_prompt?: string
@@ -31,66 +33,59 @@ export const HOMEOWNER_DEMO_SCRIPT: HomeownerStep[] = [
     screen: 'intro',
     headline: "What it's like to hire AK Renovations",
     subline:
-      "You're about to experience the client side — from first contact to finished kitchen. This is Sarah's story. It could be yours.",
-    action_label: "Start Sarah's project",
+      "This is Sarah's kitchen remodel, from first contact to finished project. Five minutes, tap Next to move through it.",
   },
   {
     step: 2,
     screen: 'proposal_overview',
-    headline: 'You receive a real proposal',
+    headline: 'A real, written proposal',
     subline:
-      "48 hours after the site visit, Sarah gets a detailed written proposal. Clear scope. Clear price. Sign from her phone.",
-    action_label: 'See the full scope',
+      "48 hours after the site visit, Sarah receives a detailed proposal. Clear scope, clear price, signable from her phone. No back-of-envelope number.",
   },
   {
     step: 3,
     screen: 'proposal_sections',
     headline: 'Every detail spelled out',
     subline:
-      "No vague line items. Every phase is documented — what we're doing, what materials, what's included. No surprises.",
-    action_label: 'Sign the proposal',
+      "No vague line items. Every phase is documented — what we're doing, what materials, what's included. No surprises once the work starts.",
     highlight: 'scope_sections',
   },
   {
     step: 4,
     screen: 'portal_welcome',
-    headline: 'Your personal portal is ready',
+    headline: 'Your own project portal',
     subline:
-      "The moment Sarah signs, she gets access. Photos, schedule, selections, invoices — all in one place. No app to download.",
-    action_label: 'Open the portal',
+      "The moment Sarah signs, her portal goes live. Photos, schedule, selections, invoices, messages — all in one place. No app to download.",
   },
   {
     step: 5,
     screen: 'selections',
-    headline: 'Make your selections — at your own pace',
+    headline: 'Make your selections on your own time',
     subline:
-      "Every material decision is tracked here. Sarah knows exactly what she's confirmed and what's still needed. No losing track of tile samples.",
-    action_label: 'View progress photos',
+      "Every material decision is tracked here. Sarah knows what's confirmed and what's still needed. No losing track of tile samples or cabinet finishes.",
     highlight: 'selections_list',
   },
   {
     step: 6,
     screen: 'progress_photos',
-    headline: 'See your project every step of the way',
+    headline: 'Watch your project come together',
     subline:
-      "Real photos from the job site, uploaded as work happens. Sarah can show her family, share with her designer, or just check in from work.",
-    action_label: "Read this week's update",
+      "Real photos from the job, uploaded as work happens. Sarah can show her family, share with her designer, or just check in during her lunch break.",
     highlight: 'photo_gallery',
   },
   {
     step: 7,
     screen: 'weekly_update',
-    headline: 'Every Friday — a real update',
+    headline: 'A real Friday update, every week',
     subline:
-      'Not a generic "work is progressing" email. A specific, photo-backed summary of what happened this week and what is coming next.',
-    action_label: 'Ask the AI a question',
+      "Not a generic 'work is progressing' email. A specific, photo-backed summary of what happened this week and what's coming next.",
   },
   {
     step: 8,
     screen: 'ai_scene',
     headline: 'Have a question? Just ask.',
     subline:
-      "Sarah can ask about her project any time — no waiting for Adam to call back, no wondering if her question is too small to bother him with.",
+      "Try it: ask about timeline, a selection, anything. Or press Skip. The real version answers you instantly, day or night, without bothering Adam.",
     is_ai_scene: true,
     suggested_prompt:
       'When will the countertops be installed? I want to plan when I can have my kitchen back.',
@@ -108,7 +103,6 @@ Project context:
 - On schedule for July 18 completion
 
 Answer Sarah's question warmly and specifically. Give her a real timeline she can plan around. Sound like a knowledgeable contractor's assistant — helpful, specific, reassuring. Max 3-4 sentences.`,
-    action_label: null,
     scene_description:
       "That's what communication looks like when your contractor uses AK Ops. Specific answers, any time, without playing phone tag.",
   },
@@ -117,11 +111,10 @@ Answer Sarah's question warmly and specifically. Give her a real timeline she ca
     screen: 'completion',
     headline: 'Done. Documented. Delivered.',
     subline:
-      'Project complete. Final walkthrough done. Sarah receives her photo reel and her 12-month warranty. The portal stays active — her project is documented forever.',
-    action_label: null,
+      "Project complete, final walkthrough done, 12-month warranty in place. Sarah keeps her portal active — her project is documented forever.",
     is_final: true,
   },
 ]
 
 export const HOMEOWNER_AI_FALLBACK =
-  "Great question, Sarah. Your countertop template appointment is Tuesday June 24th. After template, fabrication runs about 2-3 weeks, so install will land around July 10-11. That keeps you on track for a July 18 completion — your kitchen should be fully functional by the 18th. I'll send you a reminder the day before each milestone."
+  "Great question, Sarah. Your countertop template appointment is Tuesday June 24. After template, fabrication runs about 2-3 weeks, so install will land around July 10-11. That keeps you on track for a July 18 completion — your kitchen should be fully functional by the 18th. I'll send you a reminder the day before each milestone."

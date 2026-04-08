@@ -1,4 +1,10 @@
-// 13-step employee demo walkthrough script
+// 13-step employee demo walkthrough script.
+//
+// Narration style: short, conversational, explain what the screen IS and
+// why it matters. No "Tap X" instructions — the only action the user takes
+// is the always-visible Next button in the footer (label chosen by shell).
+// Keep each explanation under ~280 characters so the footer stays tidy on
+// small screens.
 
 export type DemoScreen =
   | 'welcome'
@@ -14,21 +20,18 @@ export type DemoScreen =
   | 'photos'
   | 'ai_scene_2'
   | 'bonus_tracker'
-  | 'completion'
 
 export interface DemoStep {
   step: number
   screen: DemoScreen
   title: string
   explanation: string
-  action_label: string | null
   highlight: string | null
   is_ai_scene?: boolean
   ai_scene_type?: 'field_question' | 'change_order'
   suggested_prompt?: string
   ai_system_prompt?: string
   scene_description?: string
-  show_ai_badge?: boolean
 }
 
 export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
@@ -37,8 +40,7 @@ export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
     screen: 'welcome',
     title: 'Working at AK Renovations',
     explanation:
-      "Before your interview, we want to show you exactly how we run our jobs. This takes about 5 minutes. No login needed — just tap through.",
-    action_label: "Let's go",
+      "This is a 5-minute look at how we run our jobs. Tap Next or press Space to move through it at your own pace.",
     highlight: null,
   },
   {
@@ -46,8 +48,7 @@ export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
     screen: 'launchpad',
     title: 'Your home screen',
     explanation:
-      "This is where your day starts. Everything you need is right here, one tap away. Adam knows where you are and what you're working on without having to call you.",
-    action_label: 'Tap Schedule to see your day',
+      "Every tool you need on one screen. No menus to dig through. Adam knows where you are and what you're working on without having to call you.",
     highlight: 'schedule_card',
   },
   {
@@ -55,17 +56,15 @@ export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
     screen: 'schedule',
     title: "You always know what you're doing",
     explanation:
-      "Adam schedules your day here. Henderson Kitchen in the morning, Carter Bathroom after lunch. The address, the task, the phase — all here before you leave the house.",
-    action_label: 'Tap Time Clock to clock in',
+      "Adam lays out your day in the office. Henderson Kitchen in the morning, Carter Bathroom after lunch. Address, task, phase — all before you leave the house.",
     highlight: 'schedule_items',
   },
   {
     step: 4,
     screen: 'time_clock_project_select',
-    title: 'Clocking in — pick your project',
+    title: 'Clocking in — pick the project',
     explanation:
-      "Every clock-in is tied to a specific project. If you work two jobs in one day, which happens, you clock in and out for each one separately. No guessing, no paperwork at the end of the week.",
-    action_label: 'Tap Henderson Kitchen',
+      "Every clock-in is tied to a specific project. Work two jobs in one day? You clock in and out for each one separately. No guessing at the end of the week.",
     highlight: 'project_list',
   },
   {
@@ -73,8 +72,7 @@ export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
     screen: 'time_clock_work_type',
     title: 'What kind of work?',
     explanation:
-      "Pick what you're doing. This matters because different work types are billed at different rates. Field carpentry runs at one rate, site visits at another. It tracks automatically.",
-    action_label: 'Tap Field Carpentry',
+      "Field carpentry? Site visit? Travel? Each one has its own billing rate. Pick once and it tracks automatically for the rest of that session.",
     highlight: 'work_type_grid',
   },
   {
@@ -82,8 +80,7 @@ export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
     screen: 'time_clock_active',
     title: "You're clocked in",
     explanation:
-      "GPS captured. Clock running. Adam can see you're on site. Clock out when you leave, it takes two taps.",
-    action_label: 'Tap to snap a receipt',
+      "GPS captured, clock running, Adam can see you're on site. When you leave, clock out takes two taps. If you forget, you can add a manual entry later.",
     highlight: 'active_segment',
   },
   {
@@ -91,8 +88,7 @@ export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
     screen: 'receipt_scanner',
     title: 'Bought something for the job?',
     explanation:
-      "Snap the receipt. That's it. The AI reads the vendor, amount, and items automatically. No filling out a form. No saving a photo and texting Adam. It files itself.",
-    action_label: 'Tap to snap',
+      "Snap the receipt. That's the whole action. No forms. No texting photos to Adam. The AI reads it for you — you'll see next.",
     highlight: 'camera_button',
   },
   {
@@ -100,18 +96,15 @@ export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
     screen: 'receipt_confirm',
     title: 'The AI read it',
     explanation:
-      "Lowe's. $47.82. Cabinet screws, wood shims, thinset. All extracted automatically and assigned to Henderson Kitchen. Confirm and it's filed. Adam sees it instantly.",
-    action_label: 'Confirm',
+      "Lowe's. $47.82. Cabinet screws, wood shims, thinset. Assigned to Henderson Kitchen automatically. You confirm, it files itself. Adam sees it instantly.",
     highlight: 'extracted_data',
-    show_ai_badge: true,
   },
   {
     step: 9,
     screen: 'shopping_list',
     title: 'Shopping list — with the supplier info built in',
     explanation:
-      "Adam adds materials you need here. But notice, it tells you exactly where to go and gives you the account number. No more calling Adam to ask which store or if we have an account.",
-    action_label: 'Continue',
+      "Adam adds what you need. But notice — each item tells you exactly which store and gives you the account number. No calling to ask where to go.",
     highlight: 'first_item_with_supplier',
   },
   {
@@ -119,8 +112,7 @@ export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
     screen: 'ai_scene_1',
     title: 'Ask the AI anything about your job',
     explanation:
-      "The AI knows everything about your projects. Try asking it something. We've given you a suggestion, or type your own question.",
-    action_label: null,
+      "Try it: type a question or use the suggestion. The AI knows your projects, your clients, your selections. Or press Skip to keep moving.",
     highlight: 'ai_input',
     is_ai_scene: true,
     ai_scene_type: 'field_question',
@@ -137,15 +129,14 @@ The current project context:
 
 Answer field questions concisely and practically. You are a knowledgeable colleague, not a chatbot. Use specific product names, measurements, and techniques. Never be vague. Max 3-4 sentences unless a step-by-step is genuinely needed.`,
     scene_description:
-      "The AI responds with exactly what Marcus needs — the right grout, the right technique, and a heads-up about the joint size. Not a Google search. Not a call to Adam. Just the answer.",
+      "The AI gives Marcus exactly what he needs — right grout, right technique, note about joint size. Not a Google search. Not a call to Adam.",
   },
   {
     step: 11,
     screen: 'photos',
-    title: 'Photos — documented automatically',
+    title: 'Photos, documented automatically',
     explanation:
-      "Take a progress photo, pick the category, and it's filed to the right project. No texting photos. No albums to sort. Adam sees completed work in real time from anywhere.",
-    action_label: 'Continue',
+      "Take a progress photo, pick the category, it's filed to the right project. No texting. No albums to sort. Adam sees completed work in real time.",
     highlight: 'category_picker',
   },
   {
@@ -153,8 +144,7 @@ Answer field questions concisely and practically. You are a knowledgeable collea
     screen: 'ai_scene_2',
     title: 'Found something unexpected on site',
     explanation:
-      "You pull off a wall panel and find water damage that wasn't in the original scope. This happens. Here's how you handle it — tell the AI what you found.",
-    action_label: null,
+      "Pull off a panel, find water damage, it's not in the scope. This happens. Here's how you handle it — try the AI or Skip to see the finish.",
     highlight: 'ai_input',
     is_ai_scene: true,
     ai_scene_type: 'change_order',
@@ -166,7 +156,6 @@ The current project context:
 - Henderson Kitchen Remodel at 1847 Ridgewood Dr, Stow OH
 - Phase: Cabinet Installation
 - Original scope: Full kitchen remodel — demo, cabinets, countertops, backsplash, flooring, plumbing, electrical
-- Contract value: not relevant to share with field staff
 - Client: Tom & Dana Henderson
 
 Marcus has just found unexpected water damage. Your job:
@@ -178,15 +167,14 @@ Marcus has just found unexpected water damage. Your job:
 
 Keep it under 5 sentences. Sound like a knowledgeable colleague, not a bot.`,
     scene_description:
-      "The AI tells Marcus exactly what to do — take photos, don't proceed, Adam is being notified. A change order draft is automatically created. Adam sees it on his phone before Marcus even puts his away.",
+      "The AI tells Marcus what to do — take photos, don't proceed, Adam is being notified. A change order draft is automatically created and Adam sees it before Marcus puts his phone away.",
   },
   {
     step: 13,
     screen: 'bonus_tracker',
     title: 'Your bonus tracker',
     explanation:
-      "Every project completed on time and on budget earns you a bonus. No guessing. No waiting to ask Adam. Henderson Kitchen completes June 28 — that's a $900 bonus. It tracks itself.",
-    action_label: 'Finish the walkthrough',
+      "Every project completed on time and on budget earns a bonus. Henderson Kitchen wraps June 28 — that's a $900 bonus, tracked automatically. No chasing.",
     highlight: 'bonus_card',
   },
 ]

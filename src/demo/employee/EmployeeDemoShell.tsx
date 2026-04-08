@@ -1,7 +1,16 @@
 // Employee demo shell — orchestrates the 13-step walkthrough.
-// Pure client-side. Public route. Zero auth, zero supabase.
+// Public route. Zero auth, zero supabase.
+//
+// Behaviors:
+//  - Scroll-to-top on every step change (so tall screens never strand the user)
+//  - Keyboard shortcuts (Space / Enter / →) to advance
+//  - Always-visible Next button in the footer (handled by DemoPromptBar)
+//  - On AI scenes, the footer button becomes "Skip →" so users can bail if
+//    they don't want to type — or they can ask the AI and the inline
+//    continue button in AIScene will advance them
+//  - On the final step, button becomes "Finish →"
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { PhoneFrame } from '../shared/PhoneFrame'
 import { DemoBanner, DemoPromptBar, DemoStage } from '../shared/DemoChrome'
 import { AIScene } from '../shared/AIScene'
@@ -22,7 +31,7 @@ import {
   CompletionScreen,
 } from './screens'
 
-const TOTAL = EMPLOYEE_DEMO_SCRIPT.length // 13
+const TOTAL = EMPLOYEE_DEMO_SCRIPT.length
 
 function ScreenForStep({
   step,
@@ -79,6 +88,13 @@ export default function EmployeeDemoShell() {
   const [index, setIndex] = useState(0)
   const [done, setDone] = useState(false)
 
+  // Scroll-to-top on every step change. Find the scroll container inside
+  // PhoneFrame (marked with data-demo-scroll) and reset its scrollTop.
+  useEffect(() => {
+    const scroller = document.querySelector('[data-demo-scroll]') as HTMLElement | null
+    if (scroller) scroller.scrollTop = 0
+  }, [index, done])
+
   if (done) {
     return (
       <PhoneFrame>
@@ -95,6 +111,7 @@ export default function EmployeeDemoShell() {
   const step = EMPLOYEE_DEMO_SCRIPT[index]
   const isLast = index === EMPLOYEE_DEMO_SCRIPT.length - 1
   const isAIScene = !!step.is_ai_scene
+  const isFirst = index === 0
 
   function advance() {
     if (isLast) {
@@ -103,6 +120,14 @@ export default function EmployeeDemoShell() {
       setIndex((i) => i + 1)
     }
   }
+
+  const buttonLabel = isFirst
+    ? 'Start'
+    : isLast
+      ? 'Finish'
+      : isAIScene
+        ? 'Skip'
+        : 'Next'
 
   return (
     <PhoneFrame
@@ -120,9 +145,9 @@ export default function EmployeeDemoShell() {
         <DemoPromptBar
           title={step.title}
           body={step.explanation}
-          actionLabel={step.action_label}
           onAction={advance}
-          hideAction={isAIScene}
+          buttonLabel={buttonLabel}
+          pulse={!isAIScene}
         />
       }
     >
