@@ -22,20 +22,20 @@ and completing end-to-end workflows.
 ## Priority Queue
 
 ### P0 — Replace mock data in core admin screens
-- [ ] CRMPage — wire to leads table (kanban, lead details, activity timeline)
+- [x] CRMPage — real leads kanban, drag-to-move (@dnd-kit), Add Lead, activity timeline ✅ Session 4
 - [ ] ProjectsPage — wire to projects table (list, filters, status)
 - [ ] ProjectDetailPage — wire all tabs to real data
 - [ ] FinancialsPage — wire to invoices, expenses, projects tables
-- [ ] InvoicesPage — wire to invoices table (create, send, track, pay)
-- [ ] TimeClockPage — wire to time_entries table (clock in/out, GPS, manual entry)
-- [ ] EmployeeHome — wire to real schedule, time entries, checklists
+- [x] InvoicesPage — create, send (generate-pdf), mark paid ✅ Session 4
+- [x] TimeClockPage — clock in/out to time_entries with GPS, manual entry ✅ Session 4
+- [x] EmployeeHome (FieldLaunchpadPage) — all 9 cards real Supabase data ✅ Session 4
 
 ### P1 — Employee tools end-to-end
-- [ ] ShoppingListPage — wire to shopping_list_items table
-- [ ] ReceiptsPage — camera → agent-receipt-processor → expenses table
-- [ ] PhotosPage — upload → Supabase Storage → project_photos table
+- [x] ShoppingListPage — real items, add with project selector, purchased section ✅ Session 4
+- [x] ReceiptsPage — upload to receipts bucket, agent-receipt-processor, writes to expenses ✅ Session 4
+- [x] PhotosPage — upload to project-photos bucket, agent-photo-tagger ✅ Session 4
 - [ ] MessagesPage — wire to messages table
-- [ ] NotesPage — wire to daily_logs table
+- [x] NotesPage — daily_logs + change_orders writes, project selector ✅ Session 4
 - [ ] BonusTrackerPage — wire to bonus_records table
 - [ ] SchedulePageEmployee — wire to schedule_events table
 
@@ -83,4 +83,6 @@ and completing end-to-end workflows.
 
 | Date | Work Done |
 |------|-----------|
+| 2026-04-08 | Session 5: Fixed Supabase getSession() deadlock (Promise.race with 6s timeout). Auth context now unblocks within 6s even if token refresh stalls. Committed a6708aa + 1eb4116. |
+| 2026-04-08 | Session 4: Wired CRM kanban drag-to-move (@dnd-kit), Add Lead slide-over, InvoicesPage (create/send/markPaid), TimeClockPage DB persistence + GPS, ShoppingList overhaul, Photos/Receipts real upload + AI, NotesPage project selector + daily log writes. Back arrows on all employee pages. All items committed and pushed. |
 | 2026-04-08 | Cleared mock DB data. Built: business context editor, onboarding wizard, meta agent overhaul, API usage bar, AdminDashboard real-data rewrite. Fixed Vercel build. Set bypassPermissions. Updated SESSION_STATE to reflect full app inventory (75 routes, 45 pages, 60 edge functions). |

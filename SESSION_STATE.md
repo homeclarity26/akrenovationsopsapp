@@ -1,5 +1,5 @@
 # SESSION STATE
-_Last updated: 2026-04-08_
+_Last updated: 2026-04-08 (session 5)_
 
 ## What's Deployed & Working
 
@@ -26,14 +26,19 @@ _Last updated: 2026-04-08_
 - `OnboardingPage` — inserts profiles, projects, subcontractors
 - `SecurityPage` — Supabase auth settings
 - `APIUsageBar` — live cost data from api_usage_log via get-usage-stats function
+- `CRMPage` — real leads kanban with drag-to-move (@dnd-kit), Add Lead slide-over, activity timeline
+- `InvoicesPage` — real invoice list, New Invoice sheet (line items), Send (generate-pdf), Mark Paid
+- `FieldLaunchpadPage` — all 9 cards wired: shopping badge, messages unread, pending ai_actions, open time entry, today's schedule
+- `TimeClockPage` (employee) — clock in/out persists to time_entries with GPS, manual entry wired
+- `ShoppingListPage` — real items grouped by project, add item with project selector, purchased section, clear history
+- `PhotosPage` — real Supabase Storage upload (project-photos bucket), project selector, calls agent-photo-tagger
+- `ReceiptsPage` — real upload to receipts bucket, project selector, calls agent-receipt-processor, writes to expenses
+- `NotesPage` — project selector (localStorage persisted), add daily log writes to daily_logs, change order flags write to change_orders
+- `EmployeeChecklistsPage` — real checklist_instance_items from Supabase, mark complete persists
 
 ### MOCK DATA (UI complete, needs wiring)
-- `CRMPage` — MOCK_LEADS
 - `ProjectsPage` — MOCK_PROJECTS
 - `FinancialsPage` — MOCK_FINANCIALS, MOCK_INVOICES, MOCK_PROJECTS
-- `InvoicesPage` — MOCK_INVOICES, MOCK_TIME_ENTRIES
-- `TimeClockPage` — MOCK_TIME_ENTRIES, MOCK_PROJECTS (both admin + employee views)
-- `EmployeeHome` — MOCK_SCHEDULE, MOCK_TIME_ENTRIES, MOCK_CHECKLIST_INSTANCE_ITEMS
 - `PayrollDashboardPage` — MOCK_PAY_PERIODS, MOCK_PAYROLL_RECORDS
 - `ClientProgress` — hardcoded phases + static updates
 - `ClientInvoices` — hardcoded inline demo data
@@ -44,10 +49,10 @@ _Last updated: 2026-04-08_
 - WalkthroughPage, ChecklistsPage, PortfolioPage, WarrantyPage
 - All payroll sub-pages (PayPeriodDetail, PayrollWorkers, WorkerSetup, etc.)
 - All budget components (BudgetSetup, BudgetTab, QuoteCollection, etc.)
-- All employee pages (ShoppingList, Receipts, Photos, Messages, Notes, Bonus, Schedule, etc.)
+- MessagesPage, BonusTrackerPage, SchedulePageEmployee (UI + partial data)
 - All client pages (Photos, Selections, Messages, Schedule, PunchList, Docs, Referral)
 - Settings pages (Agents, Approvals, MemoryInspector, Materials, ToolRequests, Rates, Checklists, EstimateTemplates, Backups)
-- MetaAgentPage, ImprovementQueuePage, AICommandPage, FieldLaunchpadPage
+- MetaAgentPage, ImprovementQueuePage, AICommandPage
 
 ### COMPLETE (demo / no real data needed)
 - `EmployeeDemoShell` — interactive demo at /demo/employee
