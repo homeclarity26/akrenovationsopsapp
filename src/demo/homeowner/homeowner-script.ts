@@ -1,13 +1,15 @@
-// 9-step homeowner demo walkthrough script.
+// 8-step homeowner demo walkthrough script.
 //
 // Narration style: warm and reassuring. Sarah's story. No "Tap X" instructions —
 // the only action is the always-visible Next button in the footer.
+//
+// Step 1 is the portal welcome (previously step 4) so viewers land on the
+// visual wow first. The old intro-with-metadata-card step was removed.
 
 export type HomeownerScreen =
-  | 'intro'
+  | 'portal_welcome'
   | 'proposal_overview'
   | 'proposal_sections'
-  | 'portal_welcome'
   | 'selections'
   | 'progress_photos'
   | 'weekly_update'
@@ -30,17 +32,17 @@ export interface HomeownerStep {
 export const HOMEOWNER_DEMO_SCRIPT: HomeownerStep[] = [
   {
     step: 1,
-    screen: 'intro',
-    headline: "What it's like to hire AK Renovations",
+    screen: 'portal_welcome',
+    headline: "This is what your portal feels like",
     subline:
-      "This is Sarah's kitchen remodel, from first contact to finished project. Five minutes, tap Next to move through it.",
+      "Sarah Mitchell is 3 weeks into her kitchen remodel in Stow. Every detail of her project lives here — photos, schedule, selections, invoices, all in one place. Press Next to see the rest of her story.",
   },
   {
     step: 2,
     screen: 'proposal_overview',
-    headline: 'A real, written proposal',
+    headline: 'It started with a real proposal',
     subline:
-      "48 hours after the site visit, Sarah receives a detailed proposal. Clear scope, clear price, signable from her phone. No back-of-envelope number.",
+      "48 hours after the site visit, Sarah received a detailed written proposal. Clear scope, clear price, signable from her phone. No back-of-envelope number.",
   },
   {
     step: 3,
@@ -52,13 +54,6 @@ export const HOMEOWNER_DEMO_SCRIPT: HomeownerStep[] = [
   },
   {
     step: 4,
-    screen: 'portal_welcome',
-    headline: 'Your own project portal',
-    subline:
-      "The moment Sarah signs, her portal goes live. Photos, schedule, selections, invoices, messages — all in one place. No app to download.",
-  },
-  {
-    step: 5,
     screen: 'selections',
     headline: 'Make your selections on your own time',
     subline:
@@ -66,7 +61,7 @@ export const HOMEOWNER_DEMO_SCRIPT: HomeownerStep[] = [
     highlight: 'selections_list',
   },
   {
-    step: 6,
+    step: 5,
     screen: 'progress_photos',
     headline: 'Watch your project come together',
     subline:
@@ -74,14 +69,14 @@ export const HOMEOWNER_DEMO_SCRIPT: HomeownerStep[] = [
     highlight: 'photo_gallery',
   },
   {
-    step: 7,
+    step: 6,
     screen: 'weekly_update',
     headline: 'A real Friday update, every week',
     subline:
       "Not a generic 'work is progressing' email. A specific, photo-backed summary of what happened this week and what's coming next.",
   },
   {
-    step: 8,
+    step: 7,
     screen: 'ai_scene',
     headline: 'Have a question? Just ask.',
     subline:
@@ -107,7 +102,7 @@ Answer Sarah's question warmly and specifically. Give her a real timeline she ca
       "That's what communication looks like when your contractor uses AK Ops. Specific answers, any time, without playing phone tag.",
   },
   {
-    step: 9,
+    step: 8,
     screen: 'completion',
     headline: 'Done. Documented. Delivered.',
     subline:

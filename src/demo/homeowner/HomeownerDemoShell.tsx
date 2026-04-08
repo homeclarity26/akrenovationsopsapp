@@ -17,7 +17,6 @@ import {
 } from './homeowner-script'
 import type { HomeownerStep } from './homeowner-script'
 import {
-  IntroScreen,
   ProposalOverviewScreen,
   ProposalSectionsScreen,
   PortalWelcomeScreen,
@@ -37,8 +36,6 @@ function ScreenForStep({
   onAdvance: () => void
 }) {
   switch (step.screen) {
-    case 'intro':
-      return <IntroScreen />
     case 'proposal_overview':
       return <ProposalOverviewScreen />
     case 'proposal_sections':
