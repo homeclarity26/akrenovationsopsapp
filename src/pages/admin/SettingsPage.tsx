@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, User, Users, Brain, Zap, AlertTriangle, Layers, Wrench, BookOpen, UserPlus } from 'lucide-react'
+import { ChevronRight, User, Brain, Zap, AlertTriangle, Layers, Wrench, BookOpen, UserPlus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
