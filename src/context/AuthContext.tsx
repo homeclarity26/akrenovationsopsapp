@@ -79,9 +79,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true
 
+    // Safety net: if auth hasn't resolved in 8 seconds, unblock the UI
+    const timeout = setTimeout(() => {
+      if (mounted) setLoading(false)
+    }, 8000)
+
     // Initial session check
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return
+      clearTimeout(timeout)
       setSession(data.session)
       if (data.session?.user) {
         const profile = await fetchProfile(data.session.user.id, data.session.user.email)
@@ -93,6 +99,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Subscribe to auth changes (sign in, sign out, token refresh)
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       if (!mounted) return
+      clearTimeout(timeout)
       setSession(newSession)
       if (newSession?.user) {
         const profile = await fetchProfile(newSession.user.id, newSession.user.email)
@@ -105,6 +112,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     return () => {
       mounted = false
+      clearTimeout(timeout)
       subscription?.subscription.unsubscribe()
     }
   }, [])
