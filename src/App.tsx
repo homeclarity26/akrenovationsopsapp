@@ -115,8 +115,9 @@ function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'clie
   // before the session restores.
   if (loading) return <AuthLoadingScreen />
   if (!user) return <Navigate to="/login" replace />
+  // Admins can access all routes (field mode lets admins use employee screens)
+  if (user.role === 'admin') return <>{children}</>
   if (user.role !== role) {
-    if (user.role === 'admin') return <Navigate to="/admin" replace />
     if (user.role === 'employee') return <Navigate to="/employee" replace />
     return <Navigate to="/client/progress" replace />
   }
