@@ -3,10 +3,11 @@
 
 import { HOMEOWNER_DEMO_DATA } from '../homeowner-data'
 import {
-  KITCHEN,
+  HOUSE,
   PROGRESS_SEQUENCE,
   WEEKLY_UPDATE_PHOTOS,
   BEFORE_AFTER,
+  CURRENT_PHASE_THUMB,
 } from '../../shared/demo-images'
 
 const D = HOMEOWNER_DEMO_DATA
@@ -122,11 +123,11 @@ export function ProposalSectionsScreen({
 export function PortalWelcomeScreen() {
   return (
     <div style={{ margin: '-16px -14px 0' }}>
-      {/* Full-bleed hero with image + gradient overlay + welcome text */}
+      {/* Full-bleed hero — Sarah's actual house exterior + gradient overlay */}
       <div style={s.heroWrap}>
         <img
-          src={KITCHEN.heroLuxury}
-          alt="Your kitchen vision"
+          src={HOUSE.exterior}
+          alt="Sarah's home"
           style={s.heroImg}
         />
         <div style={s.heroGradient} />
@@ -169,7 +170,7 @@ export function PortalWelcomeScreen() {
           <div style={s.phaseDivider} />
           <div style={s.currentPhase}>
             <img
-              src={KITCHEN.shakerCream}
+              src={CURRENT_PHASE_THUMB}
               alt="Cabinets installed"
               style={s.currentPhaseImg}
             />
