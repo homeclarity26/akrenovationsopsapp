@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, User, Users, Brain, Zap, AlertTriangle, Layers, Wrench } from 'lucide-react'
+import { ChevronRight, User, Users, Brain, Zap, AlertTriangle, Layers, Wrench, BookOpen, UserPlus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -39,8 +39,21 @@ export function SettingsPage() {
         <SectionHeader title="AI" />
         <Card padding="none">
           <button
-            onClick={() => navigate('/admin/settings/memory')}
+            onClick={() => navigate('/admin/settings/context')}
             className="w-full flex items-center gap-3 px-4 py-4 text-left hover:bg-[var(--bg)] transition-colors rounded-2xl min-h-[44px]"
+          >
+            <div className="w-9 h-9 rounded-xl bg-[var(--navy)] flex items-center justify-center flex-shrink-0">
+              <BookOpen size={17} className="text-white" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm text-[var(--text)]">Business Context</p>
+              <p className="text-xs text-[var(--text-tertiary)] mt-0.5">Edit what the AI knows about your business</p>
+            </div>
+            <ChevronRight size={15} className="text-[var(--text-tertiary)] flex-shrink-0" />
+          </button>
+          <button
+            onClick={() => navigate('/admin/settings/memory')}
+            className="w-full flex items-center gap-3 px-4 py-4 text-left hover:bg-[var(--bg)] transition-colors border-t border-[var(--border-light)] min-h-[44px]"
           >
             <div className="w-9 h-9 rounded-xl bg-[var(--navy)] flex items-center justify-center flex-shrink-0">
               <Brain size={17} className="text-white" />
@@ -230,9 +243,12 @@ export function SettingsPage() {
               </div>
             </div>
           ))}
-          <button className="flex items-center gap-2 p-4 w-full text-left text-[var(--navy)] text-sm font-medium">
-            <Users size={16} />
-            Add Employee
+          <button
+            onClick={() => navigate('/admin/onboard')}
+            className="flex items-center gap-2 p-4 w-full text-left text-[var(--navy)] text-sm font-medium border-t border-[var(--border-light)]"
+          >
+            <UserPlus size={16} />
+            Onboard New Person
           </button>
         </Card>
       </div>

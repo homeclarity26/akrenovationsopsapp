@@ -6,6 +6,7 @@ import {
   Receipt, ClipboardList, HardHat, Shield, Wallet
 } from 'lucide-react'
 import { AIBar } from '@/components/ui/AIBar'
+import { APIUsageBar } from '@/components/ui/APIUsageBar'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -57,6 +58,9 @@ export function AdminLayout() {
           ))}
         </nav>
         <div className="p-3 border-t border-white/10 space-y-0.5">
+          <div className="px-3 py-2">
+            <APIUsageBar className="w-full justify-center" />
+          </div>
           <NavLink
             to="/admin/ai"
             className={({ isActive }) =>
@@ -101,6 +105,7 @@ export function AdminLayout() {
           Field mode
         </button>
         <div className="flex items-center gap-1">
+        <APIUsageBar className="mr-1" />
         <button
           onClick={() => setAiOpen(true)}
           className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-white transition-colors"

@@ -1,7 +1,7 @@
-// extract-preferences — Phase E
-// Called async after every meta-agent-chat turn.
-// Analyzes the exchange for signals about Adam's preferences/patterns.
-// Upserts to meta_agent_preferences table.
+// extract-preferences — Phase E (overhaul)
+// Called async (fire-and-forget) after every meta-agent-chat turn.
+// Analyzes the exchange for preferences, patterns, and business facts worth remembering.
+// Writes to meta_agent_preferences and operational_memory tables.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -18,6 +18,23 @@ interface ExtractInput {
   assistant_reply: string
 }
 
+interface ExtractedPreference {
+  key: string
+  value: string
+  preference_type: 'communication' | 'workflow' | 'financial' | 'operational'
+}
+
+interface ExtractedFact {
+  content: string
+  memory_type: 'fact' | 'pattern' | 'preference'
+}
+
+interface ExtractionResult {
+  preferences: ExtractedPreference[]
+  facts: ExtractedFact[]
+  nothing_worth_saving: boolean
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -27,26 +44,47 @@ serve(async (req) => {
   try {
     const { session_id, user_message, assistant_reply }: ExtractInput = await req.json()
 
+    if (!session_id || !user_message || !assistant_reply) {
+      return new Response(JSON.stringify({ skipped: true, reason: 'missing fields' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
-    // Only analyze every 3rd message to avoid over-inference
-    const { count } = await supabase.from('meta_agent_conversations').select('id', { count: 'exact', head: true }).eq('session_id', session_id)
-    if ((count ?? 0) % 3 !== 0) {
-      return new Response(JSON.stringify({ skipped: true }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
-    }
+    // Load existing preference keys to avoid re-extracting known things
+    const { data: existingPrefs } = await supabase
+      .from('meta_agent_preferences')
+      .select('key,preference_type')
+      .limit(100)
 
-    const systemPrompt = `Analyze this conversation exchange for signals about the user's (Adam's) preferences and patterns.
-Return ONLY a JSON object with structure:
+    const existingKeys = new Set((existingPrefs ?? []).map(p => `${p.preference_type}/${p.key}`))
+
+    // Call Claude Haiku for fast extraction
+    const extractionPrompt = `You are analyzing a conversation between Adam Kilgore (AK Renovations owner) and his AI chief of staff.
+
+Extract ONLY non-obvious, durable information worth remembering for future conversations. Skip pleasantries, skip things any business would do.
+
+User message: ${user_message}
+AI reply: ${assistant_reply}
+
+Return JSON:
 {
-  "preferences": [
-    { "type": "communication_style|decision_pattern|workflow_preference|business_priority|pain_point|time_pattern", "key": "short_key", "value": "what you learned", "confidence": 0.0-1.0, "evidence": "what specifically showed this" }
-  ]
+  "preferences": [{"key": "string", "value": "string", "preference_type": "communication|workflow|financial|operational"}],
+  "facts": [{"content": "string", "memory_type": "fact|pattern|preference"}],
+  "nothing_worth_saving": boolean
 }
-Only include high-confidence signals (>0.7). Return empty array if no clear signals.
-Categories: communication_style, decision_pattern, workflow_preference, business_priority, pain_point, time_pattern`
+
+Rules:
+- If nothing interesting was said, set nothing_worth_saving: true and return empty arrays
+- preferences: things about HOW Adam likes to work ("prefers bullet points over paragraphs", "wants AR follow-up after 14 days not 7")
+- facts: things ABOUT the business ("Henderson client is price sensitive", "Martinez project is a referral from Thompson")
+- Max 3 items total — quality over quantity
+- Skip generic things ("Adam wants invoices paid") — only extract specific, non-obvious signals
+- preference_type must be exactly one of: communication, workflow, financial, operational`
 
     const res = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -57,38 +95,89 @@ Categories: communication_style, decision_pattern, workflow_preference, business
       },
       body: JSON.stringify({
         model: 'claude-haiku-4-20250514',
-        max_tokens: 500,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: `User: ${user_message}\nAssistant: ${assistant_reply}` }],
+        max_tokens: 600,
+        system: 'You extract structured preference and fact data from conversations. Always return valid JSON.',
+        messages: [{ role: 'user', content: extractionPrompt }],
       }),
     })
 
-    if (!res.ok) return new Response(JSON.stringify({ success: false }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    if (!res.ok) {
+      console.error('Haiku extraction error:', await res.text())
+      return new Response(JSON.stringify({ success: false, reason: 'claude_error' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
 
     const data = await res.json()
-    const rawText = data.content?.[0]?.text ?? '{}'
+    const rawText = (data.content?.[0]?.text ?? '').trim()
 
-    let preferences: { type: string; key: string; value: string; confidence: number; evidence: string }[] = []
+    // Parse the JSON response, stripping markdown code fences if present
+    let result: ExtractionResult = { preferences: [], facts: [], nothing_worth_saving: true }
     try {
-      const parsed = JSON.parse(rawText)
-      preferences = parsed.preferences ?? []
-    } catch { preferences = [] }
+      const cleaned = rawText.replace(/^```(?:json)?\s*/i, '').replace(/```\s*$/i, '').trim()
+      result = JSON.parse(cleaned)
+    } catch {
+      console.error('Failed to parse extraction JSON:', rawText)
+      return new Response(JSON.stringify({ success: false, reason: 'parse_error' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
 
-    // Upsert detected preferences
-    for (const pref of preferences) {
-      if (pref.confidence < 0.7) continue
-      await supabase.from('meta_agent_preferences').upsert({
-        preference_type: pref.type,
-        key: pref.key,
-        value: pref.value,
-        confidence: pref.confidence,
-        evidence: pref.evidence,
-        inferred_at: new Date().toISOString(),
-      }, { onConflict: 'preference_type,key', ignoreDuplicates: false })
+    if (result.nothing_worth_saving) {
+      return new Response(JSON.stringify({ success: true, skipped: true, reason: 'nothing_worth_saving' }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      })
+    }
+
+    let prefsWritten = 0
+    let factsWritten = 0
+
+    // Write preferences — skip keys we already know
+    for (const pref of result.preferences ?? []) {
+      if (!pref.key || !pref.value || !pref.preference_type) continue
+      const compositeKey = `${pref.preference_type}/${pref.key}`
+      if (existingKeys.has(compositeKey)) continue
+
+      const { error } = await supabase
+        .from('meta_agent_preferences')
+        .upsert({
+          preference_type: pref.preference_type,
+          key: pref.key,
+          value: pref.value,
+          inferred_at: new Date().toISOString(),
+        }, { onConflict: 'preference_type,key', ignoreDuplicates: false })
+
+      if (!error) {
+        prefsWritten++
+        existingKeys.add(compositeKey)
+      } else {
+        console.error('Pref upsert error:', error)
+      }
+    }
+
+    // Write facts/patterns to operational_memory
+    for (const fact of result.facts ?? []) {
+      if (!fact.content || !fact.memory_type) continue
+
+      const { error } = await supabase
+        .from('operational_memory')
+        .insert({
+          memory_type: fact.memory_type,
+          content: fact.content,
+          source: 'meta_agent_conversation',
+          session_id,
+          created_at: new Date().toISOString(),
+        })
+
+      if (!error) {
+        factsWritten++
+      } else {
+        console.error('Fact insert error:', error)
+      }
     }
 
     return new Response(
-      JSON.stringify({ success: true, preferences_extracted: preferences.length }),
+      JSON.stringify({ success: true, preferences_written: prefsWritten, facts_written: factsWritten }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     )
   } catch (err) {

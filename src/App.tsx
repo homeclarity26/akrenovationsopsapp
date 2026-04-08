@@ -51,6 +51,8 @@ import { ToolRequestsAdminPage } from '@/pages/admin/settings/ToolRequestsPage'
 // Phase M — Backups & Security
 import { BackupsPage } from '@/pages/admin/settings/BackupsPage'
 import { SecurityPage } from '@/pages/admin/settings/SecurityPage'
+import { BusinessContextPage } from '@/pages/admin/settings/BusinessContextPage'
+import { OnboardingPage } from '@/pages/admin/OnboardingPage'
 
 // Employee pages
 import { EmployeeHome } from '@/pages/employee/EmployeeHome'
@@ -179,6 +181,9 @@ function AppRoutes() {
         {/* Phase M — Backups & Security */}
         <Route path="settings/backups" element={<BackupsPage />} />
         <Route path="settings/security" element={<SecurityPage />} />
+        {/* Business context editor + onboarding */}
+        <Route path="settings/context" element={<BusinessContextPage />} />
+        <Route path="onboard" element={<OnboardingPage />} />
       </Route>
 
       {/* Employee */}
