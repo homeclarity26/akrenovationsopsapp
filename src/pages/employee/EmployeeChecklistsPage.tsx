@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react'
-import { CheckCircle2, Circle, AlertTriangle, ExternalLink, X } from 'lucide-react'
+import { CheckCircle2, Circle, AlertTriangle, ExternalLink, X, ArrowLeft } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 
@@ -32,6 +33,7 @@ interface ChecklistItem {
 }
 
 export function EmployeeChecklistsPage() {
+  const navigate = useNavigate()
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -94,7 +96,12 @@ export function EmployeeChecklistsPage() {
 
   return (
     <div className="space-y-4 pb-24">
-      <PageHeader title="Checklists" subtitle={`${pendingCount} items assigned to you`} />
+      <div className="flex items-center gap-2">
+        <button onClick={() => navigate(-1)} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
+          <ArrowLeft size={20} />
+        </button>
+        <PageHeader title="Checklists" subtitle={`${pendingCount} items assigned to you`} />
+      </div>
 
       {(isLoading || Object.keys(grouped).length === 0) && (
         <Card padding="lg">

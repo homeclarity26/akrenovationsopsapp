@@ -1,5 +1,6 @@
 import { useState } from 'react'
-import { Send } from 'lucide-react'
+import { Send, ArrowLeft } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 const INITIAL_MESSAGES = [
   { id: 1, sender: 'Adam', role: 'admin', text: "Hey Jeff, how's the tile going today?", time: '8:02 AM', mine: false },
@@ -9,6 +10,7 @@ const INITIAL_MESSAGES = [
 ]
 
 export function MessagesPage() {
+  const navigate = useNavigate()
   const [messages, setMessages] = useState(INITIAL_MESSAGES)
   const [input, setInput] = useState('')
 
@@ -28,9 +30,14 @@ export function MessagesPage() {
   return (
     <div className="flex flex-col h-[calc(100svh-7rem)]">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-[var(--border-light)] bg-white">
-        <h1 className="font-semibold text-[var(--navy)] text-base">Team Chat</h1>
-        <p className="text-xs text-[var(--text-secondary)]">Adam, Jeff, Steven</p>
+      <div className="px-4 py-3 border-b border-[var(--border-light)] bg-white flex items-center gap-3">
+        <button onClick={() => navigate(-1)} className="p-1 -ml-1 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)] flex-shrink-0">
+          <ArrowLeft size={20} />
+        </button>
+        <div>
+          <h1 className="font-semibold text-[var(--navy)] text-base">Team Chat</h1>
+          <p className="text-xs text-[var(--text-secondary)]">Adam, Jeff, Steven</p>
+        </div>
       </div>
 
       {/* Messages */}

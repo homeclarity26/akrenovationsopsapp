@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react'
-import { Plus, Clock, X } from 'lucide-react'
+import { Plus, Clock, X, ArrowLeft } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 
@@ -84,10 +85,12 @@ function fmtMoney(n: number) {
 
 export function TimeClockPage() {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const TODAY = new Date().toISOString().slice(0, 10)
 
-  const { data: dbEntries = [], refetch: refetchEntries } = useQuery({
-    queryKey: ['time-entries', user?.id, TODAY],
+  const { data: dbEntries = [] } = useQuery({
+    queryKey: ['today-time-entries', user?.id, TODAY],
     enabled: !!user?.id,
     queryFn: async () => {
       const { data } = await supabase
@@ -124,11 +127,6 @@ export function TimeClockPage() {
     },
   })
 
-  const [localEntries, setLocalEntries] = useState<TimeEntry[]>([])
-  const entries: TimeEntry[] = [...localEntries, ...dbEntries.filter(
-    db => !localEntries.find(l => l.id === db.id)
-  )]
-
   const [now, setNow] = useState(Date.now())
   const [showClockIn, setShowClockIn] = useState(false)
   const [showClockOut, setShowClockOut] = useState(false)
@@ -161,7 +159,7 @@ export function TimeClockPage() {
     return () => clearInterval(t)
   }, [])
 
-  const todayEntries = entries.filter(e =>
+  const todayEntries = dbEntries.filter(e =>
     e.clock_in.startsWith(TODAY)
   )
   const openEntry = todayEntries.find(e => e.clock_out === null)
@@ -192,45 +190,66 @@ export function TimeClockPage() {
   }
 
   const handleClockInConfirm = () => {
-    const newEntry: TimeEntry = {
-      id: `te-${Date.now()}`,
-      user_id: user?.id ?? '',
-      project_id: ciProject?.id ?? null,
-      project_title: ciProject?.title ?? null,
-      work_type: ciWorkType,
-      clock_in: new Date().toISOString(),
-      clock_out: null,
-      total_minutes: null,
-      is_billable: ciProject ? ciBillable : false,
-      billing_rate: ciProject && ciBillable ? ciRate : null,
-      billed_amount: null,
-      billing_status: ciProject && ciBillable ? 'pending' : 'na',
-      entry_method: 'live',
-      geofence_verified: true,
+    const doInsert = async (coords: { lat: number; lng: number } | null) => {
+      await supabase.from('time_entries').insert({
+        employee_id: user!.id,
+        project_id: ciProject?.id ?? null,
+        clock_in: new Date().toISOString(),
+        clock_in_lat: coords?.lat ?? null,
+        clock_in_lng: coords?.lng ?? null,
+        entry_type: 'live',
+        work_type: ciWorkType,
+        is_billable: ciProject ? ciBillable : false,
+        billing_rate: ciProject && ciBillable ? ciRate : null,
+        billing_status: ciProject && ciBillable ? 'pending' : 'na',
+        notes: null,
+      })
+      queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
     }
-    setLocalEntries(prev => [newEntry, ...prev])
+
     setShowClockIn(false)
     setCiStep(1)
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        doInsert({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+      },
+      () => { doInsert(null) },
+      { enableHighAccuracy: true, timeout: 5000 }
+    )
   }
 
   // ── Clock Out ─────────────────────────────────────────────────────────────────
   const handleClockOutConfirm = () => {
     if (!openEntry) return
-    const clockOut = new Date()
-    const mins = Math.floor((clockOut.getTime() - new Date(openEntry.clock_in).getTime()) / 60000)
-    const billed = openEntry.is_billable && openEntry.billing_rate ? (mins / 60) * openEntry.billing_rate : null
-    setLocalEntries(prev => prev.map(e =>
-      e.id === openEntry.id
-        ? { ...e, clock_out: clockOut.toISOString(), total_minutes: mins, billed_amount: billed }
-        : e
-    ))
+
+    const doUpdate = async (coords: { lat: number; lng: number } | null) => {
+      const clockOutTime = new Date()
+      const totalHours = (clockOutTime.getTime() - new Date(openEntry.clock_in).getTime()) / 3600000
+      await supabase.from('time_entries').update({
+        clock_out: clockOutTime.toISOString(),
+        clock_out_lat: coords?.lat ?? null,
+        clock_out_lng: coords?.lng ?? null,
+        total_hours: Math.round(totalHours * 100) / 100,
+        notes: clockOutNote || null,
+      }).eq('id', openEntry.id)
+      queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
+    }
+
     setClockOutNote('')
     setShowClockOut(false)
-    refetchEntries()
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        doUpdate({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+      },
+      () => { doUpdate(null) },
+      { enableHighAccuracy: true, timeout: 5000 }
+    )
   }
 
   // ── Manual Entry ─────────────────────────────────────────────────────────────
-  const handleManualSave = () => {
+  const handleManualSave = async () => {
     setManualError('')
     if (!manualProject) { setManualError('Select a project'); return }
     if (!manualStart || !manualEnd) { setManualError('Enter start and end time'); return }
@@ -239,28 +258,23 @@ export function TimeClockPage() {
     const endDt = new Date(`${manualDate}T${manualEnd}`)
     if (endDt <= startDt) { setManualError('End time must be after start time'); return }
     if (endDt > new Date()) { setManualError('Cannot enter future time'); return }
-    const mins = Math.floor((endDt.getTime() - startDt.getTime()) / 60000)
-    const billed = manualBillable && manualRate ? (mins / 60) * manualRate : null
-    const entry: TimeEntry = {
-      id: `te-m-${Date.now()}`,
-      user_id: user?.id ?? '',
+    const totalHours = (endDt.getTime() - startDt.getTime()) / 3600000
+
+    await supabase.from('time_entries').insert({
+      employee_id: user!.id,
       project_id: manualProject.id,
-      project_title: manualProject.title,
-      work_type: manualWorkType,
       clock_in: startDt.toISOString(),
       clock_out: endDt.toISOString(),
-      total_minutes: mins,
+      total_hours: Math.round(totalHours * 100) / 100,
+      entry_type: 'manual',
+      work_type: manualWorkType,
       is_billable: manualBillable,
       billing_rate: manualBillable ? manualRate : null,
-      billed_amount: billed,
       billing_status: manualBillable ? 'pending' : 'na',
-      entry_method: 'manual',
-      manual_reason: manualReason,
-      geofence_verified: false,
-      approved_by: null,
-      approved_at: null,
-    }
-    setLocalEntries(prev => [entry, ...prev])
+      notes: manualReason,
+    })
+    queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
+
     setShowManual(false)
     setManualReason('')
     setManualStart('')
@@ -270,15 +284,29 @@ export function TimeClockPage() {
   // ── Switch Projects (conflict → clock out current → clock in new) ──────────
   const handleSwitchProject = () => {
     if (!openEntry) return
-    const clockOut = new Date()
-    const mins = Math.floor((clockOut.getTime() - new Date(openEntry.clock_in).getTime()) / 60000)
-    const billed = openEntry.is_billable && openEntry.billing_rate ? (mins / 60) * openEntry.billing_rate : null
-    setLocalEntries(prev => prev.map(e =>
-      e.id === openEntry.id
-        ? { ...e, clock_out: clockOut.toISOString(), total_minutes: mins, billed_amount: billed }
-        : e
-    ))
+
+    const doSwitch = async (coords: { lat: number; lng: number } | null) => {
+      const clockOutTime = new Date()
+      const totalHours = (clockOutTime.getTime() - new Date(openEntry.clock_in).getTime()) / 3600000
+      await supabase.from('time_entries').update({
+        clock_out: clockOutTime.toISOString(),
+        clock_out_lat: coords?.lat ?? null,
+        clock_out_lng: coords?.lng ?? null,
+        total_hours: Math.round(totalHours * 100) / 100,
+      }).eq('id', openEntry.id)
+      queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
+    }
+
     setShowConflict(false)
+
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        doSwitch({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+      },
+      () => { doSwitch(null) },
+      { enableHighAccuracy: true, timeout: 5000 }
+    )
+
     setTimeout(() => {
       setCiStep(1)
       setCiProject(null)
@@ -291,6 +319,12 @@ export function TimeClockPage() {
 
   return (
     <div className="p-4 space-y-4 pb-24">
+      {/* Back arrow */}
+      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-[var(--text-secondary)] pt-2 px-0 pb-0">
+        <ArrowLeft size={16} />
+        Back
+      </button>
+
       {/* Header */}
       <div className="pt-2 flex items-start justify-between">
         <div>

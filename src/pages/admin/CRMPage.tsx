@@ -1,12 +1,70 @@
 import { useState } from 'react'
 import { Plus, Phone, Mail, ArrowLeft, Calendar, MessageSquare, Sparkles } from 'lucide-react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { supabase } from '@/lib/supabase'
+
+// ── Kanban sub-components ─────────────────────────────────────────────────────
+
+function KanbanCard({ lead, onSelect }: { lead: Record<string, unknown>; onSelect: () => void }) {
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: lead.id as string,
+    data: { lead },
+  })
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 50 }
+    : undefined
+  return (
+    <div ref={setNodeRef} style={style} {...listeners} {...attributes} className={isDragging ? 'opacity-30' : ''}>
+      <button onClick={onSelect} className="w-full text-left touch-none">
+        <Card padding="sm" className="cursor-grab active:cursor-grabbing hover:border-[var(--border)]">
+          <p className="font-semibold text-xs text-[var(--text)] leading-snug mb-1">{lead.full_name as string}</p>
+          <p className="text-[10px] text-[var(--text-secondary)] capitalize mb-2">{lead.project_type as string}</p>
+          <p className="font-mono text-sm font-semibold text-[var(--text)]">
+            ${((lead.estimated_value as number ?? 0) / 1000).toFixed(0)}K
+          </p>
+        </Card>
+      </button>
+    </div>
+  )
+}
+
+function KanbanColumn({ stageKey, label, leads, onSelect }: {
+  stageKey: string
+  label: string
+  leads: Record<string, unknown>[]
+  onSelect: (id: string) => void
+}) {
+  const { setNodeRef, isOver } = useDroppable({ id: stageKey })
+  return (
+    <div className="w-56 flex-shrink-0">
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-xs font-semibold text-[var(--text-secondary)]">{label}</p>
+        <span className="text-xs text-[var(--text-tertiary)] bg-[var(--border-light)] px-1.5 py-0.5 rounded-full">
+          {leads.length}
+        </span>
+      </div>
+      <div
+        ref={setNodeRef}
+        className={`space-y-2 min-h-[60px] rounded-xl p-1 transition-colors ${isOver ? 'bg-[var(--cream-light)]' : ''}`}
+      >
+        {leads.map(lead => (
+          <KanbanCard key={lead.id as string} lead={lead} onSelect={() => onSelect(lead.id as string)} />
+        ))}
+        {leads.length === 0 && (
+          <div className="border-2 border-dashed border-[var(--border)] rounded-xl p-4 text-center">
+            <p className="text-xs text-[var(--text-tertiary)]">No leads</p>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 
 const STAGES = [
   { key: 'lead',            label: 'Lead' },
@@ -33,6 +91,32 @@ function computeDaysInStage(lead: Record<string, unknown>): number {
 export function CRMPage() {
   const [view, setView] = useState<'list' | 'kanban'>('list')
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [stageOverrides, setStageOverrides] = useState<Record<string, string>>({})
+  const [draggingLead, setDraggingLead] = useState<Record<string, unknown> | null>(null)
+  const queryClient = useQueryClient()
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }))
+
+  async function handleDragEnd(event: DragEndEvent) {
+    setDraggingLead(null)
+    const { active, over } = event
+    if (!over) return
+    const leadId = active.id as string
+    const newStage = over.id as string
+    const currentStage = stageOverrides[leadId] ?? (leads as Record<string, unknown>[]).find((l: any) => l.id === leadId)?.stage
+    if (currentStage === newStage) return
+    // Optimistic update
+    setStageOverrides(prev => ({ ...prev, [leadId]: newStage }))
+    // Persist
+    const now = new Date().toISOString()
+    await supabase.from('leads').update({ stage: newStage, stage_entered_at: now }).eq('id', leadId)
+    await supabase.from('lead_activities').insert({
+      lead_id: leadId,
+      activity_type: 'stage_change',
+      description: `Moved to ${STAGES.find(s => s.key === newStage)?.label ?? newStage}`,
+    })
+    queryClient.invalidateQueries({ queryKey: ['leads'] })
+  }
 
   const { data: leads = [], isLoading: leadsLoading } = useQuery({
     queryKey: ['leads'],
@@ -311,41 +395,47 @@ export function CRMPage() {
           ))}
         </Card>
       ) : (
-        <div className="overflow-x-auto -mx-4 px-4">
-          <div className="flex gap-3 w-max pb-4">
-            {STAGES.map(stage => {
-              const stageLeads = (leads as Record<string, unknown>[]).filter(l => l.stage === stage.key)
-              return (
-                <div key={stage.key} className="w-56 flex-shrink-0">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs font-semibold text-[var(--text-secondary)]">{stage.label}</p>
-                    <span className="text-xs text-[var(--text-tertiary)] bg-[var(--border-light)] px-1.5 py-0.5 rounded-full">
-                      {stageLeads.length}
-                    </span>
-                  </div>
-                  <div className="space-y-2">
-                    {stageLeads.map(lead => (
-                      <button key={lead.id as string} onClick={() => setSelectedId(lead.id as string)} className="w-full text-left">
-                        <Card padding="sm" className="cursor-pointer hover:border-[var(--border)]">
-                          <p className="font-semibold text-xs text-[var(--text)] leading-snug mb-1">{lead.full_name as string}</p>
-                          <p className="text-[10px] text-[var(--text-secondary)] capitalize mb-2">{lead.project_type as string}</p>
-                          <p className="font-mono text-sm font-semibold text-[var(--text)]">
-                            ${((lead.estimated_value as number) / 1000).toFixed(0)}K
-                          </p>
-                        </Card>
-                      </button>
-                    ))}
-                    {stageLeads.length === 0 && (
-                      <div className="border-2 border-dashed border-[var(--border)] rounded-xl p-4 text-center">
-                        <p className="text-xs text-[var(--text-tertiary)]">No leads</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
+        <DndContext
+          sensors={sensors}
+          onDragStart={({ active }) => {
+            const lead = (leads as Record<string, unknown>[]).find((l: any) => l.id === active.id)
+            setDraggingLead(lead ?? null)
+          }}
+          onDragEnd={handleDragEnd}
+          onDragCancel={() => setDraggingLead(null)}
+        >
+          <div className="overflow-x-auto -mx-4 px-4">
+            <div className="flex gap-3 w-max pb-4">
+              {STAGES.map(stage => {
+                const stageLeads = (leads as Record<string, unknown>[])
+                  .map(l => ({ ...l, stage: stageOverrides[(l as any).id] ?? l.stage }))
+                  .filter(l => l.stage === stage.key)
+                return (
+                  <KanbanColumn
+                    key={stage.key}
+                    stageKey={stage.key}
+                    label={stage.label}
+                    leads={stageLeads}
+                    onSelect={setSelectedId}
+                  />
+                )
+              })}
+            </div>
           </div>
-        </div>
+          <DragOverlay>
+            {draggingLead ? (
+              <div className="w-56 rotate-2 shadow-lg opacity-90">
+                <Card padding="sm">
+                  <p className="font-semibold text-xs text-[var(--text)] leading-snug mb-1">{draggingLead.full_name as string}</p>
+                  <p className="text-[10px] text-[var(--text-secondary)] capitalize mb-2">{draggingLead.project_type as string}</p>
+                  <p className="font-mono text-sm font-semibold text-[var(--text)]">
+                    ${((draggingLead.estimated_value as number ?? 0) / 1000).toFixed(0)}K
+                  </p>
+                </Card>
+              </div>
+            ) : null}
+          </DragOverlay>
+        </DndContext>
       )}
     </div>
   )

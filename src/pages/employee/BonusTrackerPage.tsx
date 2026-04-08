@@ -1,11 +1,13 @@
-import { Check, X, TrendingUp } from 'lucide-react'
+import { Check, X, TrendingUp, ArrowLeft } from 'lucide-react'
 import { Card, MetricCard } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 
 export function BonusTrackerPage() {
+  const navigate = useNavigate()
   const { user } = useAuth()
 
   const { data: records = [], isLoading } = useQuery({
@@ -30,9 +32,14 @@ export function BonusTrackerPage() {
 
   return (
     <div className="p-4 space-y-5">
-      <div className="pt-2">
-        <h1 className="font-display text-2xl text-[var(--navy)]">Bonus Tracker</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-0.5">YTD through {yearLabel}</p>
+      <div className="flex items-center gap-2 pt-2">
+        <button onClick={() => navigate(-1)} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
+          <ArrowLeft size={20} />
+        </button>
+        <div>
+          <h1 className="font-display text-2xl text-[var(--navy)]">Bonus Tracker</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-0.5">YTD through {yearLabel}</p>
+        </div>
       </div>
 
       {/* Summary */}

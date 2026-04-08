@@ -1,11 +1,13 @@
-import { Phone, Mail, MapPin, ExternalLink, User } from 'lucide-react'
+import { Phone, Mail, MapPin, ExternalLink, User, ArrowLeft } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 
 export function ClientInfoPage() {
+  const navigate = useNavigate()
   const { user } = useAuth()
 
   const { data: project, isLoading } = useQuery({
@@ -40,10 +42,16 @@ export function ClientInfoPage() {
     window.open(`https://maps.apple.com/?address=${encoded}`, '_blank')
   }
 
+  const backBtn = (
+    <button onClick={() => navigate(-1)} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
+      <ArrowLeft size={20} />
+    </button>
+  )
+
   if (isLoading) {
     return (
-      <div className="p-4 pt-6">
-        <h1 className="font-display text-2xl text-[var(--navy)] mb-4">Client Info</h1>
+      <div className="p-4 pt-4">
+        <div className="flex items-center gap-2 mb-4">{backBtn}<h1 className="font-display text-2xl text-[var(--navy)]">Client Info</h1></div>
         <p className="text-sm text-[var(--text-secondary)]">Loading...</p>
       </div>
     )
@@ -52,9 +60,12 @@ export function ClientInfoPage() {
   if (!project) {
     return (
       <div className="p-4 space-y-5">
-        <div className="pt-2">
-          <h1 className="font-display text-2xl text-[var(--navy)]">Client Info</h1>
-          <p className="text-sm text-[var(--text-secondary)] mt-0.5">Current project</p>
+        <div className="flex items-center gap-2 pt-2">
+          {backBtn}
+          <div>
+            <h1 className="font-display text-2xl text-[var(--navy)]">Client Info</h1>
+            <p className="text-sm text-[var(--text-secondary)] mt-0.5">Current project</p>
+          </div>
         </div>
         <Card>
           <p className="text-sm text-[var(--text-secondary)] text-center py-4">No active project assigned.</p>
@@ -65,9 +76,12 @@ export function ClientInfoPage() {
 
   return (
     <div className="p-4 space-y-5">
-      <div className="pt-2">
-        <h1 className="font-display text-2xl text-[var(--navy)]">Client Info</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-0.5">Current project</p>
+      <div className="flex items-center gap-2 pt-2">
+        {backBtn}
+        <div>
+          <h1 className="font-display text-2xl text-[var(--navy)]">Client Info</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-0.5">Current project</p>
+        </div>
       </div>
 
       {/* Client card */}
