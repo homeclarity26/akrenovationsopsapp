@@ -111,6 +111,16 @@ Summarize the health of the agent system in 3-5 bullet points. Flag any concerns
       requires_approval: false,
     })
 
+    // N51: Trigger template improvement analysis as part of weekly orchestration cycle
+    fetch(`${supabaseUrl()}/functions/v1/agent-template-improvement-suggester`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${serviceKey()}`,
+      },
+      body: '{}',
+    }).catch((err: unknown) => console.error('template-improvement-suggester trigger failed:', err))
+
     return new Response(JSON.stringify({ success: true, directives_issued: directives.length, missing_agents: missingAgents.length }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' }
     })

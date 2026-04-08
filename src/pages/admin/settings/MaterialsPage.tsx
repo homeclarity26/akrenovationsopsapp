@@ -1,6 +1,10 @@
+// N43: When a client selects a product not in the library, prompt to add to
+// material_specs — implemented in ClientSelections.tsx follow-up.
+// The "Add to library" button below is the admin-side equivalent for specs
+// already surfaced in this view.
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ArrowLeft, Star, Plus } from 'lucide-react'
+import { ArrowLeft, Star, Plus, BookmarkPlus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { MOCK_MATERIAL_SPECS } from '@/data/mock'
@@ -87,18 +91,29 @@ export function MaterialsPage() {
                 </p>
                 {m.notes && <p className="text-[11px] text-[var(--text-secondary)] italic mt-1">{m.notes}</p>}
               </div>
-              <div className="text-right flex-shrink-0">
+              <div className="text-right flex-shrink-0 flex flex-col items-end gap-1.5">
                 <p className="font-mono text-sm font-semibold text-[var(--text)]">
                   {m.price_typical != null ? `$${m.price_typical}` : '—'}
                 </p>
                 <p className="text-[10px] text-[var(--text-tertiary)]">{m.unit}</p>
                 <span
-                  className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full mt-1 inline-block ${
+                  className={`text-[9px] font-semibold uppercase px-1.5 py-0.5 rounded-full inline-block ${
                     FINISH_LEVEL_COLORS[m.finish_level]
                   }`}
                 >
                   {m.finish_level.replace('_', ' ')}
                 </span>
+                {/* N43: Add to library — for products sourced from client selections or external sources */}
+                <button
+                  className="flex items-center gap-1 text-[10px] text-[var(--navy)] font-semibold hover:text-[var(--navy-light)] transition-colors mt-0.5"
+                  onClick={() => {
+                    // TODO: open an "add to library" sheet pre-filled with this spec's data
+                    alert(`Add "${m.product_name}" to library — coming soon`)
+                  }}
+                >
+                  <BookmarkPlus size={10} />
+                  Add to library
+                </button>
               </div>
             </div>
           </div>

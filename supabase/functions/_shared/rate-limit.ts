@@ -88,6 +88,10 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
   'backup-storage-manifest':         { maxRequests: 3,   windowSeconds: 86400 },
   'meta-agent-open-pr':              { maxRequests: 10,  windowSeconds: 3600 },
   'github-webhook':                  { maxRequests: 500, windowSeconds: 3600 },
+
+  // ─── Phase N: Universal Template System ───
+  'suggest-deliverable-items':            { maxRequests: 60,  windowSeconds: 3600 },
+  'agent-template-improvement-suggester': { maxRequests: 5,   windowSeconds: 86400 },
 }
 
 const DEFAULT_LIMIT = { maxRequests: 60, windowSeconds: 3600 }

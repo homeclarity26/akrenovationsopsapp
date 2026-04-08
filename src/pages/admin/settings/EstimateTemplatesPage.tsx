@@ -4,8 +4,10 @@ import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
+import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
+import type { EditableItem } from '@/components/ui/EditableDeliverable'
 import { MOCK_ESTIMATE_TEMPLATES, MOCK_LABOR_BENCHMARKS, MOCK_CREW_HOURLY_RATE } from '@/data/mock'
-import type { EstimateTemplate, EstimateTemplateConfidence } from '@/data/mock'
+import type { EstimateTemplate, EstimateTemplateConfidence, LaborBenchmark } from '@/data/mock'
 import { cn } from '@/lib/utils'
 
 function money(n: number): string {
@@ -43,6 +45,9 @@ export function EstimateTemplatesPage() {
   const [selected, setSelected] = useState<EstimateTemplate | null>(null)
   const [innerTab, setInnerTab] = useState<'materials' | 'labor'>('materials')
   const groups = groupByProjectType(MOCK_ESTIMATE_TEMPLATES)
+  // N42: Labor benchmarks editable list — local state only for now
+  // TODO: persist benchmark edits to Supabase labor_benchmarks table when project is marked complete
+  const [benchmarks, setBenchmarks] = useState<LaborBenchmark[]>(MOCK_LABOR_BENCHMARKS)
 
   return (
     <div className="space-y-5 pb-10">
@@ -90,7 +95,7 @@ export function EstimateTemplatesPage() {
             </Button>
           </div>
           <Card padding="none">
-            {MOCK_LABOR_BENCHMARKS.map((b) => {
+            {benchmarks.map((b) => {
               const costTypical = b.hours_typical * MOCK_CREW_HOURLY_RATE
               return (
                 <div key={b.id} className="grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-3 border-b border-[var(--border-light)] last:border-0 items-center">
@@ -119,6 +124,38 @@ export function EstimateTemplatesPage() {
                 </div>
               )
             })}
+          </Card>
+
+          {/* N42: EditableDeliverable for labor benchmarks */}
+          {/* Note: showPromoteOption=false — benchmarks are calibrated from completed projects, not promoted */}
+          {/* TODO: when a project is marked complete, system should prompt to recalibrate benchmarks */}
+          <Card>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-3">
+              Labor Benchmarks — Editable List
+            </p>
+            <EditableDeliverable
+              deliverableType="labor_benchmark"
+              instanceId="labor-benchmarks"
+              instanceTable="labor_benchmarks"
+              items={benchmarks.map((b): EditableItem => ({
+                id: b.id,
+                title: `${b.task_name} (${b.hours_typical} hrs typical)`,
+                description: b.category,
+              }))}
+              onSave={async (editedItems) => {
+                // TODO: persist to Supabase labor_benchmarks table
+                // For now, update local state only
+                setBenchmarks((prev) =>
+                  prev.map((b) => {
+                    const edited = editedItems.find((ei) => ei.id === b.id)
+                    if (!edited) return b
+                    return { ...b, task_name: edited.title.replace(/ \([\d.]+ hrs typical\)$/, '') }
+                  }).filter((b) => editedItems.some((ei) => ei.id === b.id))
+                )
+              }}
+              isEditable={true}
+              showPromoteOption={false}
+            />
           </Card>
         </div>
       )}

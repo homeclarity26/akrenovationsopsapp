@@ -5,6 +5,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { MOCK_SHOPPING_ITEMS } from '@/data/mock'
 import { cn } from '@/lib/utils'
 
+// N40: Template generation happens when a phase starts — see agent-calibrate-templates edge function
 export function ShoppingListPage() {
   const [items, setItems] = useState(MOCK_SHOPPING_ITEMS)
 

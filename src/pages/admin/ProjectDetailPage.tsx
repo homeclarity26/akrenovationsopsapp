@@ -13,6 +13,8 @@ import {
 import { cn } from '@/lib/utils'
 import { BudgetTab } from './budget/BudgetTab'
 import { ProjectSubsTab } from './ProjectSubsTab'
+import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
+import type { EditableItem } from '@/components/ui/EditableDeliverable'
 
 type Tab = 'overview' | 'financials' | 'budget' | 'subs' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
 
@@ -682,27 +684,28 @@ export function ProjectDetailPage() {
         )}
 
         {/* ── PUNCH LIST ── */}
+        {/* N38: Admin editing via EditableDeliverable. Client sign-off happens in ClientPunchList.tsx (read-only for clients). */}
         {tab === 'punch' && (
-          <Card padding="none">
+          <Card>
+            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-3">Punch List Items</p>
             {punchList.length === 0 ? (
-              <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">Punch list is clear</div>
+              <p className="text-sm text-[var(--text-tertiary)] py-2">Punch list is clear</p>
             ) : (
-              punchList.map(item => (
-                <div key={item.id} className="flex items-center gap-3 p-4 border-b border-[var(--border-light)] last:border-0">
-                  <div className={cn(
-                    'w-5 h-5 rounded-full flex items-center justify-center flex-shrink-0',
-                    item.status === 'complete' ? 'bg-[var(--success)]' : 'border-2 border-[var(--border)]'
-                  )}>
-                    {item.status === 'complete' && <Check size={11} className="text-white" />}
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <p className={cn('text-sm', item.status === 'complete' ? 'line-through text-[var(--text-tertiary)]' : 'font-medium text-[var(--text)]')}>
-                      {item.description}
-                    </p>
-                    <p className="text-xs text-[var(--text-tertiary)] mt-0.5">{item.location} · {item.assigned_to}</p>
-                  </div>
-                </div>
-              ))
+              <EditableDeliverable
+                deliverableType="punch_list"
+                instanceId={id ?? ''}
+                instanceTable="projects"
+                items={punchList.map((item): EditableItem => ({
+                  id: item.id,
+                  title: item.description,
+                  description: [item.location, item.assigned_to].filter(Boolean).join(' · '),
+                }))}
+                onSave={async () => {
+                  // TODO: persist punch list edits to Supabase punch_list_items table
+                }}
+                isEditable={true}
+                showPromoteOption={false}
+              />
             )}
           </Card>
         )}

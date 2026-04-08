@@ -5,6 +5,8 @@ import { Card, MetricCard } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
+import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
+import type { EditableItem } from '@/components/ui/EditableDeliverable'
 import {
   MOCK_CHECKLIST_INSTANCES,
   MOCK_CHECKLIST_INSTANCE_ITEMS,
@@ -232,6 +234,53 @@ export function ChecklistsPage() {
                       </span>
                     </button>
                   ))}
+
+                  {/* Template source info + editable items */}
+                  <div className="px-4 py-4 border-t border-[var(--border-light)]">
+                    {inst.template_id && (
+                      <p className="text-[11px] text-[var(--text-tertiary)] uppercase tracking-wider mb-3">
+                        Template source: {inst.template_name}
+                      </p>
+                    )}
+                    <EditableDeliverable
+                      deliverableType="checklist"
+                      instanceId={inst.id}
+                      instanceTable="checklist_instances"
+                      templateId={inst.template_id}
+                      templateName={inst.template_name}
+                      items={itemsForInstance(inst.id).map((i): EditableItem => ({
+                        id: i.id,
+                        title: i.title,
+                        description: i.description ?? undefined,
+                      }))}
+                      onSave={async (editedItems) => {
+                        setItems((prev) => {
+                          const otherItems = prev.filter((i) => i.instance_id !== inst.id)
+                          const updatedItems = editedItems.map((ei, idx) => {
+                            const existing = prev.find((pi) => pi.id === ei.id)
+                            return existing
+                              ? { ...existing, title: ei.title, description: ei.description ?? null }
+                              : {
+                                  id: ei.id,
+                                  instance_id: inst.id,
+                                  title: ei.title,
+                                  description: ei.description ?? null,
+                                  sort_order: idx,
+                                  status: 'pending' as ChecklistItemStatus,
+                                  assigned_role: 'admin',
+                                  due_date: null,
+                                  ai_help_available: false,
+                                  external_link: null,
+                                  assigned_to: null,
+                                }
+                          })
+                          return [...otherItems, ...updatedItems]
+                        })
+                      }}
+                      isEditable={true}
+                      showPromoteOption={true}
+                    />
+                  </div>
                 </div>
               )}
             </Card>

@@ -9,6 +9,14 @@ type Priority = 'critical' | 'high' | 'medium' | 'low'
 type Category = 'ux_friction' | 'missing_feature' | 'agent_improvement' | 'workflow_optimization' | 'data_quality' | 'performance'
 type Status = 'draft' | 'reviewed' | 'approved' | 'in_progress' | 'deployed' | 'dismissed'
 
+interface TemplateSuggestion {
+  suggested_additions: Array<{ title: string; description?: string; rationale: string }>
+  suggested_removals: Array<{ item_title: string; rationale: string }>
+  suggested_edits: Array<{ old_title: string; new_title: string; rationale: string }>
+  confidence: string
+  summary: string
+}
+
 interface ImprovementSpec {
   id: string
   title: string
@@ -21,6 +29,15 @@ interface ImprovementSpec {
   status: Status
   adam_notes?: string
   created_at: string
+  // N50: Template improvement metadata
+  metadata?: {
+    source?: string
+    deliverable_type?: string
+    template_id?: string
+    template_name?: string
+    instances_analyzed?: number
+    analysis?: TemplateSuggestion
+  }
 }
 
 type PrStatus = 'draft' | 'pr_opened' | 'approved' | 'merged' | 'deployed' | 'closed' | 'failed'
@@ -193,6 +210,7 @@ export function ImprovementQueuePage() {
   const FILTERS: { key: FilterOption; label: string }[] = [
     { key: 'all', label: 'All' },
     { key: 'high', label: 'High Priority' },
+    { key: 'workflow_optimization', label: 'Template Improvements' },
     { key: 'agent_improvement', label: 'Agent Issues' },
     { key: 'ux_friction', label: 'UX Friction' },
     { key: 'missing_feature', label: 'Missing Features' },
@@ -267,9 +285,67 @@ export function ImprovementQueuePage() {
                 </div>
 
                 {isExpanded && (
-                  <div className="mb-3">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">Proposed Solution</p>
-                    <p className="text-sm text-[var(--text-secondary)]">{item.proposed_solution}</p>
+                  <div className="mb-3 space-y-3">
+                    <div>
+                      <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">Proposed Solution</p>
+                      <p className="text-sm text-[var(--text-secondary)]">{item.proposed_solution}</p>
+                    </div>
+
+                    {/* N50: Template improvement detail view */}
+                    {item.metadata?.source === 'template_improvement_suggester' && item.metadata.analysis && (() => {
+                      const analysis = item.metadata.analysis
+                      return (
+                        <div className="border border-[var(--border)] rounded-xl overflow-hidden">
+                          <div className="px-3 py-2 bg-[var(--navy)] flex items-center justify-between">
+                            <span className="text-xs text-white font-medium">
+                              Template: {item.metadata.template_name ?? item.metadata.deliverable_type}
+                            </span>
+                            <span className="text-[10px] text-white/70">
+                              {item.metadata.instances_analyzed} projects analyzed
+                            </span>
+                          </div>
+                          <div className="divide-y divide-[var(--border-light)]">
+                            {analysis.suggested_additions.map((sug, idx) => (
+                              <div key={`add-${idx}`} className="flex items-start gap-3 p-3 bg-[var(--success-bg)]">
+                                <span className="text-xs font-semibold text-[var(--success)] w-16 shrink-0 mt-0.5">+ Add</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-[var(--text)]">{sug.title}</p>
+                                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">{sug.rationale}</p>
+                                </div>
+                              </div>
+                            ))}
+                            {analysis.suggested_removals.map((sug, idx) => (
+                              <div key={`rem-${idx}`} className="flex items-start gap-3 p-3 bg-[var(--danger-bg)]">
+                                <span className="text-xs font-semibold text-[var(--danger)] w-16 shrink-0 mt-0.5">- Remove</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-[var(--text)]">{sug.item_title}</p>
+                                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">{sug.rationale}</p>
+                                </div>
+                              </div>
+                            ))}
+                            {analysis.suggested_edits.map((sug, idx) => (
+                              <div key={`edit-${idx}`} className="flex items-start gap-3 p-3 bg-[var(--warning-bg)]">
+                                <span className="text-xs font-semibold text-[var(--warning)] w-16 shrink-0 mt-0.5">~ Edit</span>
+                                <div className="flex-1 min-w-0">
+                                  <p className="text-sm font-medium text-[var(--text)]">
+                                    "{sug.old_title}" → "{sug.new_title}"
+                                  </p>
+                                  <p className="text-xs text-[var(--text-secondary)] mt-0.5">{sug.rationale}</p>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          <div className="px-3 py-2 bg-[var(--bg)] border-t border-[var(--border-light)]">
+                            <p className="text-xs text-[var(--text-tertiary)]">
+                              Confidence: <span className="font-medium text-[var(--text)]">{analysis.confidence}</span>
+                              {' · '}To apply: open
+                              {' '}<span className="text-[var(--navy)] font-medium">Templates → {item.metadata.template_name}</span>
+                              {' '}and make these changes.
+                            </p>
+                          </div>
+                        </div>
+                      )
+                    })()}
                   </div>
                 )}
 

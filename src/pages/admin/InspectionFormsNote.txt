@@ -1,0 +1,9 @@
+N41: Inspection form editing goes in the ProjectDetailPage inspections tab (to be built in Phase N follow-up)
+
+When built, the inspections tab should:
+- Render MOCK_INSPECTION_REPORTS filtered by project_id
+- Use EditableDeliverable for the areas/checklist items within each report
+  - deliverableType="inspection_form", instanceTable="inspection_reports", isEditable=true, showPromoteOption=true
+  - Map each area/item as EditableItem: { id: item.id, title: item.area_name || item.description, description: item.notes }
+- The InspectionFormTemplate type is already defined in TemplatesPage.tsx with an `areas` field
+- Template table: inspection_form_templates (see TemplatesPage.tsx TYPE_TO_TABLE)

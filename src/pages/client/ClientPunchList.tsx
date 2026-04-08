@@ -1,3 +1,7 @@
+// N38: Admin editing of punch list items happens via the Project Detail page
+// punch tab (/admin/projects/:id → "Punch" tab). EditableDeliverable is wired
+// there. This client portal view is intentionally read-only for item content —
+// clients can only mark items complete and sign off.
 import { useState } from 'react'
 import { Check, Circle, PenLine } from 'lucide-react'
 import { Card } from '@/components/ui/Card'

@@ -7,6 +7,8 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
+import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
+import type { EditableItem } from '@/components/ui/EditableDeliverable'
 import {
   MOCK_SUB_SCOPES,
   MOCK_PROJECTS,
@@ -183,10 +185,50 @@ export function ScopeDetailPage() {
       <SectionCard title="Scope Summary" body={sections.scope_summary} />
 
       {/* Inclusions */}
-      <ListSectionCard title="Inclusions" items={sections.inclusions} bullet="green" />
+      <Card>
+        <SectionHeader title="Inclusions" />
+        <EditableDeliverable
+          deliverableType="scope"
+          instanceId={scope.id}
+          instanceTable="sub_scopes"
+          items={sections.inclusions.map((item, idx): EditableItem => ({ id: String(idx), title: item }))}
+          onSave={async (editedItems) => {
+            setScope({
+              ...scope,
+              scope_sections: {
+                ...scope.scope_sections,
+                inclusions: editedItems.map((i) => i.title),
+              },
+            })
+          }}
+          isEditable={true}
+          showPromoteOption={true}
+          className="mt-2"
+        />
+      </Card>
 
       {/* Exclusions */}
-      <ListSectionCard title="Exclusions" items={sections.exclusions} bullet="red" />
+      <Card>
+        <SectionHeader title="Exclusions" />
+        <EditableDeliverable
+          deliverableType="scope"
+          instanceId={scope.id}
+          instanceTable="sub_scopes"
+          items={sections.exclusions.map((item, idx): EditableItem => ({ id: `excl-${idx}`, title: item }))}
+          onSave={async (editedItems) => {
+            setScope({
+              ...scope,
+              scope_sections: {
+                ...scope.scope_sections,
+                exclusions: editedItems.map((i) => i.title),
+              },
+            })
+          }}
+          isEditable={true}
+          showPromoteOption={true}
+          className="mt-2"
+        />
+      </Card>
 
       {/* Materials */}
       <Card>

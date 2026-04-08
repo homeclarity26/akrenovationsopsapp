@@ -4,11 +4,13 @@ import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
+import type { EditableItem } from '@/components/ui/EditableDeliverable'
 import { MOCK_PROPOSALS, MOCK_PORTFOLIO_PHOTOS } from '@/data/mock'
 
 export function ProposalsPage() {
   const [selected, setSelected] = useState<string | null>(null)
-  const proposals = MOCK_PROPOSALS
+  const [proposals, setProposals] = useState(MOCK_PROPOSALS)
 
   const viewing = proposals.find(p => p.id === selected)
 
@@ -45,16 +47,89 @@ export function ProposalsPage() {
         {viewing.sections.map((section, i) => (
           <Card key={i}>
             <p className="font-semibold text-sm text-[var(--text)] mb-2">{section.title}</p>
-            <ul className="space-y-1.5">
-              {section.bullets.map((b: string, j: number) => (
-                <li key={j} className="flex items-start gap-2">
-                  <div className="w-1.5 h-1.5 rounded-full bg-[var(--rust)] flex-shrink-0 mt-1.5" />
-                  <p className="text-sm text-[var(--text-secondary)]">{b}</p>
-                </li>
-              ))}
-            </ul>
+            <EditableDeliverable
+              deliverableType="proposal"
+              instanceId={viewing.id}
+              instanceTable="proposals"
+              items={section.bullets.map((b: string, j: number): EditableItem => ({ id: String(j), title: b }))}
+              onSave={async (editedItems) => {
+                setProposals((prev) =>
+                  prev.map((p) =>
+                    p.id === viewing.id
+                      ? {
+                          ...p,
+                          sections: p.sections.map((s, si) =>
+                            si === i ? { ...s, bullets: editedItems.map((ei) => ei.title) } : s,
+                          ),
+                        }
+                      : p,
+                  ),
+                )
+              }}
+              isEditable={true}
+              showPromoteOption={true}
+            />
           </Card>
         ))}
+
+        {/* N39: Payment Schedule — milestones editable via EditableDeliverable */}
+        {(() => {
+          // Cast to access optional payment_schedule field not yet in all mock proposals
+          const paymentSchedule = (viewing as typeof viewing & { payment_schedule?: { label?: string; name?: string; percent?: number }[] }).payment_schedule
+          if (paymentSchedule && paymentSchedule.length > 0) {
+            const milestoneItems: EditableItem[] = paymentSchedule.map((m, idx) => ({
+              id: String(idx),
+              title: m.label ?? m.name ?? 'Milestone',
+              description: m.percent != null ? `${m.percent}%` : undefined,
+            }))
+            return (
+              <Card>
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-3">Payment Schedule</p>
+                <EditableDeliverable
+                  deliverableType="payment_schedule"
+                  instanceId={viewing.id}
+                  instanceTable="proposals"
+                  items={milestoneItems}
+                  onSave={async (editedItems) => {
+                    setProposals((prev) =>
+                      prev.map((p) =>
+                        p.id === viewing.id
+                          ? { ...p, payment_schedule: editedItems.map((ei) => ({ label: ei.title, percent: ei.description ? Number(ei.description) : undefined })) }
+                          : p
+                      )
+                    )
+                  }}
+                  isEditable={true}
+                  showPromoteOption={true}
+                />
+              </Card>
+            )
+          }
+          // No payment schedule exists yet — show placeholder
+          return (
+            <Card>
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-2">Payment Schedule</p>
+              <p className="text-sm text-[var(--text-tertiary)] mb-3">No payment schedule — add milestones</p>
+              <EditableDeliverable
+                deliverableType="payment_schedule"
+                instanceId={viewing.id}
+                instanceTable="proposals"
+                items={[]}
+                onSave={async (editedItems) => {
+                  setProposals((prev) =>
+                    prev.map((p) =>
+                      p.id === viewing.id
+                        ? { ...p, payment_schedule: editedItems.map((ei) => ({ label: ei.title, percent: ei.description ? Number(ei.description) : undefined })) }
+                        : p
+                    )
+                  )
+                }}
+                isEditable={true}
+                showPromoteOption={true}
+              />
+            </Card>
+          )
+        })()}
 
         {/* Our Recent Work — auto-suggested portfolio photos for this project type */}
         <Card>

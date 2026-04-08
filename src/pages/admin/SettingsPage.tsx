@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { ChevronRight, User, Brain, Zap, AlertTriangle, Layers, Wrench, BookOpen, UserPlus } from 'lucide-react'
+import { ChevronRight, User, Brain, Zap, AlertTriangle, Layers, Wrench, BookOpen, UserPlus, LayoutTemplate } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -113,6 +113,19 @@ export function SettingsPage() {
             <div className="flex-1 min-w-0">
               <p className="font-semibold text-sm text-[var(--text)]">Pending Approvals</p>
               <p className="text-xs text-[var(--text-tertiary)] mt-0.5">Review AI actions before they execute</p>
+            </div>
+            <ChevronRight size={15} className="text-[var(--text-tertiary)] flex-shrink-0" />
+          </button>
+          <button
+            onClick={() => navigate('/admin/settings/templates')}
+            className="w-full flex items-center gap-3 px-4 py-4 text-left hover:bg-[var(--bg)] transition-colors border-t border-[var(--border-light)] min-h-[44px]"
+          >
+            <div className="w-9 h-9 rounded-xl bg-[var(--cream-light)] flex items-center justify-center flex-shrink-0">
+              <LayoutTemplate size={17} className="text-[var(--navy)]" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="font-semibold text-sm text-[var(--text)]">Templates</p>
+              <p className="text-xs text-[var(--text-tertiary)] mt-0.5">Manage scope, proposal, checklist, and punch list templates</p>
             </div>
             <ChevronRight size={15} className="text-[var(--text-tertiary)] flex-shrink-0" />
           </button>

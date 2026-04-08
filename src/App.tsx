@@ -48,6 +48,8 @@ import { PortfolioPage } from '@/pages/admin/portfolio/PortfolioPage'
 import { WarrantyPage } from '@/pages/admin/warranty/WarrantyPage'
 import { MaterialsPage } from '@/pages/admin/settings/MaterialsPage'
 import { ToolRequestsAdminPage } from '@/pages/admin/settings/ToolRequestsPage'
+// Phase N — Template Library
+import { TemplatesPage } from '@/pages/admin/settings/TemplatesPage'
 // Phase M — Backups & Security
 import { BackupsPage } from '@/pages/admin/settings/BackupsPage'
 import { SecurityPage } from '@/pages/admin/settings/SecurityPage'
@@ -178,6 +180,8 @@ function AppRoutes() {
         <Route path="warranty" element={<WarrantyPage />} />
         <Route path="settings/materials" element={<MaterialsPage />} />
         <Route path="settings/tool-requests" element={<ToolRequestsAdminPage />} />
+        {/* Phase N — Template Library */}
+        <Route path="settings/templates" element={<TemplatesPage />} />
         {/* Phase M — Backups & Security */}
         <Route path="settings/backups" element={<BackupsPage />} />
         <Route path="settings/security" element={<SecurityPage />} />
