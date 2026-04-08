@@ -26,9 +26,7 @@ import {
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
-import { ListRow } from '@/components/ui/ListRow'
 import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
@@ -170,7 +168,7 @@ function contentField(table: TableName): string {
 
 /** Extract the EditableItem[] from any template */
 function extractItems(tmpl: AnyTemplate): EditableItem[] {
-  const t = tmpl as Record<string, unknown>
+  const t = tmpl as unknown as Record<string, unknown>
   const field = contentField(tmpl._table as TableName)
   const raw = t[field]
   if (!Array.isArray(raw)) return []
@@ -604,7 +602,7 @@ function AddItemRow({ onAdd }: { onAdd: (title: string) => void }) {
 // VariationsTree — N48
 // ---------------------------------------------------------------------------
 function VariationsTree({
-  root,
+  root: _root,
   children,
 }: {
   root: AnyTemplate
@@ -675,7 +673,7 @@ function TemplateCard({
 
   const subtitle: string[] = []
   if (template.project_type) subtitle.push(template.project_type)
-  const t = template as Record<string, unknown>
+  const t = template as unknown as Record<string, unknown>
   if (typeof t.trade === 'string' && t.trade) subtitle.push(t.trade)
   if (typeof t.inspection_type === 'string' && t.inspection_type) subtitle.push(t.inspection_type)
   if (typeof t.phase === 'string' && t.phase) subtitle.push(`Phase: ${t.phase}`)
@@ -821,8 +819,8 @@ function TemplateTypePanel({ type }: TemplateTypePanelProps) {
       const { data } = await supabase.from(table).select('*').order('name')
       if (data) {
         setTemplates(
-          (data as Record<string, unknown>[]).map((row) => ({
-            ...(row as BaseTemplate),
+          (data as unknown as Record<string, unknown>[]).map((row) => ({
+            ...(row as unknown as BaseTemplate),
             _table: table,
             is_active: row.is_active !== false,
             times_used: (row.times_used as number) ?? 0,
@@ -854,7 +852,7 @@ function TemplateTypePanel({ type }: TemplateTypePanelProps) {
     setDuplicating(template.id)
     try {
       const field = contentField(table)
-      const original = template as Record<string, unknown>
+      const original = template as unknown as Record<string, unknown>
       const { id: _id, ...rest } = original
       void _id
 

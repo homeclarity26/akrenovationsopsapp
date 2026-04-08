@@ -2,26 +2,69 @@ import { useState } from 'react'
 import { Plus, Flag, FileText } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { MOCK_DAILY_LOGS, MOCK_CHANGE_ORDERS } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
+
+type FlagItem = { id: string; project_id: string; title: string; description: string; status: string; cost_change: number; schedule_change_days: number; flagged_by: string; flagged_at: string; client_approved_at: string | null }
 
 export function NotesPage() {
+  const { user } = useAuth()
   const [showFlag, setShowFlag] = useState(false)
   const [flagText, setFlagText] = useState('')
-  type FlagItem = { id: string; project_id: string; title: string; description: string; status: string; cost_change: number; schedule_change_days: number; flagged_by: string; flagged_at: string; client_approved_at: string | null }
-  const [flags, setFlags] = useState<FlagItem[]>(MOCK_CHANGE_ORDERS.filter(co => co.project_id === 'proj-1') as FlagItem[])
-  const [logs] = useState(MOCK_DAILY_LOGS.filter(l => l.employee === 'Jeff Miller'))
+  const [localFlags, setLocalFlags] = useState<FlagItem[]>([])
+
+  const { data: dbFlags = [] } = useQuery({
+    queryKey: ['change-orders-flagged', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('change_orders')
+        .select('*')
+        .eq('flagged_by', user!.id)
+        .order('flagged_at', { ascending: false })
+      return (data ?? []).map((co: any) => ({
+        id: co.id,
+        project_id: co.project_id,
+        title: co.title,
+        description: co.description,
+        status: co.status,
+        cost_change: co.cost_change ?? 0,
+        schedule_change_days: co.schedule_change_days ?? 0,
+        flagged_by: co.flagged_by,
+        flagged_at: co.flagged_at ? new Date(co.flagged_at).toLocaleDateString() : '',
+        client_approved_at: co.client_approved_at ?? null,
+      })) as FlagItem[]
+    },
+  })
+
+  const flags = [...localFlags, ...dbFlags.filter(db => !localFlags.find(l => l.id === db.id))]
+
+  const { data: logs = [] } = useQuery({
+    queryKey: ['daily-logs', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('daily_logs')
+        .select('*')
+        .eq('employee_id', user!.id)
+        .order('log_date', { ascending: false })
+        .limit(20)
+      return data ?? []
+    },
+  })
 
   const submitFlag = () => {
     if (!flagText.trim()) return
-    setFlags(prev => [{
+    setLocalFlags(prev => [{
       id: `co-${Date.now()}`,
-      project_id: 'proj-1',
+      project_id: '',
       title: flagText,
       description: flagText,
       status: 'flagged' as const,
       cost_change: 0,
       schedule_change_days: 0,
-      flagged_by: 'Jeff Miller',
+      flagged_by: user?.id ?? '',
       flagged_at: new Date().toLocaleDateString(),
       client_approved_at: null,
     }, ...prev])
@@ -103,22 +146,28 @@ export function NotesPage() {
       {/* Daily Logs */}
       <div>
         <SectionHeader title="Daily Logs" />
-        <Card padding="none">
-          {logs.map(log => (
-            <div key={log.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-7 h-7 rounded-lg bg-[var(--navy)] flex items-center justify-center flex-shrink-0">
-                  <FileText size={13} className="text-white" />
+        {logs.length === 0 ? (
+          <Card>
+            <p className="text-sm text-[var(--text-secondary)] text-center py-4">No daily logs yet.</p>
+          </Card>
+        ) : (
+          <Card padding="none">
+            {logs.map((log: any) => (
+              <div key={log.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-7 h-7 rounded-lg bg-[var(--navy)] flex items-center justify-center flex-shrink-0">
+                    <FileText size={13} className="text-white" />
+                  </div>
+                  <div>
+                    <p className="font-semibold text-sm text-[var(--text)]">{log.log_date}</p>
+                    <p className="text-xs text-[var(--text-tertiary)]">{log.weather ?? ''}{log.weather ? ' · ' : ''}{log.workers_on_site?.length ?? 0} on site</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="font-semibold text-sm text-[var(--text)]">{log.date}</p>
-                  <p className="text-xs text-[var(--text-tertiary)]">{log.weather} · {log.workers.length} on site</p>
-                </div>
+                <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{log.summary}</p>
               </div>
-              <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{log.summary}</p>
-            </div>
-          ))}
-        </Card>
+            ))}
+          </Card>
+        )}
       </div>
 
       {/* Add log */}

@@ -6,14 +6,9 @@ import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
-import {
-  MOCK_SUB_SCOPES,
-  MOCK_SUB_CONTRACTS,
-  MOCK_BUDGET_QUOTES,
-  MOCK_BUDGET_TRADES,
-  MOCK_SUBCONTRACTORS,
-} from '@/data/mock'
 import type { SubScopeStatus } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 
 interface Props {
   projectId: string
@@ -31,13 +26,83 @@ export function ProjectSubsTab({ projectId }: Props) {
   const navigate = useNavigate()
   const [generating, setGenerating] = useState<string | null>(null)
 
-  // Build rows: each awarded quote produces a row
-  const awardedQuotes = useMemo(
-    () => MOCK_BUDGET_QUOTES.filter((q) => q.project_id === projectId && q.status === 'awarded'),
-    [projectId],
-  )
-  const scopes = useMemo(() => MOCK_SUB_SCOPES.filter((s) => s.project_id === projectId), [projectId])
-  const contracts = useMemo(() => MOCK_SUB_CONTRACTS.filter((c) => c.project_id === projectId), [projectId])
+  const { data: subcontractors = [] } = useQuery({
+    queryKey: ['subcontractors'],
+    queryFn: async () => {
+      const { data } = await supabase.from('subcontractors').select('id, company_name, contact_name, phone')
+      return (data ?? []) as { id: string; company_name: string; contact_name?: string; phone?: string }[]
+    },
+  })
+
+  const { data: awardedQuotes = [] } = useQuery({
+    queryKey: ['budget_quotes', projectId, 'awarded'],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('budget_quotes')
+        .select('*')
+        .eq('project_id', projectId)
+        .eq('status', 'awarded')
+      return (data ?? []) as {
+        id: string
+        project_id: string
+        trade_id: string
+        subcontractor_id: string
+        company_name: string
+        amount: number
+        status: string
+      }[]
+    },
+  })
+
+  const { data: scopes = [] } = useQuery({
+    queryKey: ['sub_scopes', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('sub_scopes')
+        .select('*')
+        .eq('project_id', projectId)
+      return (data ?? []) as { id: string; project_id: string; budget_quote_id: string | null; scope_number: string; status: SubScopeStatus; [key: string]: unknown }[]
+    },
+  })
+
+  const { data: contracts = [] } = useQuery({
+    queryKey: ['sub_contracts', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('sub_contracts')
+        .select('*')
+        .eq('project_id', projectId)
+      return (data ?? []) as { id: string; project_id: string; scope_id: string; contract_number: string; status: string; attorney_approved_template: boolean; [key: string]: unknown }[]
+    },
+  })
+
+  const { data: trades = [] } = useQuery({
+    queryKey: ['budget_trades'],
+    queryFn: async () => {
+      const { data } = await supabase.from('budget_trades').select('id, name')
+      return (data ?? []) as { id: string; name: string }[]
+    },
+  })
+
+  // Memoize scope/contract lookups
+  const scopesByQuoteId = useMemo(() => {
+    const map = new Map<string, typeof scopes[0]>()
+    for (const s of scopes) {
+      if (s.budget_quote_id) map.set(s.budget_quote_id, s)
+    }
+    return map
+  }, [scopes])
+
+  const contractsByScopeId = useMemo(() => {
+    const map = new Map<string, typeof contracts[0]>()
+    for (const c of contracts) {
+      map.set(c.scope_id, c)
+    }
+    return map
+  }, [contracts])
 
   if (awardedQuotes.length === 0) {
     return (
@@ -67,10 +132,10 @@ export function ProjectSubsTab({ projectId }: Props) {
       <SectionHeader title="Awarded Subcontractors" />
 
       {awardedQuotes.map((quote) => {
-        const trade = MOCK_BUDGET_TRADES.find((t) => t.id === quote.trade_id)
-        const sub = MOCK_SUBCONTRACTORS.find((s) => s.id === quote.subcontractor_id)
-        const scope = scopes.find((s) => s.budget_quote_id === quote.id)
-        const contract = scope ? contracts.find((c) => c.scope_id === scope.id) : null
+        const trade = trades.find((t) => t.id === quote.trade_id)
+        const sub = subcontractors.find((s) => s.id === quote.subcontractor_id)
+        const scope = scopesByQuoteId.get(quote.id)
+        const contract = scope ? contractsByScopeId.get(scope.id) : null
 
         return (
           <Card key={quote.id}>

@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Check, X, Edit2, AlertTriangle, Info } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { MOCK_AI_ACTIONS } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 
 type RiskLevel = 'low' | 'medium' | 'high'
 
@@ -19,16 +20,30 @@ const RISK_ICON: Record<RiskLevel, React.ReactNode> = {
 }
 
 export function ApprovalsPage() {
-  const [actions, setActions] = useState(MOCK_AI_ACTIONS.filter(a => a.status === 'pending'))
+  const { data: rawActions = [], isLoading } = useQuery({
+    queryKey: ['ai-actions-pending'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('ai_actions')
+        .select('*')
+        .eq('status', 'pending')
+        .eq('requires_approval', true)
+        .order('created_at', { ascending: false })
+      return data ?? []
+    },
+  })
+  const [dismissed, setDismissed] = useState<string[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
 
+  const actions = rawActions.filter(a => !dismissed.includes(a.id))
+
   const approve = (id: string) => {
-    setActions(prev => prev.filter(a => a.id !== id))
+    setDismissed(prev => [...prev, id])
   }
 
   const reject = (id: string) => {
-    setActions(prev => prev.filter(a => a.id !== id))
+    setDismissed(prev => [...prev, id])
   }
 
   const startEdit = (action: typeof actions[0]) => {
@@ -39,8 +54,17 @@ export function ApprovalsPage() {
   }
 
   const approveEdited = (id: string) => {
-    setActions(prev => prev.filter(a => a.id !== id))
+    setDismissed(prev => [...prev, id])
     setEditingId(null)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-4 space-y-6 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">
+        <PageHeader title="Pending Approvals" subtitle="Loading..." />
+        <div className="text-sm text-[var(--text-secondary)] text-center py-8">Loading pending approvals...</div>
+      </div>
+    )
   }
 
   return (

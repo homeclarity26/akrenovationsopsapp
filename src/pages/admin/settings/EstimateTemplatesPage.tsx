@@ -6,7 +6,8 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
 import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
 import type { EditableItem } from '@/components/ui/EditableDeliverable'
-import { MOCK_ESTIMATE_TEMPLATES, MOCK_LABOR_BENCHMARKS, MOCK_CREW_HOURLY_RATE } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import type { EstimateTemplate, EstimateTemplateConfidence, LaborBenchmark } from '@/data/mock'
 import { cn } from '@/lib/utils'
 
@@ -41,13 +42,33 @@ const TYPE_LABELS: Record<string, string> = {
   exterior: 'Exterior',
 }
 
+const CREW_HOURLY_RATE = 65
+
 export function EstimateTemplatesPage() {
   const [selected, setSelected] = useState<EstimateTemplate | null>(null)
   const [innerTab, setInnerTab] = useState<'materials' | 'labor'>('materials')
-  const groups = groupByProjectType(MOCK_ESTIMATE_TEMPLATES)
+
+  const { data: rawTemplates = [], isLoading } = useQuery({
+    queryKey: ['estimate-templates'],
+    queryFn: async () => {
+      const { data } = await supabase.from('estimate_templates').select('*').order('project_type')
+      return (data ?? []) as EstimateTemplate[]
+    },
+  })
+
+  const groups = groupByProjectType(rawTemplates)
   // N42: Labor benchmarks editable list — local state only for now
   // TODO: persist benchmark edits to Supabase labor_benchmarks table when project is marked complete
-  const [benchmarks, setBenchmarks] = useState<LaborBenchmark[]>(MOCK_LABOR_BENCHMARKS)
+  const [benchmarks, setBenchmarks] = useState<LaborBenchmark[]>([])
+
+  if (isLoading) {
+    return (
+      <div className="space-y-5 pb-10">
+        <PageHeader title="Estimate Templates" subtitle="Loading..." />
+        <div className="text-sm text-[var(--text-secondary)] text-center py-8">Loading estimate templates...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="space-y-5 pb-10">
@@ -87,7 +108,7 @@ export function EstimateTemplatesPage() {
         <div className="space-y-3">
           <div className="flex items-center justify-between">
             <p className="text-xs text-[var(--text-secondary)]">
-              Crew rate <span className="font-mono">${MOCK_CREW_HOURLY_RATE}/hr</span> · {MOCK_LABOR_BENCHMARKS.length} benchmarks
+              Crew rate <span className="font-mono">${CREW_HOURLY_RATE}/hr</span> · {benchmarks.length} benchmarks
             </p>
             <Button size="sm">
               <Sparkles size={13} />
@@ -96,7 +117,7 @@ export function EstimateTemplatesPage() {
           </div>
           <Card padding="none">
             {benchmarks.map((b) => {
-              const costTypical = b.hours_typical * MOCK_CREW_HOURLY_RATE
+              const costTypical = b.hours_typical * CREW_HOURLY_RATE
               return (
                 <div key={b.id} className="grid grid-cols-[1fr_auto_auto] gap-3 px-4 py-3 border-b border-[var(--border-light)] last:border-0 items-center">
                   <div className="min-w-0">
@@ -184,21 +205,23 @@ export function EstimateTemplatesPage() {
                         <span className="text-[11px] text-[var(--text-tertiary)]">
                           {t.projects_count} projects
                         </span>
-                        {t.size_range_min_sqft > 0 && (
+                        {t.size_range_min_sqft != null && t.size_range_min_sqft > 0 && (
                           <span className="text-[11px] text-[var(--text-tertiary)]">
                             {t.size_range_min_sqft}-{t.size_range_max_sqft} sqft
                           </span>
                         )}
                       </div>
                       <p className="mt-2 font-mono text-[13px] text-[var(--text)]">
-                        {money(t.total_cost_min)} – {money(t.total_cost_max)}
-                        <span className="text-[var(--text-tertiary)]">
-                          {' '}
-                          (typical {money(t.total_cost_typical)})
-                        </span>
+                        {t.total_cost_min != null ? `${money(t.total_cost_min)} – ${money(t.total_cost_max ?? 0)}` : '—'}
+                        {t.total_cost_typical != null && (
+                          <span className="text-[var(--text-tertiary)]">
+                            {' '}
+                            (typical {money(t.total_cost_typical)})
+                          </span>
+                        )}
                       </p>
                       <p className="mt-0.5 text-[11px] text-[var(--text-tertiary)]">
-                        {t.duration_weeks_min}-{t.duration_weeks_max} weeks
+                        {t.duration_weeks_min != null ? `${t.duration_weeks_min}-${t.duration_weeks_max} weeks` : ''}
                       </p>
                     </div>
                     <ChevronRight className="w-4 h-4 text-[var(--text-tertiary)] flex-shrink-0 mt-1" />
@@ -229,8 +252,8 @@ export function EstimateTemplatesPage() {
                   {selected.name}
                 </h2>
                 <p className="text-[13px] text-[var(--text-secondary)] mt-0.5">
-                  {TYPE_LABELS[selected.project_type] ?? selected.project_type} ·{' '}
-                  {selected.finish_level.replace('_', '-')}
+                  {TYPE_LABELS[selected.project_type] ?? selected.project_type}
+                  {selected.finish_level ? ` · ${selected.finish_level.replace('_', '-')}` : ''}
                 </p>
               </div>
             </div>
@@ -266,7 +289,7 @@ export function EstimateTemplatesPage() {
           <Card padding="md">
             <SectionHeader title="Unit costs" />
             <div className="mt-3 space-y-2">
-              {Object.entries(selected.unit_costs).map(([key, uc]) => (
+              {Object.entries(selected.unit_costs ?? {}).map(([key, uc]) => (
                 <div
                   key={key}
                   className="flex items-start justify-between gap-3 py-2 border-b border-[var(--border-light)] last:border-b-0"
@@ -293,7 +316,7 @@ export function EstimateTemplatesPage() {
           <Card padding="md">
             <SectionHeader title="Trade breakdown" />
             <div className="mt-3 space-y-2">
-              {Object.entries(selected.trade_breakdown).map(([trade, tb]) => (
+              {Object.entries(selected.trade_breakdown ?? {}).map(([trade, tb]) => (
                 <div
                   key={trade}
                   className="flex items-center justify-between gap-3 py-2 border-b border-[var(--border-light)] last:border-b-0"

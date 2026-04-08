@@ -1,5 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import { CheckCircle2, Circle, Clock, AlertTriangle, Sparkles, ExternalLink, X } from 'lucide-react'
 import { Card, MetricCard } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -7,11 +9,6 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
 import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
 import type { EditableItem } from '@/components/ui/EditableDeliverable'
-import {
-  MOCK_CHECKLIST_INSTANCES,
-  MOCK_CHECKLIST_INSTANCE_ITEMS,
-  MOCK_CHECKLIST_TEMPLATES,
-} from '@/data/mock'
 import type {
   ChecklistInstance,
   ChecklistInstanceItem,
@@ -40,14 +37,43 @@ function isOverdue(dueDate: string | null): boolean {
 
 export function ChecklistsPage() {
   const navigate = useNavigate()
-  const [items, setItems] = useState<ChecklistInstanceItem[]>(MOCK_CHECKLIST_INSTANCE_ITEMS)
+
+  const { data: instancesData = [] } = useQuery({
+    queryKey: ['checklist_instances'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('checklist_instances')
+        .select('*')
+        .order('created_at', { ascending: false })
+      return (data ?? []) as ChecklistInstance[]
+    },
+  })
+
+  const { data: itemsData = [] } = useQuery({
+    queryKey: ['checklist_instance_items'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('checklist_instance_items')
+        .select('*')
+        .order('sort_order', { ascending: true })
+      return (data ?? []) as ChecklistInstanceItem[]
+    },
+  })
+
+  const [localItems, setLocalItems] = useState<ChecklistInstanceItem[]>([])
+  const items = localItems.length > 0 ? localItems : itemsData
+  const setItems = (updater: ChecklistInstanceItem[] | ((prev: ChecklistInstanceItem[]) => ChecklistInstanceItem[])) => {
+    setLocalItems(prev => {
+      const base = prev.length > 0 ? prev : itemsData
+      return typeof updater === 'function' ? updater(base) : updater
+    })
+  }
+
   const [filter, setFilter] = useState<Filter>('all')
-  const [expandedInstanceId, setExpandedInstanceId] = useState<string | null>(
-    MOCK_CHECKLIST_INSTANCES[0]?.id ?? null,
-  )
+  const [expandedInstanceId, setExpandedInstanceId] = useState<string | null>(null)
   const [activeItem, setActiveItem] = useState<ChecklistInstanceItem | null>(null)
 
-  const instances = MOCK_CHECKLIST_INSTANCES.filter((i) => i.status === 'active')
+  const instances = instancesData.filter((i) => i.status === 'active')
 
   const metrics = useMemo(() => {
     const todayStr = today()
@@ -138,6 +164,11 @@ export function ChecklistsPage() {
 
       <div className="space-y-3">
         <SectionHeader title="Active Checklists" />
+        {instances.length === 0 && (
+          <Card>
+            <p className="text-center text-sm text-[var(--text-tertiary)] py-6">No checklists yet.</p>
+          </Card>
+        )}
         {instances.map((inst) => {
           const { done, total, pct } = completionForInstance(inst)
           const expanded = expandedInstanceId === inst.id
@@ -256,25 +287,30 @@ export function ChecklistsPage() {
                       onSave={async (editedItems) => {
                         setItems((prev) => {
                           const otherItems = prev.filter((i) => i.instance_id !== inst.id)
-                          const updatedItems = editedItems.map((ei, idx) => {
+                          const updatedItems: ChecklistInstanceItem[] = editedItems.map((ei, idx) => {
                             const existing = prev.find((pi) => pi.id === ei.id)
-                            return existing
-                              ? { ...existing, title: ei.title, description: ei.description ?? null }
-                              : {
-                                  id: ei.id,
-                                  instance_id: inst.id,
-                                  title: ei.title,
-                                  description: ei.description ?? null,
-                                  sort_order: idx,
-                                  status: 'pending' as ChecklistItemStatus,
-                                  assigned_role: 'admin',
-                                  due_date: null,
-                                  ai_help_available: false,
-                                  external_link: null,
-                                  assigned_to: null,
-                                }
+                            if (existing) {
+                              return { ...existing, title: ei.title, description: ei.description ?? null } as ChecklistInstanceItem
+                            }
+                            const newItem: ChecklistInstanceItem = {
+                              id: ei.id,
+                              instance_id: inst.id,
+                              title: ei.title,
+                              description: ei.description ?? null,
+                              sort_order: idx,
+                              status: 'pending' as ChecklistItemStatus,
+                              assigned_role: 'admin' as const,
+                              due_date: null,
+                              ai_help_available: false,
+                              external_link: null,
+                              assigned_to: null,
+                              is_required: false,
+                              completion_note: null,
+                              ai_help_prompt: null,
+                            }
+                            return newItem
                           })
-                          return [...otherItems, ...updatedItems]
+                          return [...otherItems, ...updatedItems] as ChecklistInstanceItem[]
                         })
                       }}
                       isEditable={true}
@@ -350,7 +386,7 @@ export function ChecklistsPage() {
       )}
 
       <p className="text-[11px] text-[var(--text-tertiary)] text-center pt-4">
-        {MOCK_CHECKLIST_TEMPLATES.length} master templates loaded
+        Manage templates in Settings
       </p>
     </div>
   )

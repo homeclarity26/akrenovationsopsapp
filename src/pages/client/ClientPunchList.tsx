@@ -5,10 +5,69 @@
 import { useState } from 'react'
 import { Check, Circle, PenLine } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { MOCK_PUNCH_LIST } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
+
+interface PunchListItem {
+  id: string
+  project_id: string
+  description: string
+  location?: string | null
+  status: 'open' | 'in_progress' | 'complete'
+  photo_url?: string | null
+  assigned_to?: string | null
+  sort_order?: number | null
+}
 
 export function ClientPunchList() {
-  const [items, setItems] = useState(MOCK_PUNCH_LIST.filter(p => p.project_id === 'proj-1'))
+  const { user } = useAuth()
+
+  const { data: projectId } = useQuery({
+    queryKey: ['client_project_id', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('client_user_id', user!.id)
+        .eq('status', 'active')
+        .maybeSingle()
+      return data?.id ?? null
+    },
+  })
+
+  const { data: dbItems = [] } = useQuery({
+    queryKey: ['punch_list_items', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('punch_list_items')
+        .select('*')
+        .eq('project_id', projectId!)
+        .order('sort_order', { ascending: true })
+      return (data ?? []) as PunchListItem[]
+    },
+  })
+
+  const [localOverrides, setLocalOverrides] = useState<Record<string, Partial<PunchListItem>>>({})
+  const items: PunchListItem[] = dbItems.map(i => ({ ...i, ...localOverrides[i.id] }))
+
+  const setItems = (fn: (prev: PunchListItem[]) => PunchListItem[]) => {
+    const next = fn(items)
+    const overrides: Record<string, Partial<PunchListItem>> = {}
+    for (const item of next) overrides[item.id] = item
+    setLocalOverrides(overrides)
+  }
+
+  if (dbItems.length === 0) {
+    return (
+      <div className="p-4 flex flex-col items-center justify-center py-16 text-center">
+        <p className="text-sm font-medium text-[var(--text-secondary)]">No punch list items yet.</p>
+        <p className="text-xs text-[var(--text-tertiary)] mt-1">Items will appear here when your contractor adds them.</p>
+      </div>
+    )
+  }
   const [signed, setSigned] = useState(false)
 
   const open = items.filter(i => i.status === 'open')

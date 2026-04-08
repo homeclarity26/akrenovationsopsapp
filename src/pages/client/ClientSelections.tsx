@@ -3,10 +3,67 @@ import { Check, Clock, ShoppingBag, ChevronRight } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatusPill } from '@/components/ui/StatusPill'
-import { MOCK_SELECTIONS } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
+
+interface ClientSelection {
+  id: string
+  project_id: string
+  category: string
+  item_name: string
+  description?: string
+  where_to_shop?: string
+  selected_product?: string | null
+  selected_brand?: string | null
+  selected_model?: string | null
+  selected_color?: string | null
+  selected_image_url?: string | null
+  product_url?: string | null
+  estimated_cost?: number | null
+  status: 'pending' | 'selected' | 'approved' | 'ordered' | 'received'
+  sort_order?: number | null
+  notes?: string | null
+}
 
 export function ClientSelections() {
-  const [selections, setSelections] = useState(MOCK_SELECTIONS)
+  const { user } = useAuth()
+
+  const { data: projectId } = useQuery({
+    queryKey: ['client_project_id', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('projects')
+        .select('id')
+        .eq('client_user_id', user!.id)
+        .eq('status', 'active')
+        .maybeSingle()
+      return data?.id ?? null
+    },
+  })
+
+  const { data: dbSelections = [] } = useQuery({
+    queryKey: ['client_selections', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('client_selections')
+        .select('*')
+        .eq('project_id', projectId!)
+        .order('sort_order', { ascending: true })
+      return (data ?? []) as ClientSelection[]
+    },
+  })
+
+  const [localOverrides, setLocalOverrides] = useState<Record<string, Partial<ClientSelection>>>({})
+  const selections: ClientSelection[] = dbSelections.map(s => ({ ...s, ...localOverrides[s.id] }))
+  const setSelections = (fn: (prev: ClientSelection[]) => ClientSelection[]) => {
+    const next = fn(selections)
+    const overrides: Record<string, Partial<ClientSelection>> = {}
+    for (const item of next) overrides[item.id] = item
+    setLocalOverrides(overrides)
+  }
   const [selected, setSelected] = useState<string | null>(null)
   const [choiceInput, setChoiceInput] = useState({ product: '', color: '', url: '' })
 
@@ -14,6 +71,15 @@ export function ClientSelections() {
   const decided = selections.filter(s => s.status !== 'pending')
 
   const viewing = selections.find(s => s.id === selected)
+
+  if (dbSelections.length === 0 && !selected) {
+    return (
+      <div className="p-4 flex flex-col items-center justify-center py-16 text-center">
+        <p className="text-sm font-medium text-[var(--text-secondary)]">No selections yet.</p>
+        <p className="text-xs text-[var(--text-tertiary)] mt-1">Your contractor will add selections here when they're ready for you.</p>
+      </div>
+    )
+  }
 
   const submitSelection = (id: string) => {
     setSelections(prev => prev.map(s =>
@@ -106,7 +172,7 @@ export function ClientSelections() {
           <div className="h-1.5 bg-[var(--border-light)] rounded-full overflow-hidden mt-2">
             <div
               className="h-full bg-[var(--navy)] rounded-full"
-              style={{ width: `${(decided.length / selections.length) * 100}%` }}
+              style={{ width: `${selections.length > 0 ? (decided.length / selections.length) * 100 : 0}%` }}
             />
           </div>
         </div>

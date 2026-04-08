@@ -6,7 +6,7 @@
  */
 
 import { useState } from 'react'
-import { ArrowUpCircle, GitBranch, Plus, Minus, Edit2, ArrowUpDown, X, Check } from 'lucide-react'
+import { ArrowUpCircle, GitBranch, Plus, Minus, Edit2, ArrowUpDown, X } from 'lucide-react'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import type { DiffLine } from '@/lib/templateUtils'

@@ -1,24 +1,66 @@
 import { Phone, Mail, MapPin, ExternalLink, User } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { MOCK_PROJECTS, MOCK_PHASES } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 export function ClientInfoPage() {
-  // Employee is on the Johnson project
-  const project = MOCK_PROJECTS.find(p => p.id === 'proj-1')!
-  const phases = MOCK_PHASES['proj-1'] ?? []
+  const { user } = useAuth()
+
+  const { data: project, isLoading } = useQuery({
+    queryKey: ['employee-active-project', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('project_assignments')
+        .select('projects(*, project_phases(*))')
+        .eq('employee_id', user!.id)
+        .limit(1)
+        .maybeSingle()
+      return (data as any)?.projects ?? null
+    },
+  })
+
+  const phases = project?.project_phases ?? []
 
   const callClient = () => {
+    if (!project?.client_phone) return
     window.location.href = `tel:${project.client_phone.replace(/\D/g, '')}`
   }
 
   const textClient = () => {
+    if (!project?.client_phone) return
     window.location.href = `sms:${project.client_phone.replace(/\D/g, '')}`
   }
 
   const openMaps = () => {
+    if (!project?.address) return
     const encoded = encodeURIComponent(project.address)
     window.open(`https://maps.apple.com/?address=${encoded}`, '_blank')
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-4 pt-6">
+        <h1 className="font-display text-2xl text-[var(--navy)] mb-4">Client Info</h1>
+        <p className="text-sm text-[var(--text-secondary)]">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!project) {
+    return (
+      <div className="p-4 space-y-5">
+        <div className="pt-2">
+          <h1 className="font-display text-2xl text-[var(--navy)]">Client Info</h1>
+          <p className="text-sm text-[var(--text-secondary)] mt-0.5">Current project</p>
+        </div>
+        <Card>
+          <p className="text-sm text-[var(--text-secondary)] text-center py-4">No active project assigned.</p>
+        </Card>
+      </div>
+    )
   }
 
   return (
@@ -41,41 +83,47 @@ export function ClientInfoPage() {
         </div>
 
         <div className="space-y-3">
-          <button
-            onClick={callClient}
-            className="w-full flex items-center gap-3 py-3 px-4 rounded-xl bg-[var(--bg)] text-left"
-          >
-            <Phone size={16} className="text-[var(--navy)] flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-xs text-[var(--text-tertiary)]">Phone</p>
-              <p className="text-sm font-medium text-[var(--text)]">{project.client_phone}</p>
-            </div>
-            <ExternalLink size={14} className="text-[var(--text-tertiary)]" />
-          </button>
+          {project.client_phone && (
+            <button
+              onClick={callClient}
+              className="w-full flex items-center gap-3 py-3 px-4 rounded-xl bg-[var(--bg)] text-left"
+            >
+              <Phone size={16} className="text-[var(--navy)] flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs text-[var(--text-tertiary)]">Phone</p>
+                <p className="text-sm font-medium text-[var(--text)]">{project.client_phone}</p>
+              </div>
+              <ExternalLink size={14} className="text-[var(--text-tertiary)]" />
+            </button>
+          )}
 
-          <button
-            onClick={() => window.location.href = `mailto:${project.client_email}`}
-            className="w-full flex items-center gap-3 py-3 px-4 rounded-xl bg-[var(--bg)] text-left"
-          >
-            <Mail size={16} className="text-[var(--navy)] flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-xs text-[var(--text-tertiary)]">Email</p>
-              <p className="text-sm font-medium text-[var(--text)] truncate">{project.client_email}</p>
-            </div>
-            <ExternalLink size={14} className="text-[var(--text-tertiary)]" />
-          </button>
+          {project.client_email && (
+            <button
+              onClick={() => window.location.href = `mailto:${project.client_email}`}
+              className="w-full flex items-center gap-3 py-3 px-4 rounded-xl bg-[var(--bg)] text-left"
+            >
+              <Mail size={16} className="text-[var(--navy)] flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs text-[var(--text-tertiary)]">Email</p>
+                <p className="text-sm font-medium text-[var(--text)] truncate">{project.client_email}</p>
+              </div>
+              <ExternalLink size={14} className="text-[var(--text-tertiary)]" />
+            </button>
+          )}
 
-          <button
-            onClick={openMaps}
-            className="w-full flex items-center gap-3 py-3 px-4 rounded-xl bg-[var(--bg)] text-left"
-          >
-            <MapPin size={16} className="text-[var(--rust)] flex-shrink-0" />
-            <div className="flex-1">
-              <p className="text-xs text-[var(--text-tertiary)]">Address</p>
-              <p className="text-sm font-medium text-[var(--text)]">{project.address}</p>
-            </div>
-            <ExternalLink size={14} className="text-[var(--text-tertiary)]" />
-          </button>
+          {project.address && (
+            <button
+              onClick={openMaps}
+              className="w-full flex items-center gap-3 py-3 px-4 rounded-xl bg-[var(--bg)] text-left"
+            >
+              <MapPin size={16} className="text-[var(--rust)] flex-shrink-0" />
+              <div className="flex-1">
+                <p className="text-xs text-[var(--text-tertiary)]">Address</p>
+                <p className="text-sm font-medium text-[var(--text)]">{project.address}</p>
+              </div>
+              <ExternalLink size={14} className="text-[var(--text-tertiary)]" />
+            </button>
+          )}
         </div>
 
         <div className="grid grid-cols-2 gap-3 mt-4">
@@ -106,39 +154,41 @@ export function ClientInfoPage() {
             </div>
             <div className="flex justify-between">
               <p className="text-sm text-[var(--text-secondary)]">Current phase</p>
-              <p className="text-sm font-semibold text-[var(--text)]">{project.current_phase}</p>
+              <p className="text-sm font-semibold text-[var(--text)]">{project.current_phase ?? '--'}</p>
             </div>
             <div className="flex justify-between">
               <p className="text-sm text-[var(--text-secondary)]">Completion</p>
-              <p className="text-sm font-semibold text-[var(--text)]">{project.percent_complete}%</p>
+              <p className="text-sm font-semibold text-[var(--text)]">{project.percent_complete ?? 0}%</p>
             </div>
             <div className="flex justify-between">
               <p className="text-sm text-[var(--text-secondary)]">Target finish</p>
-              <p className="text-sm font-semibold text-[var(--text)]">{project.target_completion_date}</p>
+              <p className="text-sm font-semibold text-[var(--text)]">{project.target_completion_date ?? '--'}</p>
             </div>
           </div>
 
           {/* Phase progress */}
-          <div className="mt-4 pt-4 border-t border-[var(--border-light)]">
-            <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-3">Phases</p>
-            <div className="space-y-2">
-              {phases.map((phase, i) => (
-                <div key={i} className="flex items-center gap-3">
-                  <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
-                    phase.status === 'complete' ? 'bg-[var(--success)]' :
-                    phase.status === 'active' ? 'bg-[var(--navy)]' :
-                    'bg-[var(--border)]'
-                  }`} />
-                  <p className={`text-sm flex-1 ${
-                    phase.status === 'active' ? 'font-semibold text-[var(--text)]' : 'text-[var(--text-secondary)]'
-                  }`}>{phase.name}</p>
-                  {phase.status === 'active' && (
-                    <span className="text-xs font-mono text-[var(--navy)]">{phase.pct}%</span>
-                  )}
-                </div>
-              ))}
+          {phases.length > 0 && (
+            <div className="mt-4 pt-4 border-t border-[var(--border-light)]">
+              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-3">Phases</p>
+              <div className="space-y-2">
+                {phases.map((phase: any, i: number) => (
+                  <div key={phase.id ?? i} className="flex items-center gap-3">
+                    <div className={`w-2 h-2 rounded-full flex-shrink-0 ${
+                      phase.status === 'complete' ? 'bg-[var(--success)]' :
+                      phase.status === 'active' ? 'bg-[var(--navy)]' :
+                      'bg-[var(--border)]'
+                    }`} />
+                    <p className={`text-sm flex-1 ${
+                      phase.status === 'active' ? 'font-semibold text-[var(--text)]' : 'text-[var(--text-secondary)]'
+                    }`}>{phase.name}</p>
+                    {phase.status === 'active' && (
+                      <span className="text-xs font-mono text-[var(--navy)]">{phase.percent_complete ?? 0}%</span>
+                    )}
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </Card>
       </div>
     </div>

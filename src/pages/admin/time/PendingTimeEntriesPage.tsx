@@ -1,42 +1,51 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import { Check, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { MOCK_TIME_ENTRIES } from '@/data/mock'
 
-type WorkType = 'field_carpentry' | 'project_management' | 'site_visit' | 'design' | 'administrative' | 'travel' | 'other'
-
-const WORK_TYPE_LABELS: Record<WorkType, string> = {
-  field_carpentry:    'Field Carpentry',
-  project_management: 'Project Mgmt',
-  site_visit:         'Site Visit',
-  design:             'Design',
-  administrative:     'Administrative',
-  travel:             'Travel',
-  other:              'Other',
+interface TimeEntry {
+  id: string
+  employee_id: string
+  project_id: string | null
+  clock_in: string
+  clock_out: string | null
+  total_hours: number | null
+  entry_method: string
+  approved_at: string | null
+  notes: string | null
 }
 
-function fmtDuration(mins: number) {
-  const h = Math.floor(mins / 60), m = mins % 60
+function fmtDuration(hours: number | null) {
+  if (!hours) return '—'
+  const h = Math.floor(hours), m = Math.round((hours - h) * 60)
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
-const USER_NAMES: Record<string, string> = {
-  'employee-1': 'Jeff Miller',
-  'employee-2': 'Steven Clark',
-  'admin-1':    'Adam Kilgore',
-}
-
 export function PendingTimeEntriesPage() {
-  const pending = MOCK_TIME_ENTRIES.filter(e => e.entry_method === 'manual' && !('approved_by' in e && (e as any).approved_by))
-  const [entries, setEntries] = useState(pending)
+  const { data: dbEntries = [] } = useQuery({
+    queryKey: ['pending_time_entries'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('time_entries')
+        .select('*')
+        .eq('entry_method', 'manual')
+        .is('approved_at', null)
+        .order('clock_in', { ascending: false })
+      return (data ?? []) as TimeEntry[]
+    },
+  })
+
+  const [removedIds, setRemovedIds] = useState<Set<string>>(new Set())
+  const entries = dbEntries.filter(e => !removedIds.has(e.id))
   const [rejectId, setRejectId] = useState<string | null>(null)
   const [rejectReason, setRejectReason] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
 
-  const approve = (id: string) => setEntries(prev => prev.filter(e => e.id !== id))
-  const reject = (id: string) => { setEntries(prev => prev.filter(e => e.id !== id)); setRejectId(null); setRejectReason('') }
-  const bulkApprove = () => { setEntries(prev => prev.filter(e => !selected.has(e.id))); setSelected(new Set()) }
+  const approve = (id: string) => setRemovedIds(prev => new Set([...prev, id]))
+  const reject = (id: string) => { setRemovedIds(prev => new Set([...prev, id])); setRejectId(null); setRejectReason('') }
+  const bulkApprove = () => { setRemovedIds(prev => new Set([...prev, ...selected])); setSelected(new Set()) }
   const toggleSelect = (id: string) => setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
 
   if (entries.length === 0) {
@@ -80,17 +89,17 @@ export function PendingTimeEntriesPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-sm font-semibold text-[var(--text)]">{USER_NAMES[(e as any).user_id] ?? (e as any).user_id}</p>
-                    <p className="text-xs text-[var(--text-secondary)]">{(e as any).project_title ?? 'Overhead'} · {WORK_TYPE_LABELS[e.work_type as WorkType]}</p>
+                    <p className="text-sm font-semibold text-[var(--text)]">{e.employee_id}</p>
+                    <p className="text-xs text-[var(--text-secondary)]">{e.project_id ?? 'Overhead'}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="font-mono text-sm font-bold text-[var(--text)]">{fmtDuration((e as any).total_minutes ?? 0)}</p>
+                    <p className="font-mono text-sm font-bold text-[var(--text)]">{fmtDuration(e.total_hours)}</p>
                     <p className="text-xs text-[var(--text-tertiary)]">{new Date(e.clock_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
                   </div>
                 </div>
-                {(e as any).manual_reason && (
+                {e.notes && (
                   <div className="mt-2 bg-[var(--bg)] rounded-lg px-3 py-2">
-                    <p className="text-xs text-[var(--text-secondary)]"><span className="font-semibold">Reason:</span> {(e as any).manual_reason}</p>
+                    <p className="text-xs text-[var(--text-secondary)]"><span className="font-semibold">Notes:</span> {e.notes}</p>
                   </div>
                 )}
                 <div className="flex gap-2 mt-3">

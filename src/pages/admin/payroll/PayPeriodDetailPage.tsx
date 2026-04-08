@@ -14,14 +14,8 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { Input } from '@/components/ui/Input'
-import {
-  MOCK_PAY_PERIODS,
-  MOCK_PAYROLL_RECORDS,
-  MOCK_PAYROLL_WORKERS,
-  MOCK_PROJECTS,
-  MOCK_PAYROLL_ADJUSTMENTS,
-  MOCK_TIME_ENTRIES,
-} from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import type { PayrollAdjustment, PayrollRecord, PayrollRecordStatus } from '@/data/mock'
 
 function fmtCurrency(n: number): string {
@@ -39,19 +33,54 @@ const WORKER_TYPE_LABEL: Record<string, string> = {
   owner: 'Owner (W-2)',
 }
 
+type PayPeriodRow = { id: string; status: string; period_start: string; period_end: string; pay_date: string; period_number: number; year: number }
+type WorkerRow = { profile_id: string; full_name: string; worker_type: string; pay_type?: string }
+
 export function PayPeriodDetailPage() {
   const { periodId } = useParams<{ periodId: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  const period = useMemo(() => MOCK_PAY_PERIODS.find((p) => p.id === periodId), [periodId])
 
-  const [records, setRecords] = useState<PayrollRecord[]>(() =>
-    MOCK_PAYROLL_RECORDS.filter((r) => r.pay_period_id === periodId),
-  )
-  const [, setAdjustments] = useState<PayrollAdjustment[]>(() =>
-    MOCK_PAYROLL_ADJUSTMENTS.filter((a) => a.pay_period_id === periodId),
-  )
+  const { data: period } = useQuery({
+    queryKey: ['pay_period', periodId],
+    enabled: !!periodId,
+    queryFn: async () => {
+      const { data } = await supabase.from('pay_periods').select('*').eq('id', periodId).single()
+      return data as PayPeriodRow | null
+    },
+  })
+
+  const { data: fetchedRecords = [] } = useQuery({
+    queryKey: ['payroll_records_period', periodId],
+    enabled: !!periodId,
+    queryFn: async () => {
+      const { data } = await supabase.from('payroll_records').select('*').eq('pay_period_id', periodId)
+      return (data ?? []) as PayrollRecord[]
+    },
+  })
+
+  const { data: workers = [] } = useQuery({
+    queryKey: ['payroll_workers'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').in('role', ['employee', 'admin'])
+      // Map profiles to worker-shape expected by UI
+      return (data ?? []).map((p: { id: string; full_name: string; role: string }) => ({
+        profile_id: p.id,
+        full_name: p.full_name,
+        worker_type: p.role === 'admin' ? 'owner' : 'w2_fulltime',
+        pay_type: 'salary',
+      })) as WorkerRow[]
+    },
+  })
+
+  const [records, setRecords] = useState<PayrollRecord[]>([])
+  const [, setAdjustments] = useState<PayrollAdjustment[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [adjustmentFor, setAdjustmentFor] = useState<string | null>(null)
+
+  // Sync fetched records into local state
+  useEffect(() => {
+    if (fetchedRecords.length > 0) setRecords(fetchedRecords)
+  }, [fetchedRecords])
 
   useEffect(() => {
     if (searchParams.get('addAdj') === '1' && records.length > 0) {
@@ -63,17 +92,11 @@ export function PayPeriodDetailPage() {
 
   const issues = useMemo(() => {
     const list: { kind: string; label: string }[] = []
-    const pendingManual = MOCK_TIME_ENTRIES.filter(
-      (t) => t.entry_method === 'manual' && !('approved_by' in t ? t.approved_by : null),
-    )
-    if (pendingManual.length > 0) {
-      list.push({ kind: 'manual', label: `${pendingManual.length} unapproved manual time entries` })
-    }
     for (const r of records) {
-      const w = MOCK_PAYROLL_WORKERS.find((x) => x.profile_id === r.profile_id)
+      const w = workers.find((x) => x.profile_id === r.profile_id)
       if (!w) continue
       if (w.worker_type === 'contractor_1099') {
-        if (r.contractor_payment === 0) {
+        if ((r.contractor_payment ?? 0) === 0) {
           list.push({ kind: 'no-pay', label: `${w.full_name}: no contractor payment entered` })
         }
       } else {
@@ -83,7 +106,7 @@ export function PayPeriodDetailPage() {
       }
     }
     return list
-  }, [records])
+  }, [records, workers])
 
   const totals = useMemo(() => {
     return records.reduce(
@@ -219,7 +242,7 @@ export function PayPeriodDetailPage() {
       {/* Worker rows */}
       <div className="space-y-2">
         {records.map((r) => {
-          const worker = MOCK_PAYROLL_WORKERS.find((w) => w.profile_id === r.profile_id)
+          const worker = workers.find((w) => w.profile_id === r.profile_id)
           if (!worker) return null
           const isExp = expanded.has(r.profile_id)
           return (
@@ -496,7 +519,14 @@ function AdjustmentSlideOver({
   onClose: () => void
   onSubmit: (adj: Omit<PayrollAdjustment, 'id' | 'created_at' | 'pay_period_id'>) => void
 }) {
-  const worker = MOCK_PAYROLL_WORKERS.find((w) => w.profile_id === profileId)
+  const { data: worker } = useQuery({
+    queryKey: ['worker_for_adj', profileId],
+    enabled: !!profileId,
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name').eq('id', profileId).single()
+      return data as { id: string; full_name: string } | null
+    },
+  })
   const [type, setType] = useState<PayrollAdjustment['adjustment_type']>('bonus')
   const [amount, setAmount] = useState<string>('')
   const [description, setDescription] = useState<string>('')
@@ -596,11 +626,7 @@ function AdjustmentSlideOver({
               className="w-full px-3.5 py-3 rounded-[14px] border-[1.5px] border-[var(--border)] bg-[var(--bg)] text-[var(--text)] focus:outline-none focus:border-[var(--navy)]"
             >
               <option value="">None</option>
-              {MOCK_PROJECTS.map((p) => (
-                <option key={p.id} value={p.id}>
-                  {p.title}
-                </option>
-              ))}
+              {/* Projects loaded from Supabase separately if needed */}
             </select>
           </div>
 

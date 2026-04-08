@@ -4,14 +4,8 @@ import { ArrowLeft, Plus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import {
-  MOCK_PAYROLL_WORKERS,
-  MOCK_COMPENSATION_COMPONENTS,
-  MOCK_BENEFITS_ENROLLMENT,
-  MOCK_PAYROLL_RECORDS,
-  MOCK_PAY_PERIODS,
-  MOCK_PAYROLL_YTD,
-} from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import type { CompensationComponent } from '@/data/mock'
 
 const TAB_LABELS = ['Details', 'Compensation', 'Benefits', 'History', 'YTD'] as const
@@ -44,15 +38,80 @@ const FREQUENCY_LABEL: Record<string, string> = {
   annual: '/year',
 }
 
+type WorkerProfile = { id: string; full_name: string; role: string; email?: string; start_date?: string; hourly_rate?: number; base_salary?: number; phone?: string }
+type PayrollRecordRow = { id: string; pay_period_id: string; gross_pay: number; est_net_pay: number; total_hours: number; status: string; regular_hours: number; overtime_hours: number; pto_hours?: number; base_pay: number; overtime_pay: number; vehicle_allowance: number; phone_stipend?: number; other_allowances?: number; bonus_amount: number; health_deduction: number; retirement_deduction: number; other_deductions: number; total_deductions: number; est_federal_withholding: number; est_state_withholding: number; est_employee_ss: number; est_employee_medicare: number; employer_health_cost: number; employer_retirement_cost: number; employer_ss_tax: number; employer_medicare_tax: number; employer_futa: number; employer_suta: number; total_employer_cost: number; contractor_payment: number }
+
 export function WorkerSetupPage() {
   const { workerId } = useParams<{ workerId: string }>()
-  const worker = MOCK_PAYROLL_WORKERS.find((w) => w.profile_id === workerId)
   const [tab, setTab] = useState<Tab>('Details')
 
-  const components = useMemo(() => MOCK_COMPENSATION_COMPONENTS.filter((c) => c.profile_id === workerId), [workerId])
-  const benefits = useMemo(() => MOCK_BENEFITS_ENROLLMENT.filter((b) => b.profile_id === workerId), [workerId])
-  const records = useMemo(() => MOCK_PAYROLL_RECORDS.filter((r) => r.profile_id === workerId), [workerId])
-  const ytd = useMemo(() => MOCK_PAYROLL_YTD.find((y) => y.profile_id === workerId), [workerId])
+  const { data: worker, isLoading: workerLoading } = useQuery({
+    queryKey: ['worker_profile', workerId],
+    enabled: !!workerId,
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('*').eq('id', workerId).single()
+      return data as WorkerProfile | null
+    },
+  })
+
+  const { data: components = [] } = useQuery({
+    queryKey: ['compensation_components', workerId],
+    enabled: !!workerId,
+    queryFn: async () => {
+      const { data } = await supabase.from('compensation_components').select('*').eq('employee_id', workerId)
+      return (data ?? []) as CompensationComponent[]
+    },
+  })
+
+  const { data: benefits = [] } = useQuery({
+    queryKey: ['benefits_enrollment', workerId],
+    enabled: !!workerId,
+    queryFn: async () => {
+      const { data } = await supabase.from('benefits_enrollment').select('*').eq('profile_id', workerId)
+      return data ?? []
+    },
+  })
+
+  const { data: records = [] } = useQuery({
+    queryKey: ['worker_payroll_records', workerId],
+    enabled: !!workerId,
+    queryFn: async () => {
+      const { data } = await supabase.from('payroll_records').select('*').eq('employee_id', workerId).order('created_at', { ascending: false })
+      return (data ?? []) as PayrollRecordRow[]
+    },
+  })
+
+  const ytd = useMemo(() => {
+    // Compute YTD from records since there may not be a separate ytd table
+    if (records.length === 0) return null
+    const gross = records.reduce((s, r) => s + (r.gross_pay ?? 0), 0)
+    const net = records.reduce((s, r) => s + (r.est_net_pay ?? 0), 0)
+    const federal = records.reduce((s, r) => s + (r.est_federal_withholding ?? 0), 0)
+    const state = records.reduce((s, r) => s + (r.est_state_withholding ?? 0), 0)
+    const ss = records.reduce((s, r) => s + (r.est_employee_ss ?? 0), 0)
+    const medicare = records.reduce((s, r) => s + (r.est_employee_medicare ?? 0), 0)
+    return {
+      year: new Date().getFullYear(),
+      gross_pay_ytd: gross,
+      net_pay_ytd: net,
+      federal_withholding_ytd: federal,
+      state_withholding_ytd: state,
+      employee_ss_ytd: ss,
+      employee_medicare_ytd: medicare,
+      retirement_employee_ytd: 0,
+      retirement_employer_ytd: 0,
+      health_employee_ytd: 0,
+      health_employer_ytd: 0,
+    }
+  }, [records])
+
+  if (workerLoading) {
+    return (
+      <div className="px-4 lg:px-8 py-8 max-w-3xl mx-auto">
+        <p className="text-sm text-[var(--text-tertiary)]">Loading worker…</p>
+      </div>
+    )
+  }
 
   if (!worker) {
     return (
@@ -79,7 +138,7 @@ export function WorkerSetupPage() {
         <div>
           <h1 className="font-display text-[26px] leading-tight text-[var(--navy)]">{worker.full_name}</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-0.5 capitalize">
-            {worker.worker_type.replace('_', ' ')} · {worker.pay_type ?? '—'}
+            {worker.role}
           </p>
         </div>
       </div>
@@ -104,32 +163,26 @@ export function WorkerSetupPage() {
       {tab === 'Details' && <DetailsTab worker={worker} />}
       {tab === 'Compensation' && <CompensationTab components={components} />}
       {tab === 'Benefits' && <BenefitsTab benefits={benefits} />}
-      {tab === 'History' && <HistoryTab records={records} />}
+      {tab === 'History' && <HistoryTab records={records as PayrollRecordRow[]} />}
       {tab === 'YTD' && <YTDTab ytd={ytd} />}
     </div>
   )
 }
 
-function DetailsTab({ worker }: { worker: (typeof MOCK_PAYROLL_WORKERS)[number] }) {
+function DetailsTab({ worker }: { worker: WorkerProfile }) {
   return (
     <Card padding="lg" className="space-y-3">
-      <Field label="Worker type" value={worker.worker_type.replace('_', ' ')} />
-      <Field label="Hire date" value={new Date(`${worker.hire_date}T00:00:00`).toLocaleDateString('en-US')} />
-      {worker.termination_date && (
-        <Field label="Termination date" value={new Date(`${worker.termination_date}T00:00:00`).toLocaleDateString('en-US')} />
+      <Field label="Role" value={worker.role} />
+      {worker.start_date && (
+        <Field label="Start date" value={new Date(`${worker.start_date}T00:00:00`).toLocaleDateString('en-US')} />
       )}
-      <Field label="Pay type" value={worker.pay_type ?? '—'} />
-      {worker.pay_type === 'salary' ? (
-        <Field label="Annual salary" value={fmtCurrency0(worker.annual_salary)} mono />
-      ) : (
+      {worker.email && <Field label="Email" value={worker.email} />}
+      {worker.base_salary != null ? (
+        <Field label="Annual salary" value={fmtCurrency0(worker.base_salary)} mono />
+      ) : worker.hourly_rate != null ? (
         <Field label="Hourly rate" value={fmtCurrency(worker.hourly_rate)} mono />
-      )}
-      <Field label="Standard hours / week" value={`${worker.standard_hours_per_week}`} mono />
-      <Field label="Overtime eligible" value={worker.overtime_eligible ? 'Yes' : 'No'} />
-      <Field label="Filing status" value={worker.filing_status.replace('_', ' ')} />
-      <Field label="Pay frequency" value={worker.pay_frequency} />
-      <Field label="SUTA rate (Ohio)" value={`${(worker.suta_rate * 100).toFixed(2)}%`} mono />
-      <Field label="Gusto employee ID" value={worker.gusto_employee_id ?? 'Not synced'} />
+      ) : null}
+      <Field label="Pay frequency" value="Bi-weekly" />
     </Card>
   )
 }
@@ -183,7 +236,9 @@ function CompensationTab({ components }: { components: CompensationComponent[] }
   )
 }
 
-function BenefitsTab({ benefits }: { benefits: typeof MOCK_BENEFITS_ENROLLMENT }) {
+type BenefitRow = { id: string; benefit_type: string; is_pre_tax?: boolean; plan_name?: string; carrier?: string; employee_contribution_percent?: number; employee_contribution_amount?: number; employee_contribution_frequency?: string; employer_contribution_amount?: number; employer_contribution_frequency?: string }
+
+function BenefitsTab({ benefits }: { benefits: BenefitRow[] }) {
   return (
     <div className="space-y-3">
       <div className="flex items-center justify-between">
@@ -219,10 +274,10 @@ function BenefitsTab({ benefits }: { benefits: typeof MOCK_BENEFITS_ENROLLMENT }
                 Plan: <span className="font-medium text-[var(--text)]">{b.plan_name}</span> · {b.carrier}
               </p>
               <p className="text-[11px] text-[var(--text-tertiary)] font-mono">
-                Employee: {b.employee_contribution_percent != null ? `${b.employee_contribution_percent}% of gross` : `${fmtCurrency(b.employee_contribution_amount)} ${b.employee_contribution_frequency.replace('_', ' ')}`}
+                Employee: {b.employee_contribution_percent != null ? `${b.employee_contribution_percent}% of gross` : b.employee_contribution_amount != null ? `${fmtCurrency(b.employee_contribution_amount)} ${(b.employee_contribution_frequency ?? '').replace('_', ' ')}` : '—'}
               </p>
               <p className="text-[11px] text-[var(--text-tertiary)] font-mono">
-                Employer: {fmtCurrency(b.employer_contribution_amount)} {b.employer_contribution_frequency.replace('_', ' ')}
+                Employer: {b.employer_contribution_amount != null ? `${fmtCurrency(b.employer_contribution_amount)} ${(b.employer_contribution_frequency ?? '').replace('_', ' ')}` : '—'}
               </p>
             </div>
           ))
@@ -232,40 +287,35 @@ function BenefitsTab({ benefits }: { benefits: typeof MOCK_BENEFITS_ENROLLMENT }
   )
 }
 
-function HistoryTab({ records }: { records: typeof MOCK_PAYROLL_RECORDS }) {
+function HistoryTab({ records }: { records: PayrollRecordRow[] }) {
   return (
     <Card padding="none">
       {records.length === 0 ? (
         <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No payroll history yet</div>
       ) : (
-        records.map((r) => {
-          const period = MOCK_PAY_PERIODS.find((p) => p.id === r.pay_period_id)
-          return (
-            <div
-              key={r.id}
-              className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--border-light)] last:border-0"
-            >
-              <div>
-                <p className="font-medium text-sm text-[var(--text)]">
-                  {period
-                    ? `${new Date(`${period.period_start}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${new Date(`${period.period_end}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
-                    : '—'}
-                </p>
-                <p className="text-[11px] text-[var(--text-tertiary)] font-mono">{r.status}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-sm font-mono text-[var(--text)]">{fmtCurrency(r.gross_pay)}</p>
-                <p className="text-[11px] text-[var(--text-tertiary)] font-mono">~{fmtCurrency(r.est_net_pay)} net</p>
-              </div>
+        records.map((r) => (
+          <div
+            key={r.id}
+            className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--border-light)] last:border-0"
+          >
+            <div>
+              <p className="font-medium text-sm text-[var(--text)]">Pay period {r.pay_period_id.slice(-8)}</p>
+              <p className="text-[11px] text-[var(--text-tertiary)] font-mono">{r.status}</p>
             </div>
-          )
-        })
+            <div className="text-right">
+              <p className="text-sm font-mono text-[var(--text)]">{fmtCurrency(r.gross_pay)}</p>
+              <p className="text-[11px] text-[var(--text-tertiary)] font-mono">~{fmtCurrency(r.est_net_pay)} net</p>
+            </div>
+          </div>
+        ))
       )}
     </Card>
   )
 }
 
-function YTDTab({ ytd }: { ytd: (typeof MOCK_PAYROLL_YTD)[number] | undefined }) {
+type YTDData = { year: number; gross_pay_ytd: number; net_pay_ytd: number; federal_withholding_ytd: number; state_withholding_ytd: number; employee_ss_ytd: number; employee_medicare_ytd: number; retirement_employee_ytd: number; retirement_employer_ytd: number; health_employee_ytd: number; health_employer_ytd: number }
+
+function YTDTab({ ytd }: { ytd: YTDData | null | undefined }) {
   if (!ytd) {
     return <Card padding="lg"><p className="text-sm text-[var(--text-tertiary)]">No YTD data yet</p></Card>
   }

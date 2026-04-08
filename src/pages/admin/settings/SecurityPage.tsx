@@ -51,31 +51,6 @@ interface RateLimitRow {
   created_at: string
 }
 
-// ── Mock data ────────────────────────────────────────────────────────────────
-
-const MOCK_AUDIT: AuditRow[] = [
-  { id: 'a1', user_id: 'u1', user_role: 'admin',    action: 'update', table_name: 'projects',  record_id: 'proj-1',  old_values: { status: 'pending' }, new_values: { status: 'active' }, ip_address: '192.168.1.10', user_agent: null, session_id: 's1', created_at: '2026-04-07T09:14:00Z', user_name: 'Adam Kilgore' },
-  { id: 'a2', user_id: 'u2', user_role: 'employee', action: 'create', table_name: 'expenses',  record_id: 'exp-23',  old_values: null,                  new_values: { amount: 342.18, vendor: 'Home Depot' }, ip_address: '10.0.0.5',   user_agent: null, session_id: 's2', created_at: '2026-04-07T08:42:00Z', user_name: 'Jeff Miller' },
-  { id: 'a3', user_id: 'u1', user_role: 'admin',    action: 'login',  table_name: null,         record_id: null,      old_values: null,                  new_values: { description: 'User logged in as admin' }, ip_address: '192.168.1.10', user_agent: null, session_id: 's1', created_at: '2026-04-07T07:58:00Z', user_name: 'Adam Kilgore' },
-  { id: 'a4', user_id: 'u1', user_role: 'admin',    action: 'export', table_name: 'invoices',   record_id: null,      old_values: null,                  new_values: { description: 'Exported invoices CSV', record_count: 48 }, ip_address: '192.168.1.10', user_agent: null, session_id: 's1', created_at: '2026-04-06T15:30:00Z', user_name: 'Adam Kilgore' },
-  { id: 'a5', user_id: null, user_role: null,       action: 'login_failed', table_name: null,    record_id: null,     old_values: null,                  new_values: { description: 'Failed login for unknown@example.com' }, ip_address: '74.125.19.3', user_agent: null, session_id: null, created_at: '2026-04-06T11:12:00Z', user_name: '—' },
-  { id: 'a6', user_id: 'u1', user_role: 'admin',    action: 'delete', table_name: 'leads',      record_id: 'lead-9',  old_values: { full_name: 'Old Lead' }, new_values: null,              ip_address: '192.168.1.10', user_agent: null, session_id: 's1', created_at: '2026-04-05T14:22:00Z', user_name: 'Adam Kilgore' },
-]
-
-const MOCK_SESSIONS: SessionRow[] = [
-  { id: 's1', user_id: 'u1', session_token: 'tok-1', device_info: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36', ip_address: '192.168.1.10', last_active: new Date(Date.now() - 4 * 60 * 1000).toISOString(), expires_at: new Date(Date.now() + 11 * 60 * 60 * 1000).toISOString(), is_active: true, created_at: '2026-04-07T07:58:00Z', user_name: 'Adam Kilgore', user_role: 'admin' },
-  { id: 's2', user_id: 'u2', session_token: 'tok-2', device_info: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148', ip_address: '10.0.0.5', last_active: new Date(Date.now() - 22 * 60 * 1000).toISOString(), expires_at: new Date(Date.now() + 7 * 60 * 60 * 1000).toISOString(), is_active: true, created_at: '2026-04-07T06:10:00Z', user_name: 'Jeff Miller', user_role: 'employee' },
-  { id: 's3', user_id: 'u3', session_token: 'tok-3', device_info: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0 Safari/537.36', ip_address: '73.154.88.12', last_active: new Date(Date.now() - 90 * 60 * 1000).toISOString(), expires_at: new Date(Date.now() + 29 * 24 * 60 * 60 * 1000).toISOString(), is_active: true, created_at: '2026-04-06T18:30:00Z', user_name: 'Sarah Johnson', user_role: 'client' },
-]
-
-const MOCK_RATE_LIMITS: RateLimitRow[] = [
-  { id: 'rl1', identifier: '192.168.1.10', endpoint: '/api/ai/chat',         request_count: 42, window_start: new Date(Date.now() - 55 * 60 * 1000).toISOString(), blocked: false, created_at: new Date().toISOString() },
-  { id: 'rl2', identifier: '10.0.0.5',     endpoint: '/api/upload',          request_count: 18, window_start: new Date(Date.now() - 45 * 60 * 1000).toISOString(), blocked: false, created_at: new Date().toISOString() },
-  { id: 'rl3', identifier: '74.125.19.3',  endpoint: '/api/auth/login',      request_count: 94, window_start: new Date(Date.now() - 20 * 60 * 1000).toISOString(), blocked: true,  created_at: new Date().toISOString() },
-  { id: 'rl4', identifier: '192.168.1.10', endpoint: '/api/projects',        request_count: 27, window_start: new Date(Date.now() - 30 * 60 * 1000).toISOString(), blocked: false, created_at: new Date().toISOString() },
-  { id: 'rl5', identifier: '10.0.0.5',     endpoint: '/api/time/clock',      request_count: 8,  window_start: new Date(Date.now() - 50 * 60 * 1000).toISOString(), blocked: false, created_at: new Date().toISOString() },
-]
-
 const ENDPOINT_LIMIT = 100 // per hour
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -153,7 +128,6 @@ function exportAuditCsv(rows: AuditRow[]) {
 export function SecurityPage() {
   const [activeTab, setActiveTab] = useState<SecurityTab>('audit')
   const [loading, setLoading] = useState(true)
-  const [usingMock, setUsingMock] = useState(false)
 
   // Audit state
   const [auditRows, setAuditRows] = useState<AuditRow[]>([])
@@ -171,7 +145,6 @@ export function SecurityPage() {
 
   const loadAll = async () => {
     setLoading(true)
-    let anyLive = false
     try {
       const [auditRes, sessionRes, rateRes] = await Promise.all([
         supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(50),
@@ -179,34 +152,14 @@ export function SecurityPage() {
         supabase.from('rate_limit_events').select('*').gte('window_start', new Date(Date.now() - 60 * 60 * 1000).toISOString()),
       ])
 
-      if (!auditRes.error && auditRes.data && auditRes.data.length > 0) {
-        setAuditRows(auditRes.data as AuditRow[])
-        anyLive = true
-      } else {
-        setAuditRows(MOCK_AUDIT)
-      }
-
-      if (!sessionRes.error && sessionRes.data && sessionRes.data.length > 0) {
-        setSessions(sessionRes.data as SessionRow[])
-        anyLive = true
-      } else {
-        setSessions(MOCK_SESSIONS)
-      }
-
-      if (!rateRes.error && rateRes.data && rateRes.data.length > 0) {
-        setRateLimits(rateRes.data as RateLimitRow[])
-        anyLive = true
-      } else {
-        setRateLimits(MOCK_RATE_LIMITS)
-      }
-
-      setUsingMock(!anyLive)
+      setAuditRows(!auditRes.error && auditRes.data ? auditRes.data as AuditRow[] : [])
+      setSessions(!sessionRes.error && sessionRes.data ? sessionRes.data as SessionRow[] : [])
+      setRateLimits(!rateRes.error && rateRes.data ? rateRes.data as RateLimitRow[] : [])
     } catch (err) {
-      console.warn('[security] Using mock data:', err)
-      setAuditRows(MOCK_AUDIT)
-      setSessions(MOCK_SESSIONS)
-      setRateLimits(MOCK_RATE_LIMITS)
-      setUsingMock(true)
+      console.warn('[security] Failed to load security data:', err)
+      setAuditRows([])
+      setSessions([])
+      setRateLimits([])
     } finally {
       setLoading(false)
     }
@@ -310,11 +263,6 @@ export function SecurityPage() {
         </button>
       </div>
 
-      {usingMock && (
-        <div className="rounded-xl border border-[var(--warning)] bg-[var(--warning-bg)] px-4 py-2.5 text-xs text-[var(--warning)]">
-          Showing sample data. Live security tables not available or empty.
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="flex gap-0 overflow-x-auto border-b border-[var(--border-light)]">

@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { ArrowRight, ArrowLeft, Mic, Check, Sparkles } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { WALKTHROUGH_TEMPLATES, MOCK_LABOR_BENCHMARKS, MOCK_CREW_HOURLY_RATE, MOCK_MATERIAL_SPECS } from '@/data/mock'
+import { WALKTHROUGH_TEMPLATES } from '@/data/mock'
 
 type ProjectType = 'bathroom' | 'kitchen' | 'basement' | 'addition'
 
@@ -84,19 +84,9 @@ export function WalkthroughPage() {
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-2">
             Labor benchmarks pulled
           </p>
-          <p className="text-[11px] text-[var(--text-tertiary)] mb-3">
-            Crew rate <span className="font-mono">${MOCK_CREW_HOURLY_RATE}/hr</span>. The AI used these to size labor cost separately from sub costs.
+          <p className="text-[11px] text-[var(--text-tertiary)]">
+            AI will use labor benchmarks from your templates to size labor cost separately from sub costs.
           </p>
-          <div className="space-y-1.5">
-            {MOCK_LABOR_BENCHMARKS.slice(0, 5).map((b) => (
-              <div key={b.id} className="flex items-center justify-between text-[12px]">
-                <p className="text-[var(--text-secondary)] truncate flex-1 min-w-0">{b.task_name}</p>
-                <p className="font-mono text-[var(--text)] flex-shrink-0 ml-2">
-                  {b.hours_typical}h · ${(b.hours_typical * MOCK_CREW_HOURLY_RATE).toFixed(0)}/{b.unit.replace('per ', '')}
-                </p>
-              </div>
-            ))}
-          </div>
         </Card>
 
         {/* Preferred materials suggestions (Phase K) */}
@@ -104,18 +94,9 @@ export function WalkthroughPage() {
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-2">
             Preferred materials suggested
           </p>
-          <div className="space-y-1.5">
-            {MOCK_MATERIAL_SPECS.filter((m) => m.is_preferred).slice(0, 4).map((m) => (
-              <div key={m.id} className="flex items-center justify-between text-[12px]">
-                <p className="text-[var(--text-secondary)] truncate flex-1 min-w-0">
-                  {m.brand} {m.product_name}
-                </p>
-                <p className="font-mono text-[var(--text)] flex-shrink-0 ml-2">
-                  ${m.price_typical}/{m.unit.replace('per ', '')}
-                </p>
-              </div>
-            ))}
-          </div>
+          <p className="text-[11px] text-[var(--text-tertiary)]">
+            AI will cross-reference preferred materials from your templates library.
+          </p>
         </Card>
 
         {/* Answers review */}

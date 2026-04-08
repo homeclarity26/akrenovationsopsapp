@@ -30,21 +30,6 @@ interface RestorePoint {
   created_at: string
 }
 
-// ── Mock data (used when Supabase fetch fails) ───────────────────────────────
-
-const MOCK_BACKUPS: BackupLog[] = [
-  { id: 'b1', backup_type: 'full',        status: 'success', file_name: 'akops-full-2026-04-07.sql.gz',       file_size_bytes: 48572431, drive_url: 'https://drive.google.com/file/d/mock1', records_exported: 12843, error_message: null, duration_seconds: 42, started_at: '2026-04-07T03:00:00Z', completed_at: '2026-04-07T03:00:42Z' },
-  { id: 'b2', backup_type: 'incremental', status: 'success', file_name: 'akops-incr-2026-04-06.sql.gz',       file_size_bytes: 2183920,  drive_url: 'https://drive.google.com/file/d/mock2', records_exported: 412,   error_message: null, duration_seconds: 11, started_at: '2026-04-06T03:00:00Z', completed_at: '2026-04-06T03:00:11Z' },
-  { id: 'b3', backup_type: 'full',        status: 'success', file_name: 'akops-full-2026-04-05.sql.gz',       file_size_bytes: 47821009, drive_url: 'https://drive.google.com/file/d/mock3', records_exported: 12798, error_message: null, duration_seconds: 40, started_at: '2026-04-05T03:00:00Z', completed_at: '2026-04-05T03:00:40Z' },
-  { id: 'b4', backup_type: 'incremental', status: 'failed',  file_name: null,                                 file_size_bytes: null,     drive_url: null,                                  records_exported: null,  error_message: 'Drive upload timeout after 120s', duration_seconds: 125, started_at: '2026-04-04T03:00:00Z', completed_at: '2026-04-04T03:02:05Z' },
-  { id: 'b5', backup_type: 'full',        status: 'success', file_name: 'akops-full-2026-04-03.sql.gz',       file_size_bytes: 47102389, drive_url: 'https://drive.google.com/file/d/mock5', records_exported: 12703, error_message: null, duration_seconds: 39, started_at: '2026-04-03T03:00:00Z', completed_at: '2026-04-03T03:00:39Z' },
-]
-
-const MOCK_RESTORE_POINTS: RestorePoint[] = [
-  { id: 'r1', label: 'Before Q2 payroll cutover',   created_by: 'Adam Kilgore', backup_log_id: 'b1', notes: 'Snapshot taken before running April payroll batch.', created_at: '2026-04-07T09:14:00Z' },
-  { id: 'r2', label: 'Pre Phase M migration',       created_by: 'Adam Kilgore', backup_log_id: 'b3', notes: 'Pre-audit-log schema changes.',                       created_at: '2026-04-05T08:00:00Z' },
-]
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function formatBytes(bytes: number | null): string {
@@ -86,7 +71,6 @@ export function BackupsPage() {
   const [backups, setBackups] = useState<BackupLog[]>([])
   const [restorePoints, setRestorePoints] = useState<RestorePoint[]>([])
   const [loading, setLoading] = useState(true)
-  const [usingMock, setUsingMock] = useState(false)
   const [creatingRestore, setCreatingRestore] = useState(false)
 
   const loadData = async () => {
@@ -111,20 +95,12 @@ export function BackupsPage() {
       const backupRows = (backupsRes.data ?? []) as BackupLog[]
       const restoreRows = (restoreRes.data ?? []) as RestorePoint[]
 
-      if (backupRows.length === 0 && restoreRows.length === 0) {
-        setBackups(MOCK_BACKUPS)
-        setRestorePoints(MOCK_RESTORE_POINTS)
-        setUsingMock(true)
-      } else {
-        setBackups(backupRows)
-        setRestorePoints(restoreRows)
-        setUsingMock(false)
-      }
+      setBackups(backupRows)
+      setRestorePoints(restoreRows)
     } catch (err) {
-      console.warn('[backups] Using mock data:', err)
-      setBackups(MOCK_BACKUPS)
-      setRestorePoints(MOCK_RESTORE_POINTS)
-      setUsingMock(true)
+      console.warn('[backups] Failed to load backup data:', err)
+      setBackups([])
+      setRestorePoints([])
     } finally {
       setLoading(false)
     }
@@ -213,11 +189,6 @@ export function BackupsPage() {
         </button>
       </div>
 
-      {usingMock && (
-        <div className="rounded-xl border border-[var(--warning)] bg-[var(--warning-bg)] px-4 py-2.5 text-xs text-[var(--warning)]">
-          Showing sample data. Live `backup_logs` not available.
-        </div>
-      )}
 
       {/* Health card */}
       <Card>

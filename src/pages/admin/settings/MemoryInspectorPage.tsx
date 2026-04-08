@@ -3,6 +3,8 @@ import { Brain, Search, Plus, Trash2, Check, ChevronDown, ChevronRight, RefreshC
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { cn } from '@/lib/utils'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -51,37 +53,6 @@ interface LearningInsight {
   generated_at: string
 }
 
-// ── Mock data (replaced by Supabase queries when DB is live) ──────────────────
-
-const MOCK_BUSINESS_CONTEXT: BusinessContextEntry[] = [
-  { id: '1', category: 'identity',       key: 'business_name',               value: 'AK Renovations',                                                                                                          source: 'manual', last_confirmed_at: '2026-04-07' },
-  { id: '2', category: 'identity',       key: 'owner_name',                  value: 'Adam Kilgore',                                                                                                            source: 'manual', last_confirmed_at: '2026-04-07' },
-  { id: '3', category: 'identity',       key: 'service_area',                value: 'Summit County, Ohio — Akron, Cuyahoga Falls, Hudson, Stow, and surrounding areas',                                        source: 'manual', last_confirmed_at: '2026-04-07' },
-  { id: '4', category: 'pricing_rules',  key: 'default_sub_markup',          value: '25%',                                                                                                                     source: 'manual', last_confirmed_at: '2026-04-07' },
-  { id: '5', category: 'pricing_rules',  key: 'target_gross_margin_standard', value: '38%',                                                                                                                    source: 'manual', last_confirmed_at: '2026-04-07' },
-  { id: '6', category: 'pricing_rules',  key: 'pm_hourly_rate',              value: '$120',                                                                                                                    source: 'manual', last_confirmed_at: '2026-04-07' },
-  { id: '7', category: 'brand_voice',    key: 'tone',                        value: 'Professional, confident, approachable. Sounds like a trusted expert neighbor.',                                           source: 'manual', last_confirmed_at: '2026-04-07' },
-  { id: '8', category: 'workflow_rules', key: 'approval_required_for',       value: 'Any client-facing communication, invoices, proposals, contracts, social media posts',                                     source: 'manual', last_confirmed_at: '2026-04-07' },
-]
-
-const MOCK_OPERATIONAL_MEMORY: OperationalMemoryEntry[] = [
-  { id: '1', entity_type: 'project', entity_id: 'proj-2', entity_name: 'Thompson Addition', memory_type: 'fact',    content: 'Thompson Addition started active phase on April 1, 2026. Foundation footings came in $1,800 over budget due to soil conditions requiring deeper footings.', confidence: 1.0, source: 'database_trigger', created_at: '2026-04-01' },
-  { id: '2', entity_type: 'lead',    entity_id: 'lead-1', entity_name: 'Sarah Johnson',      memory_type: 'pattern', content: 'Sarah Johnson responded to follow-up texts within 2 hours on two separate occasions. Prefers text over email.', confidence: 0.85, source: 'agent_inference', created_at: '2026-03-28' },
-  { id: '3', entity_type: 'project', entity_id: 'proj-1', entity_name: 'Johnson Kitchen',   memory_type: 'outcome', content: 'Johnson Kitchen completed on time and on budget. Client satisfaction survey returned 5/5 stars.', confidence: 1.0, source: 'database_trigger', created_at: '2026-03-15' },
-]
-
-const MOCK_AGENT_HISTORY: AgentHistoryEntry[] = [
-  { id: '1', agent_name: 'agent-morning-brief',    run_at: '2026-04-07 06:00', output_type: 'report',   output_summary: 'Morning brief covering 2 active projects, 1 overdue invoice, and 3 leads needing follow-up.', admin_action: 'approved',            edit_distance: 0,    rejection_reason: null },
-  { id: '2', agent_name: 'agent-lead-intake',       run_at: '2026-04-06 14:22', output_type: 'draft',    output_summary: 'Follow-up text drafted for Davis lead, kitchen remodel inquiry from website.',              admin_action: 'approved_with_edits', edit_distance: 3,    rejection_reason: null },
-  { id: '3', agent_name: 'agent-receipt-processor', run_at: '2026-04-06 09:15', output_type: 'action',   output_summary: 'Extracted receipt from Home Depot — $342.18, assigned to Johnson Kitchen project.',          admin_action: 'auto_executed',       edit_distance: null, rejection_reason: null },
-  { id: '4', agent_name: 'agent-lead-intake',       run_at: '2026-04-05 11:05', output_type: 'draft',    output_summary: 'Follow-up text drafted for Miller lead, bathroom renovation.',                               admin_action: 'rejected',            edit_distance: null, rejection_reason: 'Too salesy. Tone was off.' },
-]
-
-const MOCK_LEARNING_INSIGHTS: LearningInsight[] = [
-  { id: '1', insight_type: 'agent_performance', title: 'Lead intake tone needs calibration', insight: 'The lead intake agent produces follow-up drafts that Adam edits or rejects 40% of the time. The tone is consistently described as too salesy.', evidence: '5 rejections, 3 heavy edits over last 2 weeks', confidence: 0.82, actioned: false, generated_at: '2026-04-06' },
-  { id: '2', insight_type: 'sub_performance',   title: 'ABC Concrete is reliable for foundations', insight: 'ABC Concrete has completed 3 projects on time and within 5% of bid amount. They are a reliable first call for concrete and foundation work.', evidence: '3 projects, avg 3% over bid, 0 schedule delays', confidence: 0.91, actioned: false, generated_at: '2026-04-03' },
-  { id: '3', insight_type: 'project_financials', title: 'Addition projects averaging 19.4% net margin', insight: 'The last 2 completed addition projects hit 19.4% net margin on average. Sub markup at 25% and 3.5 crew weeks is the right baseline.', evidence: 'Johnson Addition (19.1%), Miller Addition (19.7%)', confidence: 0.78, actioned: true,  generated_at: '2026-03-30' },
-]
 
 
 
@@ -120,19 +91,54 @@ export function MemoryInspectorPage() {
   const [expandedId, setExpandedId]     = useState<string | null>(null)
   const [editingId, setEditingId]       = useState<string | null>(null)
   const [editValue, setEditValue]       = useState('')
-  const [bcEntries, setBcEntries]       = useState<BusinessContextEntry[]>(MOCK_BUSINESS_CONTEXT)
-  const [omEntries]                     = useState<OperationalMemoryEntry[]>(MOCK_OPERATIONAL_MEMORY)
-  const [agHistory]                     = useState<AgentHistoryEntry[]>(MOCK_AGENT_HISTORY)
-  const [insights, setInsights]         = useState<LearningInsight[]>(MOCK_LEARNING_INSIGHTS)
+  const { data: bcData = [] } = useQuery({
+    queryKey: ['memory_business_context'],
+    queryFn: async () => {
+      const { data } = await supabase.from('business_context').select('*').order('category')
+      return (data ?? []) as BusinessContextEntry[]
+    },
+  })
+  const { data: omData = [] } = useQuery({
+    queryKey: ['memory_operational_memory'],
+    queryFn: async () => {
+      const { data } = await supabase.from('operational_memory').select('*').order('created_at', { ascending: false })
+      return (data ?? []) as OperationalMemoryEntry[]
+    },
+  })
+  const { data: agData = [] } = useQuery({
+    queryKey: ['memory_agent_history'],
+    queryFn: async () => {
+      const { data } = await supabase.from('agent_history').select('*').order('run_at', { ascending: false })
+      return (data ?? []) as AgentHistoryEntry[]
+    },
+  })
+  const { data: insightsBase = [] } = useQuery({
+    queryKey: ['memory_learning_insights'],
+    queryFn: async () => {
+      const { data } = await supabase.from('learning_insights').select('*').order('generated_at', { ascending: false })
+      return (data ?? []) as LearningInsight[]
+    },
+  })
+
+  const [bcEntries, setBcEntries] = useState<BusinessContextEntry[]>([])
+  const [omEntries]               = useState<OperationalMemoryEntry[]>([])
+  const [agHistory]               = useState<AgentHistoryEntry[]>([])
+  const [insights, setInsights]   = useState<LearningInsight[]>([])
+
+  // Seed local state from query data (allows optimistic in-place edits)
+  const displayBc       = bcEntries.length   > 0 ? bcEntries   : bcData
+  const displayOm       = omEntries.length   > 0 ? omEntries   : omData
+  const displayHistory  = agHistory.length   > 0 ? agHistory   : agData
+  const displayInsights = insights.length    > 0 ? insights    : insightsBase
   const [agentFilter, setAgentFilter]   = useState('all')
   const [insightFilter, setInsightFilter] = useState('all')
   const [refreshing, setRefreshing]     = useState(false)
 
   const TABS: { id: MemoryTab; label: string; count: number }[] = [
-    { id: 'business_context',   label: 'Business Context',   count: bcEntries.length },
-    { id: 'operational_memory', label: 'Operational Memory', count: omEntries.length },
-    { id: 'agent_history',      label: 'Agent History',      count: agHistory.length },
-    { id: 'learning_insights',  label: 'Learning Insights',  count: insights.filter(i => !i.actioned).length },
+    { id: 'business_context',   label: 'Business Context',   count: displayBc.length },
+    { id: 'operational_memory', label: 'Operational Memory', count: displayOm.length },
+    { id: 'agent_history',      label: 'Agent History',      count: displayHistory.length },
+    { id: 'learning_insights',  label: 'Learning Insights',  count: displayInsights.filter(i => !i.actioned).length },
   ]
 
   const simulateRefresh = () => {
@@ -141,36 +147,38 @@ export function MemoryInspectorPage() {
   }
 
   const saveEdit = (id: string) => {
-    setBcEntries(prev => prev.map(e => e.id === id ? { ...e, value: editValue } : e))
+    const base = bcEntries.length > 0 ? bcEntries : bcData
+    setBcEntries(base.map(e => e.id === id ? { ...e, value: editValue } : e))
     setEditingId(null)
   }
 
   const markInsightActioned = (id: string) => {
-    setInsights(prev => prev.map(i => i.id === id ? { ...i, actioned: true } : i))
+    const base = insights.length > 0 ? insights : insightsBase
+    setInsights(base.map(i => i.id === id ? { ...i, actioned: true } : i))
   }
 
   // ── Filtered lists ──────────────────────────────────────────────────────────
-  const filteredBC = bcEntries.filter(e =>
+  const filteredBC = displayBc.filter(e =>
     !search || e.key.toLowerCase().includes(search.toLowerCase()) || e.value.toLowerCase().includes(search.toLowerCase())
   )
 
   const bcCategories = Array.from(new Set(filteredBC.map(e => e.category)))
 
-  const filteredOM = omEntries.filter(e =>
+  const filteredOM = displayOm.filter(e =>
     !search || e.content.toLowerCase().includes(search.toLowerCase()) || e.entity_name.toLowerCase().includes(search.toLowerCase())
   )
 
-  const filteredHistory = agHistory.filter(e =>
+  const filteredHistory = displayHistory.filter(e =>
     (agentFilter === 'all' || e.agent_name === agentFilter) &&
     (!search || e.output_summary.toLowerCase().includes(search.toLowerCase()))
   )
 
-  const filteredInsights = insights.filter(i =>
+  const filteredInsights = displayInsights.filter(i =>
     (insightFilter === 'all' || i.insight_type === insightFilter) &&
     (!search || i.title.toLowerCase().includes(search.toLowerCase()) || i.insight.toLowerCase().includes(search.toLowerCase()))
   )
 
-  const agentNames = Array.from(new Set(agHistory.map(h => h.agent_name)))
+  const agentNames = Array.from(new Set(displayHistory.map(h => h.agent_name)))
 
   return (
     <div className="max-w-2xl mx-auto lg:max-w-4xl px-4 py-6 space-y-5">

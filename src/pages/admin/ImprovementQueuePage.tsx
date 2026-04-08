@@ -3,6 +3,7 @@ import { Check, X, Copy, ExternalLink, GitPullRequest, Loader2 } from 'lucide-re
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
 type Priority = 'critical' | 'high' | 'medium' | 'low'
@@ -57,55 +58,6 @@ interface ImprovementPr {
   created_at: string
 }
 
-const MOCK_PRS: Record<string, ImprovementPr> = {
-  'imp-2': {
-    id: 'pr-mock-2',
-    improvement_spec_id: 'imp-2',
-    pr_number: 42,
-    pr_url: 'https://github.com/homeclarity26/akrenovationsopsapp/pull/42',
-    pr_title: '[Auto] Morning brief should be pinned at top of dashboard',
-    branch_name: 'improvement/abc12345-morning-brief',
-    change_category: 'copy_change',
-    status: 'pr_opened',
-    created_at: new Date(Date.now() - 3600_000).toISOString(),
-  },
-}
-
-const MOCK_IMPROVEMENTS: ImprovementSpec[] = [
-  {
-    id: 'imp-1',
-    title: 'Quote entry form loses data on back navigation',
-    problem_statement: 'When adding a quote in the budget module, navigating away from the trade and coming back clears the partially-entered form.',
-    evidence: 'Navigated away from quote entry form 7 times this week without completing. Average time on budget screen: 4.2 minutes (suggests friction).',
-    proposed_solution: 'Persist form state in local component state via a parent-level useState in QuoteCollection, or use sessionStorage to preserve in-progress form data between navigation events.',
-    priority: 'high',
-    category: 'ux_friction',
-    status: 'draft',
-    created_at: new Date(Date.now() - 86400000).toISOString(),
-  },
-  {
-    id: 'imp-2',
-    title: 'Morning brief should be pinned at top of dashboard',
-    problem_statement: "The morning brief is generated daily but only lives in the agent outputs feed, which Adam has to scroll to find. It's the most important content of the day.",
-    evidence: 'Admin dashboard usage: 8 seconds average before navigating away. Morning brief opened: 2 times in 7 days.',
-    proposed_solution: "Add a \"Today's Brief\" card at the very top of AdminDashboard.tsx that pulls the latest agent_outputs record from agent-morning-brief and displays the first 3-4 lines with a \"Read full brief\" expand.",
-    priority: 'high',
-    category: 'workflow_optimization',
-    status: 'draft',
-    created_at: new Date(Date.now() - 172800000).toISOString(),
-  },
-  {
-    id: 'imp-3',
-    title: 'Lead aging agent output format not scannable',
-    problem_statement: 'The lead aging agent drafts follow-up messages but they appear as one long text block. Adam has to read the whole thing to find the action.',
-    evidence: 'Lead aging outputs: dismissed 60% of the time. Average review time before dismiss: 3 seconds (not enough time to read).',
-    proposed_solution: 'Restructure agent output format: bold the lead name and recommended action in the first line, then show the draft message below in a collapsible section.',
-    priority: 'medium',
-    category: 'agent_improvement',
-    status: 'draft',
-    created_at: new Date(Date.now() - 259200000).toISOString(),
-  },
-]
 
 const PRIORITY_COLORS: Record<Priority, string> = {
   critical: 'bg-[var(--danger-bg)] text-[var(--danger)]',
@@ -126,14 +78,45 @@ const CATEGORY_LABELS: Record<Category, string> = {
 type FilterOption = 'all' | Priority | Category
 
 export function ImprovementQueuePage() {
-  const [improvements, setImprovements] = useState<ImprovementSpec[]>(MOCK_IMPROVEMENTS)
   const [filter, setFilter] = useState<FilterOption>('all')
   const [expandedId, setExpandedId] = useState<string | null>(null)
   const [copiedId, setCopiedId] = useState<string | null>(null)
-  const [prs, setPrs] = useState<Record<string, ImprovementPr>>(MOCK_PRS)
+  const [prs, setPrs] = useState<Record<string, ImprovementPr>>({})
   const [openingPrId, setOpeningPrId] = useState<string | null>(null)
 
-  // Best-effort real fetch of improvement_prs — falls back to mock data.
+  const { data: rawImprovements = [], isLoading } = useQuery({
+    queryKey: ['improvement_specs'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('improvement_specs')
+        .select('*')
+        .order('created_at', { ascending: false })
+      return (data ?? []) as ImprovementSpec[]
+    },
+  })
+
+  const [localOverrides, setLocalOverrides] = useState<Record<string, Partial<ImprovementSpec>>>({})
+
+  const improvements: ImprovementSpec[] = rawImprovements
+    .map(i => ({ ...i, ...localOverrides[i.id] }))
+    .filter(i => localOverrides[i.id]?.status !== ('dismissed' as Status))
+
+  const setImprovements = (fn: (prev: ImprovementSpec[]) => ImprovementSpec[]) => {
+    const next = fn(improvements)
+    const overrides: Record<string, Partial<ImprovementSpec>> = {}
+    for (const item of next) {
+      overrides[item.id] = item
+    }
+    // Also track dismissed items (removed from next)
+    for (const item of improvements) {
+      if (!next.find(n => n.id === item.id)) {
+        overrides[item.id] = { ...item, status: 'dismissed' as Status }
+      }
+    }
+    setLocalOverrides(overrides)
+  }
+
+  // Fetch PRs from improvement_prs table
   useEffect(() => {
     let cancelled = false
     const load = async () => {
@@ -146,12 +129,11 @@ export function ImprovementQueuePage() {
         if (cancelled) return
         const map: Record<string, ImprovementPr> = {}
         for (const row of data as ImprovementPr[]) {
-          // Keep most recent per spec
           if (!map[row.improvement_spec_id]) map[row.improvement_spec_id] = row
         }
-        if (Object.keys(map).length) setPrs(map)
+        setPrs(map)
       } catch {
-        // stub db or offline — keep mock data
+        // table not yet available — empty state
       }
     }
     load()
@@ -222,6 +204,14 @@ export function ImprovementQueuePage() {
   })
 
   const deployed = improvements.filter(i => i.status === 'deployed')
+
+  if (isLoading) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-sm text-[var(--text-secondary)]">Loading improvement queue...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 space-y-6 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">

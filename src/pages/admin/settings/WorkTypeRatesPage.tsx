@@ -1,9 +1,10 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Check } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { MOCK_WORK_TYPE_RATES } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 
 type WorkType = 'field_carpentry' | 'project_management' | 'site_visit' | 'design' | 'administrative' | 'travel' | 'other'
 
@@ -19,43 +20,82 @@ const WORK_TYPE_LABELS: Record<WorkType, string> = {
 
 const WORK_TYPES: WorkType[] = ['field_carpentry', 'project_management', 'site_visit', 'design', 'administrative', 'travel', 'other']
 
-const MOCK_USERS = [
-  { id: 'admin-1',    name: 'Adam Kilgore', role: 'admin',    default_work_type: 'project_management' as WorkType },
-  { id: 'employee-1', name: 'Jeff Miller',  role: 'employee', default_work_type: 'field_carpentry' as WorkType },
-  { id: 'employee-2', name: 'Steven Clark', role: 'employee', default_work_type: 'field_carpentry' as WorkType },
-]
+type DbProfile = { id: string; full_name: string; role: string }
+type RateRow = { id: string; user_id: string; work_type: WorkType; rate_per_hour: number; is_default_billable: boolean }
 
 export function WorkTypeRatesPage() {
-  const [rates, setRates] = useState(MOCK_WORK_TYPE_RATES)
-  const [defaults, setDefaults] = useState<Record<string, WorkType>>(
-    Object.fromEntries(MOCK_USERS.map(u => [u.id, u.default_work_type]))
-  )
+  const { data: dbRates = [], isLoading: ratesLoading } = useQuery({
+    queryKey: ['work-type-rates'],
+    queryFn: async () => {
+      const { data } = await supabase.from('work_type_rates').select('*').order('work_type')
+      return (data ?? []) as Array<{ id: string; work_type: string; label: string; billable_rate: number; cost_rate: number; description: string }>
+    },
+  })
+
+  const { data: profiles = [], isLoading: profilesLoading } = useQuery({
+    queryKey: ['profiles-active'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id,full_name,role').in('role', ['admin', 'employee']).eq('is_active', true).order('full_name')
+      return (data ?? []) as DbProfile[]
+    },
+  })
+
+  const isLoading = ratesLoading || profilesLoading
+
+  const initialRates = useMemo<RateRow[]>(() =>
+    profiles.flatMap((u: DbProfile) =>
+      WORK_TYPES.map(wt => {
+        const dbRate = dbRates.find(r => r.work_type === wt)
+        return {
+          id: `wtr-${u.id}-${wt}`,
+          user_id: u.id,
+          work_type: wt,
+          rate_per_hour: dbRate ? Number(dbRate.billable_rate ?? 0) : 0,
+          is_default_billable: dbRate ? Number(dbRate.billable_rate ?? 0) > 0 : false,
+        }
+      })
+    ),
+  [dbRates, profiles])
+
+  const [overrides, setOverrides] = useState<Record<string, Partial<RateRow>>>({})
+  const [defaults, setDefaults] = useState<Record<string, WorkType>>({})
   const [editingCell, setEditingCell] = useState<string | null>(null)
   const [saved, setSaved] = useState<string | null>(null)
+
+  const rates = useMemo<RateRow[]>(() =>
+    initialRates.map(r => ({ ...r, ...(overrides[`${r.user_id}-${r.work_type}`] ?? {}) })),
+  [initialRates, overrides])
 
   const getRate = (userId: string, wt: WorkType) =>
     rates.find(r => r.user_id === userId && r.work_type === wt)
 
   const updateRate = (userId: string, wt: WorkType, field: 'rate_per_hour' | 'is_default_billable', value: number | boolean) => {
-    setRates(prev => {
-      const existing = prev.find(r => r.user_id === userId && r.work_type === wt)
-      if (existing) {
-        return prev.map(r => r.user_id === userId && r.work_type === wt ? { ...r, [field]: value } : r)
-      }
-      return [...prev, { id: `wtr-new-${Date.now()}`, user_id: userId, work_type: wt, rate_per_hour: 0, is_default_billable: true, [field]: value }]
-    })
-    setSaved(`${userId}-${wt}`)
+    const key = `${userId}-${wt}`
+    setOverrides(prev => ({ ...prev, [key]: { ...(prev[key] ?? {}), [field]: value } }))
+    setSaved(key)
     setTimeout(() => setSaved(null), 1500)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-4 space-y-6 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">
+        <PageHeader title="Work Type Rates" subtitle="Loading..." />
+        <div className="text-sm text-[var(--text-secondary)] text-center py-8">Loading work type rates...</div>
+      </div>
+    )
   }
 
   return (
     <div className="p-4 space-y-6 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">
       <PageHeader title="Work Type Rates" subtitle="Set billing rates per person per work type" />
 
-      {MOCK_USERS.map(user => (
+      {profiles.length === 0 && !isLoading && (
+        <p className="text-sm text-[var(--text-tertiary)] text-center py-8">No employees found.</p>
+      )}
+      {profiles.map((user: DbProfile) => (
         <div key={user.id} className="space-y-2">
           <div className="flex items-center gap-2">
-            <SectionHeader title={user.name} />
+            <SectionHeader title={user.full_name} />
             <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ${user.role === 'admin' ? 'bg-[var(--navy)] text-white' : 'bg-[var(--cream-light)] text-[var(--navy)]'}`}>
               {user.role}
             </span>

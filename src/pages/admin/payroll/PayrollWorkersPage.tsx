@@ -3,7 +3,8 @@ import { ArrowLeft, Plus, ChevronRight } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { MOCK_PAYROLL_WORKERS } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 
 const TYPE_LABEL: Record<string, string> = {
   w2_fulltime: 'Full-time',
@@ -17,7 +18,22 @@ function fmtCurrency(n: number | null): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
 }
 
+type WorkerProfile = { id: string; full_name: string; role: string; email?: string; start_date?: string; hourly_rate?: number; base_salary?: number }
+
 export function PayrollWorkersPage() {
+  const { data: workers = [], isLoading } = useQuery({
+    queryKey: ['payroll_worker_profiles'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, role, email, start_date, hourly_rate, base_salary')
+        .in('role', ['employee', 'admin'])
+        .eq('is_active', true)
+        .order('full_name')
+      return (data ?? []) as WorkerProfile[]
+    },
+  })
+
   return (
     <div className="px-4 lg:px-8 py-4 space-y-4 max-w-4xl mx-auto">
       <Link
@@ -42,27 +58,33 @@ export function PayrollWorkersPage() {
       />
 
       <Card padding="none">
-        {MOCK_PAYROLL_WORKERS.map((w) => (
-          <Link
-            key={w.profile_id}
-            to={`/admin/payroll/workers/${w.profile_id}`}
-            className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg)] transition-colors"
-          >
-            <div className="min-w-0 flex-1">
-              <div className="flex items-center gap-2 mb-0.5">
-                <span className="font-medium text-sm text-[var(--text)] truncate">{w.full_name}</span>
-                <span className="text-[10px] uppercase font-semibold tracking-wide text-[var(--text-tertiary)] bg-[var(--cream-light)] px-1.5 py-0.5 rounded">
-                  {TYPE_LABEL[w.worker_type]}
-                </span>
+        {isLoading ? (
+          <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">Loading workers…</div>
+        ) : workers.length === 0 ? (
+          <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No workers found.</div>
+        ) : (
+          workers.map((w) => (
+            <Link
+              key={w.id}
+              to={`/admin/payroll/workers/${w.id}`}
+              className="flex items-center justify-between px-4 py-3.5 border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg)] transition-colors"
+            >
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="font-medium text-sm text-[var(--text)] truncate">{w.full_name}</span>
+                  <span className="text-[10px] uppercase font-semibold tracking-wide text-[var(--text-tertiary)] bg-[var(--cream-light)] px-1.5 py-0.5 rounded">
+                    {TYPE_LABEL[w.role] ?? w.role}
+                  </span>
+                </div>
+                <p className="text-[11px] text-[var(--text-tertiary)] font-mono">
+                  {w.base_salary ? `${fmtCurrency(w.base_salary)}/yr` : w.hourly_rate ? `${fmtCurrency(w.hourly_rate)}/hr` : '—'}
+                  {w.start_date && ` · Hired ${new Date(`${w.start_date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}`}
+                </p>
               </div>
-              <p className="text-[11px] text-[var(--text-tertiary)] font-mono">
-                {w.pay_type === 'salary' ? `${fmtCurrency(w.annual_salary)}/yr` : `${fmtCurrency(w.hourly_rate)}/hr`}
-                {' · '}Hired {new Date(`${w.hire_date}T00:00:00`).toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
-              </p>
-            </div>
-            <ChevronRight size={16} className="text-[var(--text-tertiary)]" />
-          </Link>
-        ))}
+              <ChevronRight size={16} className="text-[var(--text-tertiary)]" />
+            </Link>
+          ))
+        )}
       </Card>
     </div>
   )

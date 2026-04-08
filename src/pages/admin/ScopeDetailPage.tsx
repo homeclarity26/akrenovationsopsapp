@@ -9,13 +9,9 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
 import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
 import type { EditableItem } from '@/components/ui/EditableDeliverable'
-import {
-  MOCK_SUB_SCOPES,
-  MOCK_PROJECTS,
-  MOCK_SUBCONTRACTORS,
-  MOCK_SUB_CONTRACTS,
-} from '@/data/mock'
 import type { SubScope, SubScopeStatus } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 
 const statusMap: Record<SubScopeStatus, string> = {
   draft: 'draft',
@@ -29,11 +25,59 @@ export function ScopeDetailPage() {
   const { id: projectId, subId: scopeId } = useParams<{ id: string; subId: string }>()
   const navigate = useNavigate()
 
-  const scopeBase = MOCK_SUB_SCOPES.find((s) => s.id === scopeId)
-  const project = MOCK_PROJECTS.find((p) => p.id === projectId)
-  const [scope, setScope] = useState<SubScope | undefined>(scopeBase)
+  const { data: scopeData, isLoading: scopeLoading } = useQuery({
+    queryKey: ['sub_scope', scopeId],
+    enabled: !!scopeId,
+    queryFn: async () => {
+      const { data } = await supabase.from('sub_scopes').select('*').eq('id', scopeId!).single()
+      return data as SubScope | null
+    },
+  })
 
-  if (!scope || !project) {
+  const [scope, setScope] = useState<SubScope | undefined>(undefined)
+  // Sync scopeData into local state for optimistic updates
+  if (scopeData && scope === undefined) {
+    setScope(scopeData)
+  }
+  // When scopeData changes (e.g. after invalidation), update if not in edit mode
+  const effectiveScope = scope ?? scopeData ?? undefined
+
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data } = await supabase.from('projects').select('id, title, address').eq('id', projectId).single()
+      return data
+    },
+  })
+
+  const { data: existingContract } = useQuery({
+    queryKey: ['sub_contract_for_scope', scopeId],
+    enabled: !!scopeId,
+    queryFn: async () => {
+      const { data } = await supabase.from('sub_contracts').select('*').eq('scope_id', scopeId!).maybeSingle()
+      return data as { id: string; contract_number: string; status: string; attorney_approved_template: boolean; [key: string]: unknown } | null
+    },
+  })
+
+  const { data: sub } = useQuery({
+    queryKey: ['subcontractor', effectiveScope?.subcontractor_id],
+    enabled: !!effectiveScope?.subcontractor_id,
+    queryFn: async () => {
+      const { data } = await supabase.from('subcontractors').select('id, company_name, contact_name, phone').eq('id', effectiveScope!.subcontractor_id!).single()
+      return data
+    },
+  })
+
+  if (scopeLoading || !project) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-[var(--text-secondary)]">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!effectiveScope) {
     return (
       <div className="p-8 text-center">
         <p className="text-[var(--text-secondary)]">Scope not found.</p>
@@ -44,30 +88,29 @@ export function ScopeDetailPage() {
     )
   }
 
-  const sub = MOCK_SUBCONTRACTORS.find((s) => s.id === scope.subcontractor_id)
-  const subName = sub?.company_name ?? scope.scope_sections.header.subcontractor ?? 'TBD'
-  const sections = scope.scope_sections
-  const existingContract = MOCK_SUB_CONTRACTS.find((c) => c.scope_id === scope.id)
+  const scopeLocal = effectiveScope
+  const subName = sub?.company_name ?? scopeLocal.scope_sections.header.subcontractor ?? 'TBD'
+  const sections = scopeLocal.scope_sections
 
-  const canGenerateContract = ['reviewed', 'sent', 'acknowledged'].includes(scope.status)
+  const canGenerateContract = ['reviewed', 'sent', 'acknowledged'].includes(scopeLocal.status)
 
   const handleRegenerate = () => {
-    if (!confirm('This will create Revision ' + (scope.revision + 1) + ' and archive Revision ' + scope.revision + '. Continue?')) return
-    setScope({ ...scope, revision: scope.revision + 1, status: 'draft' })
+    if (!confirm('This will create Revision ' + (scopeLocal.revision + 1) + ' and archive Revision ' + scopeLocal.revision + '. Continue?')) return
+    setScope({ ...scopeLocal, revision: scopeLocal.revision + 1, status: 'draft' })
   }
 
   const handleMarkReviewed = () => {
-    setScope({ ...scope, status: 'reviewed' })
+    setScope({ ...scopeLocal, status: 'reviewed' })
   }
 
   const handleSendToSub = () => {
     if (!confirm(`Send this scope to ${subName} via email?`)) return
-    setScope({ ...scope, status: 'sent' })
+    setScope({ ...scopeLocal, status: 'sent' })
   }
 
   const handleMarkAttorneyReviewed = () => {
     setScope({
-      ...scope,
+      ...scopeLocal,
       attorney_reviewed: true,
       attorney_reviewed_at: new Date().toISOString(),
     })
@@ -76,7 +119,7 @@ export function ScopeDetailPage() {
   const handleGenerateContract = () => {
     if (!canGenerateContract) return
     // In production: supabase.functions.invoke('agent-generate-contract', ...)
-    navigate(`/admin/projects/${projectId}/subs/${scope.id}/contract`)
+    navigate(`/admin/projects/${projectId}/subs/${scopeLocal.id}/contract`)
   }
 
   const dollarStyle: CSSProperties = { fontVariantNumeric: 'tabular-nums' }
@@ -92,13 +135,13 @@ export function ScopeDetailPage() {
       </button>
 
       <PageHeader
-        title={`${scope.scope_number}`}
-        subtitle={`${scope.trade} · ${subName} · Rev ${scope.revision}`}
-        action={<StatusPill status={statusMap[scope.status]} />}
+        title={`${scopeLocal.scope_number}`}
+        subtitle={`${scopeLocal.trade} · ${subName} · Rev ${scopeLocal.revision}`}
+        action={<StatusPill status={statusMap[scopeLocal.status]} />}
       />
 
       {/* Draft banner */}
-      {scope.status === 'draft' && (
+      {scopeLocal.status === 'draft' && (
         <Card className="bg-[var(--warning-bg)] border-[var(--warning)]/30">
           <p className="text-sm text-[var(--warning)] font-medium">
             AI-generated draft, review before sending to subcontractor
@@ -106,12 +149,12 @@ export function ScopeDetailPage() {
         </Card>
       )}
 
-      {scope.attorney_reviewed && (
+      {scopeLocal.attorney_reviewed && (
         <Card className="bg-[var(--success-bg)] border-[var(--success)]/30">
           <p className="text-sm text-[var(--success)] font-medium flex items-center gap-2">
             <Check size={14} />
             Attorney reviewed
-            {scope.attorney_reviewed_at ? ` · ${new Date(scope.attorney_reviewed_at).toLocaleDateString()}` : ''}
+            {scopeLocal.attorney_reviewed_at ? ` · ${new Date(scopeLocal.attorney_reviewed_at).toLocaleDateString()}` : ''}
           </p>
         </Card>
       )}
@@ -130,19 +173,19 @@ export function ScopeDetailPage() {
           <FileText size={14} />
           Attorney
         </Button>
-        {scope.status === 'draft' && (
+        {scopeLocal.status === 'draft' && (
           <Button variant="secondary" size="sm" onClick={handleMarkReviewed}>
             <Check size={14} />
             Mark Reviewed
           </Button>
         )}
-        {scope.status !== 'draft' && (
+        {scopeLocal.status !== 'draft' && (
           <Button variant="secondary" size="sm" onClick={handleSendToSub}>
             <Send size={14} />
             Send to Sub
           </Button>
         )}
-        {!scope.attorney_reviewed && (
+        {!scopeLocal.attorney_reviewed && (
           <Button variant="secondary" size="sm" onClick={handleMarkAttorneyReviewed}>
             <Check size={14} />
             Attorney Ok
@@ -189,14 +232,14 @@ export function ScopeDetailPage() {
         <SectionHeader title="Inclusions" />
         <EditableDeliverable
           deliverableType="scope"
-          instanceId={scope.id}
+          instanceId={scopeLocal.id}
           instanceTable="sub_scopes"
           items={sections.inclusions.map((item, idx): EditableItem => ({ id: String(idx), title: item }))}
           onSave={async (editedItems) => {
             setScope({
-              ...scope,
+              ...scopeLocal,
               scope_sections: {
-                ...scope.scope_sections,
+                ...scopeLocal.scope_sections,
                 inclusions: editedItems.map((i) => i.title),
               },
             })
@@ -212,14 +255,14 @@ export function ScopeDetailPage() {
         <SectionHeader title="Exclusions" />
         <EditableDeliverable
           deliverableType="scope"
-          instanceId={scope.id}
+          instanceId={scopeLocal.id}
           instanceTable="sub_scopes"
           items={sections.exclusions.map((item, idx): EditableItem => ({ id: `excl-${idx}`, title: item }))}
           onSave={async (editedItems) => {
             setScope({
-              ...scope,
+              ...scopeLocal,
               scope_sections: {
-                ...scope.scope_sections,
+                ...scopeLocal.scope_sections,
                 exclusions: editedItems.map((i) => i.title),
               },
             })

@@ -1,16 +1,38 @@
 import { Check, X, TrendingUp } from 'lucide-react'
 import { Card, MetricCard } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { MOCK_BONUS } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 export function BonusTrackerPage() {
-  const { ytd_earned, ytd_qualified, ytd_projects, hit_rate, records } = MOCK_BONUS
+  const { user } = useAuth()
+
+  const { data: records = [], isLoading } = useQuery({
+    queryKey: ['bonus-records', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('bonus_records')
+        .select('*, projects(title)')
+        .eq('employee_id', user!.id)
+        .order('created_at', { ascending: false })
+      return data ?? []
+    },
+  })
+
+  const ytd_earned = records.filter((r: any) => r.qualified).reduce((sum: number, r: any) => sum + (r.bonus_amount ?? 0), 0)
+  const ytd_qualified = records.filter((r: any) => r.qualified).length
+  const ytd_projects = records.length
+  const hit_rate = ytd_projects > 0 ? ytd_qualified / ytd_projects : 0
+
+  const yearLabel = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
 
   return (
     <div className="p-4 space-y-5">
       <div className="pt-2">
         <h1 className="font-display text-2xl text-[var(--navy)]">Bonus Tracker</h1>
-        <p className="text-sm text-[var(--text-secondary)] mt-0.5">YTD through April 2026</p>
+        <p className="text-sm text-[var(--text-secondary)] mt-0.5">YTD through {yearLabel}</p>
       </div>
 
       {/* Summary */}
@@ -71,56 +93,64 @@ export function BonusTrackerPage() {
       {/* Project records */}
       <div>
         <SectionHeader title="Project Breakdown" />
-        <Card padding="none">
-          {records.map((r, i) => (
-            <div key={i} className="p-4 border-b border-[var(--border-light)] last:border-0">
-              <div className="flex items-start justify-between gap-3 mb-2">
-                <div className="flex-1 min-w-0">
-                  <p className="font-semibold text-sm text-[var(--text)] truncate">{r.project}</p>
-                  <p className="text-xs text-[var(--text-tertiary)] capitalize">{r.project_type}</p>
+        {isLoading ? (
+          <p className="text-sm text-[var(--text-secondary)]">Loading...</p>
+        ) : records.length === 0 ? (
+          <Card>
+            <p className="text-sm text-[var(--text-secondary)] text-center py-4">No bonus records yet.</p>
+          </Card>
+        ) : (
+          <Card padding="none">
+            {records.map((r: any) => (
+              <div key={r.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
+                <div className="flex items-start justify-between gap-3 mb-2">
+                  <div className="flex-1 min-w-0">
+                    <p className="font-semibold text-sm text-[var(--text)] truncate">{r.projects?.title ?? 'Project'}</p>
+                    <p className="text-xs text-[var(--text-tertiary)] capitalize">{r.project_type}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 flex-shrink-0">
+                    {r.qualified ? (
+                      <>
+                        <Check size={14} className="text-[var(--success)]" />
+                        <span className="font-mono text-sm font-bold text-[var(--success)]">${r.bonus_amount}</span>
+                      </>
+                    ) : (
+                      <>
+                        <X size={14} className="text-[var(--danger)]" />
+                        <span className="text-sm font-semibold text-[var(--text-tertiary)]">Not earned</span>
+                      </>
+                    )}
+                  </div>
                 </div>
-                <div className="flex items-center gap-1.5 flex-shrink-0">
-                  {r.qualified ? (
-                    <>
-                      <Check size={14} className="text-[var(--success)]" />
-                      <span className="font-mono text-sm font-bold text-[var(--success)]">${r.amount}</span>
-                    </>
-                  ) : (
-                    <>
-                      <X size={14} className="text-[var(--danger)]" />
-                      <span className="text-sm font-semibold text-[var(--text-tertiary)]">Not earned</span>
-                    </>
-                  )}
-                </div>
-              </div>
 
-              <div className="grid grid-cols-2 gap-2">
-                {/* Schedule */}
-                <div className={`flex items-center gap-2 p-2.5 rounded-xl ${r.schedule_hit ? 'bg-[var(--success-bg)]' : 'bg-[var(--danger-bg)]'}`}>
-                  {r.schedule_hit
-                    ? <Check size={13} className="text-[var(--success)] flex-shrink-0" />
-                    : <X size={13} className="text-[var(--danger)] flex-shrink-0" />
-                  }
-                  <div>
-                    <p className={`text-[11px] font-semibold ${r.schedule_hit ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>Schedule</p>
-                    <p className={`text-[10px] ${r.schedule_hit ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>{r.schedule_hit ? 'On time' : 'Behind'}</p>
+                <div className="grid grid-cols-2 gap-2">
+                  {/* Schedule */}
+                  <div className={`flex items-center gap-2 p-2.5 rounded-xl ${r.schedule_target_met ? 'bg-[var(--success-bg)]' : 'bg-[var(--danger-bg)]'}`}>
+                    {r.schedule_target_met
+                      ? <Check size={13} className="text-[var(--success)] flex-shrink-0" />
+                      : <X size={13} className="text-[var(--danger)] flex-shrink-0" />
+                    }
+                    <div>
+                      <p className={`text-[11px] font-semibold ${r.schedule_target_met ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>Schedule</p>
+                      <p className={`text-[10px] ${r.schedule_target_met ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>{r.schedule_target_met ? 'On time' : 'Behind'}</p>
+                    </div>
                   </div>
-                </div>
-                {/* Margin */}
-                <div className={`flex items-center gap-2 p-2.5 rounded-xl ${r.margin_hit ? 'bg-[var(--success-bg)]' : 'bg-[var(--danger-bg)]'}`}>
-                  {r.margin_hit
-                    ? <Check size={13} className="text-[var(--success)] flex-shrink-0" />
-                    : <X size={13} className="text-[var(--danger)] flex-shrink-0" />
-                  }
-                  <div>
-                    <p className={`text-[11px] font-semibold ${r.margin_hit ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>Margin</p>
-                    <p className={`text-[10px] font-mono ${r.margin_hit ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>{r.margin}% / {r.target}%</p>
+                  {/* Margin */}
+                  <div className={`flex items-center gap-2 p-2.5 rounded-xl ${r.margin_target_met ? 'bg-[var(--success-bg)]' : 'bg-[var(--danger-bg)]'}`}>
+                    {r.margin_target_met
+                      ? <Check size={13} className="text-[var(--success)] flex-shrink-0" />
+                      : <X size={13} className="text-[var(--danger)] flex-shrink-0" />
+                    }
+                    <div>
+                      <p className={`text-[11px] font-semibold ${r.margin_target_met ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>Margin</p>
+                      <p className={`text-[10px] font-mono ${r.margin_target_met ? 'text-[var(--success)]' : 'text-[var(--danger)]'}`}>{r.margin_target_met ? 'Hit' : 'Missed'}</p>
+                    </div>
                   </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </Card>
+            ))}
+          </Card>
+        )}
       </div>
     </div>
   )

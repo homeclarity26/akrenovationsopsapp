@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react'
 import { Send, Sparkles, ChevronRight, AlertCircle, Layers } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 
 interface Message {
   id: string
@@ -17,22 +19,49 @@ const QUICK_PROMPTS = [
   "What's taking the most of my time?",
 ]
 
-const INITIAL_MESSAGE: Message = {
-  id: 'init',
-  role: 'assistant',
-  content: "Thompson Addition framing is 4 days behind — that's the thing to focus on today. You've also got 3 pending approvals and the Johnson proposal hasn't been viewed yet after 6 days. Want to start with the project risk or the proposal follow-up?",
-  timestamp: new Date(),
-  isProactive: true,
-}
-
 export function MetaAgentPage() {
   const navigate = useNavigate()
-  const [messages, setMessages] = useState<Message[]>([INITIAL_MESSAGE])
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [sessionId] = useState(() => crypto.randomUUID())
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
+
+  const { data: pendingApprovals = 0 } = useQuery({
+    queryKey: ['meta-pending-approvals'],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('ai_actions')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+        .eq('requires_approval', true)
+      return count ?? 0
+    },
+  })
+
+  const { data: newImprovements = 0 } = useQuery({
+    queryKey: ['meta-improvements'],
+    queryFn: async () => {
+      const { count } = await supabase
+        .from('improvement_specs')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'pending')
+      return count ?? 0
+    },
+  })
+
+  const { data: activeAgents = 0 } = useQuery({
+    queryKey: ['meta-active-agents'],
+    queryFn: async () => {
+      const since = new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString()
+      const { count } = await supabase
+        .from('agent_outputs')
+        .select('agent_name', { count: 'exact', head: true })
+        .gte('created_at', since)
+      return count ?? 0
+    },
+  })
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -112,29 +141,44 @@ export function MetaAgentPage() {
       {/* Status bar */}
       <div className="flex items-center gap-4 px-4 py-2.5 border-b border-[var(--border-light)] bg-[var(--white)]">
         <div className="flex items-center gap-1.5">
-          <div className="w-2 h-2 rounded-full bg-[var(--success)]" />
-          <span className="text-xs text-[var(--text-secondary)]">3 agents running</span>
+          <div className={`w-2 h-2 rounded-full ${activeAgents > 0 ? 'bg-[var(--success)]' : 'bg-[var(--border)]'}`} />
+          <span className="text-xs text-[var(--text-secondary)]">{activeAgents} agent{activeAgents !== 1 ? 's' : ''} active today</span>
         </div>
-        <button
-          onClick={() => navigate('/admin/settings/approvals')}
-          className="flex items-center gap-1.5 text-xs text-[var(--warning)] font-medium"
-        >
-          <AlertCircle size={12} />
-          2 pending approvals
-          <ChevronRight size={11} />
-        </button>
-        <button
-          onClick={() => navigate('/admin/ai/improvements')}
-          className="flex items-center gap-1.5 text-xs text-[var(--navy)] font-medium ml-auto"
-        >
-          <Layers size={12} />
-          1 new improvement
-          <ChevronRight size={11} />
-        </button>
+        {pendingApprovals > 0 && (
+          <button
+            onClick={() => navigate('/admin/settings/approvals')}
+            className="flex items-center gap-1.5 text-xs text-[var(--warning)] font-medium"
+          >
+            <AlertCircle size={12} />
+            {pendingApprovals} pending approval{pendingApprovals !== 1 ? 's' : ''}
+            <ChevronRight size={11} />
+          </button>
+        )}
+        {newImprovements > 0 && (
+          <button
+            onClick={() => navigate('/admin/ai/improvements')}
+            className="flex items-center gap-1.5 text-xs text-[var(--navy)] font-medium ml-auto"
+          >
+            <Layers size={12} />
+            {newImprovements} new improvement{newImprovements !== 1 ? 's' : ''}
+            <ChevronRight size={11} />
+          </button>
+        )}
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.length === 0 && !isLoading && (
+          <div className="flex justify-start">
+            <div className="w-7 h-7 rounded-full bg-[var(--navy)] flex items-center justify-center flex-shrink-0 mt-1 mr-2.5">
+              <Sparkles size={13} className="text-white" />
+            </div>
+            <div className="max-w-[85%] bg-[var(--white)] border border-[var(--border-light)] rounded-2xl rounded-tl-sm px-4 py-3">
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5">from AK Ops</p>
+              <p className="text-sm leading-relaxed text-[var(--text)]">Hey Adam. Ask me anything about the business, your projects, or your team. I can pull data, draft messages, run reports, and flag what needs your attention.</p>
+            </div>
+          </div>
+        )}
         {messages.map(msg => (
           <div key={msg.id} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
             {msg.role === 'assistant' && (

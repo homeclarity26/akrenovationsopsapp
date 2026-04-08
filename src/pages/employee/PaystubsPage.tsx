@@ -1,16 +1,13 @@
 // Employee paystubs view — employees see their OWN payroll records only.
 // Never shows employer cost, employer taxes, or other employees' data.
 
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useAuth } from '@/context/AuthContext'
-import {
-  MOCK_PAY_PERIODS,
-  MOCK_PAYROLL_RECORDS,
-  MOCK_PAYROLL_YTD,
-} from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import type { PayrollRecord } from '@/data/mock'
 
 function fmtCurrency(n: number): string {
@@ -20,18 +17,44 @@ function fmtDate(d: string): string {
   return new Date(`${d}T00:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
 }
 
+type PayPeriodRow = { id: string; period_start: string; period_end: string; pay_date?: string }
+type YTDData = { gross_pay_ytd: number; net_pay_ytd: number; federal_withholding_ytd: number; state_withholding_ytd: number; employee_ss_ytd: number; employee_medicare_ytd: number; year: number }
+
 export function PaystubsPage() {
   const { user } = useAuth()
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  const myRecords = useMemo(
-    () => MOCK_PAYROLL_RECORDS.filter((r) => r.profile_id === user?.id),
-    [user?.id],
-  )
-  const myYtd = useMemo(
-    () => MOCK_PAYROLL_YTD.find((y) => y.profile_id === user?.id),
-    [user?.id],
-  )
+  const { data: myRecords = [] } = useQuery({
+    queryKey: ['my_payroll_records', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('payroll_records')
+        .select('*')
+        .eq('employee_id', user!.id)
+        .order('created_at', { ascending: false })
+      return (data ?? []) as PayrollRecord[]
+    },
+  })
+
+  const { data: payPeriods = [] } = useQuery({
+    queryKey: ['pay_periods_for_stubs'],
+    queryFn: async () => {
+      const { data } = await supabase.from('pay_periods').select('id, period_start, period_end, pay_date')
+      return (data ?? []) as PayPeriodRow[]
+    },
+  })
+
+  // Compute YTD from records
+  const myYtd: YTDData | null = myRecords.length === 0 ? null : {
+    year: new Date().getFullYear(),
+    gross_pay_ytd: myRecords.reduce((s, r) => s + (r.gross_pay ?? 0), 0),
+    net_pay_ytd: myRecords.reduce((s, r) => s + (r.est_net_pay ?? 0), 0),
+    federal_withholding_ytd: myRecords.reduce((s, r) => s + (r.est_federal_withholding ?? 0), 0),
+    state_withholding_ytd: myRecords.reduce((s, r) => s + (r.est_state_withholding ?? 0), 0),
+    employee_ss_ytd: myRecords.reduce((s, r) => s + (r.est_employee_ss ?? 0), 0),
+    employee_medicare_ytd: myRecords.reduce((s, r) => s + (r.est_employee_medicare ?? 0), 0),
+  }
 
   return (
     <div className="px-4 lg:px-8 py-4 space-y-4 max-w-2xl mx-auto">
@@ -40,7 +63,7 @@ export function PaystubsPage() {
       {myYtd && (
         <Card padding="lg">
           <p className="uppercase text-[10px] font-semibold tracking-[0.06em] text-[var(--text-tertiary)] font-body mb-1">
-            {myYtd.year} year-to-date
+            {myYtd!.year} year-to-date
           </p>
           <p className="font-display text-3xl text-[var(--navy)] font-mono">{fmtCurrency(myYtd.gross_pay_ytd)}</p>
           <p className="text-[12px] text-[var(--text-secondary)] mt-0.5">Gross earnings YTD</p>
@@ -79,7 +102,7 @@ export function PaystubsPage() {
       ) : (
         <div className="space-y-2">
           {myRecords.map((r) => {
-            const period = MOCK_PAY_PERIODS.find((p) => p.id === r.pay_period_id)
+            const period = payPeriods.find((p) => p.id === r.pay_period_id)
             const isOpen = expanded === r.id
             return (
               <Card key={r.id} padding="none">

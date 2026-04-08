@@ -1,4 +1,6 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import { BudgetStageIndicator } from './BudgetStageIndicator'
 import type { BudgetStage } from './BudgetStageIndicator'
 import { BudgetSetup } from './BudgetSetup'
@@ -6,12 +8,6 @@ import { QuoteCollection } from './QuoteCollection'
 import { BudgetSelectionsStage } from './BudgetSelectionsStage'
 import type { BudgetSelection } from './BudgetSelectionsStage'
 import { FinalPrice } from './FinalPrice'
-import {
-  MOCK_BUDGET_SETTINGS,
-  MOCK_BUDGET_TRADES,
-  MOCK_BUDGET_QUOTES,
-  MOCK_BUDGET_SELECTIONS,
-} from '@/data/mock'
 import type { BudgetSettings, BudgetTrade, BudgetQuote } from '@/data/mock'
 
 interface Props {
@@ -51,23 +47,69 @@ function computeMaxReached(
 }
 
 export function BudgetTab({ projectId, projectType }: Props) {
-  // ── Local state mirroring mock data ──────────────────────────────────────
-  const [settings, setSettings] = useState<BudgetSettings | undefined>(
-    MOCK_BUDGET_SETTINGS[projectId]
-  )
-  const [trades, setTrades] = useState<BudgetTrade[]>(
-    MOCK_BUDGET_TRADES.filter(t => t.project_id === projectId)
-  )
-  const [quotes, setQuotes] = useState<BudgetQuote[]>(
-    MOCK_BUDGET_QUOTES.filter(q => q.project_id === projectId)
-  )
-  const [selections, setSelections] = useState<BudgetSelection[]>(
-    (MOCK_BUDGET_SELECTIONS as BudgetSelection[]).filter(s => s.project_id === projectId)
-  )
+  // ── Real Supabase queries ─────────────────────────────────────────────────
+  const { data: settingsRow } = useQuery({
+    queryKey: ['budget_settings', projectId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('budget_settings')
+        .select('*')
+        .eq('project_id', projectId)
+        .maybeSingle()
+      return data ?? undefined
+    },
+  })
 
-  const initialStage  = computeInitialStage(settings, trades)
+  const { data: tradesData = [] } = useQuery({
+    queryKey: ['budget_trades', projectId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('budget_trades')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('sort_order', { ascending: true })
+      return (data ?? []) as BudgetTrade[]
+    },
+  })
+
+  const { data: quotesData = [] } = useQuery({
+    queryKey: ['budget_quotes', projectId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('budget_quotes')
+        .select('*')
+        .eq('project_id', projectId)
+      return (data ?? []) as BudgetQuote[]
+    },
+  })
+
+  const { data: selectionsData = [] } = useQuery({
+    queryKey: ['budget_selections', projectId],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('client_selections')
+        .select('*')
+        .eq('project_id', projectId)
+        .order('sort_order', { ascending: true })
+      return (data ?? []) as BudgetSelection[]
+    },
+  })
+
+  // ── Local state (overlay on top of server data for optimistic UI) ─────────
+  const [settings, setSettings] = useState<BudgetSettings | undefined>(undefined)
+  const [trades, setTrades] = useState<BudgetTrade[]>([])
+  const [quotes, setQuotes] = useState<BudgetQuote[]>([])
+  const [selections, setSelections] = useState<BudgetSelection[]>([])
+
+  // Sync from server data whenever queries resolve
+  const resolvedSettings = settings ?? (settingsRow as BudgetSettings | undefined)
+  const resolvedTrades   = trades.length > 0 ? trades : tradesData
+  const resolvedQuotes   = quotes.length > 0 ? quotes : quotesData
+  const resolvedSelections = selections.length > 0 ? selections : (selectionsData as BudgetSelection[])
+
+  const initialStage  = computeInitialStage(resolvedSettings, resolvedTrades)
   const [stage,       setStage]      = useState<BudgetStage>(initialStage)
-  const [maxReached,  setMaxReached] = useState<BudgetStage>(computeMaxReached(settings, trades))
+  const [maxReached,  setMaxReached] = useState<BudgetStage>(computeMaxReached(resolvedSettings, resolvedTrades))
 
   const advanceTo = (next: BudgetStage) => {
     setStage(next)
@@ -80,7 +122,7 @@ export function BudgetTab({ projectId, projectType }: Props) {
     editableTrades: { localId: string; name: string; trade_category: BudgetTrade['trade_category']; budget_amount: number }[]
   ) => {
     const newSettings: BudgetSettings = {
-      id:                    settings?.id ?? `bs-${Date.now()}`,
+      id:                    resolvedSettings?.id ?? `bs-${Date.now()}`,
       project_id:            projectId,
       sub_markup_percent:    vars.sub_markup_percent    ?? 0.25,
       pm_rate_per_hour:      vars.pm_rate_per_hour      ?? 120,
@@ -128,8 +170,8 @@ export function BudgetTab({ projectId, projectType }: Props) {
         <BudgetSetup
           projectId={projectId}
           projectType={projectType}
-          existingSettings={settings}
-          existingTrades={trades.length > 0 ? trades : undefined}
+          existingSettings={resolvedSettings}
+          existingTrades={resolvedTrades.length > 0 ? resolvedTrades : undefined}
           onSave={handleSetupSave}
         />
       )}
@@ -137,8 +179,8 @@ export function BudgetTab({ projectId, projectType }: Props) {
       {stage === 2 && (
         <QuoteCollection
           projectId={projectId}
-          trades={trades}
-          quotes={quotes}
+          trades={resolvedTrades}
+          quotes={resolvedQuotes}
           onTradesChange={updated => {
             setTrades(updated)
             // If any trade is now awarded, unlock Stage 3
@@ -157,23 +199,23 @@ export function BudgetTab({ projectId, projectType }: Props) {
       {stage === 3 && (
         <BudgetSelectionsStage
           projectId={projectId}
-          trades={trades}
-          selections={selections}
+          trades={resolvedTrades}
+          selections={resolvedSelections}
           onSelectionsChange={setSelections}
         />
       )}
 
-      {stage === 4 && settings && (
+      {stage === 4 && resolvedSettings && (
         <FinalPrice
           projectId={projectId}
-          trades={trades}
-          settings={settings}
+          trades={resolvedTrades}
+          settings={resolvedSettings}
           onSettingsChange={setSettings}
           onStageChange={s => setStage(s)}
         />
       )}
 
-      {stage === 4 && !settings && (
+      {stage === 4 && !resolvedSettings && (
         <div className="p-8 text-center">
           <p className="text-sm text-[var(--text-secondary)]">Complete Budget Setup first to access Final Price.</p>
           <button

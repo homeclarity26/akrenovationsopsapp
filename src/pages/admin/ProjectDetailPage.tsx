@@ -5,11 +5,8 @@ import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
-import {
-  MOCK_PROJECTS, MOCK_PHASES, MOCK_EXPENSES, MOCK_INVOICES, MOCK_TASKS, MOCK_DAILY_LOGS,
-  MOCK_CHANGE_ORDERS, MOCK_PUNCH_LIST, MOCK_BUDGET_SETTINGS, MOCK_BUDGET_TRADES, MOCK_TIME_ENTRIES,
-  MOCK_WARRANTY_CLAIMS_FULL, MOCK_COMM_LOG, MOCK_PORTFOLIO_PHOTOS, MOCK_PROJECT_REELS, MOCK_INSPECTION_REPORTS,
-} from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 import { BudgetTab } from './budget/BudgetTab'
 import { ProjectSubsTab } from './ProjectSubsTab'
@@ -23,7 +20,113 @@ export function ProjectDetailPage() {
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('overview')
 
-  const project = MOCK_PROJECTS.find(p => p.id === id)
+  const { data: project, isLoading: projectLoading } = useQuery({
+    queryKey: ['project', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('projects').select('*').eq('id', id).single()
+      return data
+    },
+  })
+
+  const { data: phases = [] } = useQuery({
+    queryKey: ['project_phases', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('project_phases').select('*').eq('project_id', id).order('sort_order')
+      return data ?? []
+    },
+  })
+
+  const { data: expenses = [] } = useQuery({
+    queryKey: ['project_expenses', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('expenses').select('*').eq('project_id', id).order('date', { ascending: false })
+      return data ?? []
+    },
+  })
+
+  const { data: invoices = [] } = useQuery({
+    queryKey: ['project_invoices', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('invoices').select('*').eq('project_id', id)
+      return data ?? []
+    },
+  })
+
+  const { data: tasks = [] } = useQuery({
+    queryKey: ['project_tasks', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('tasks').select('*').eq('project_id', id).order('sort_order')
+      return data ?? []
+    },
+  })
+
+  const { data: logs = [] } = useQuery({
+    queryKey: ['project_daily_logs', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('daily_logs').select('*').eq('project_id', id).order('log_date', { ascending: false })
+      return data ?? []
+    },
+  })
+
+  const { data: changeOrders = [] } = useQuery({
+    queryKey: ['project_change_orders', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('change_orders').select('*').eq('project_id', id)
+      return data ?? []
+    },
+  })
+
+  const { data: punchList = [] } = useQuery({
+    queryKey: ['project_punch_list', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('punch_list_items').select('*').eq('project_id', id).order('sort_order')
+      return data ?? []
+    },
+  })
+
+  const { data: warrantyClaims = [] } = useQuery({
+    queryKey: ['project_warranty_claims', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('warranty_claims').select('*').eq('project_id', id)
+      return data ?? []
+    },
+  })
+
+  const { data: projectPhotos = [] } = useQuery({
+    queryKey: ['project_photos', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('project_photos').select('*').eq('project_id', id).order('taken_at', { ascending: false })
+      return data ?? []
+    },
+  })
+
+  const { data: timeEntries = [] } = useQuery({
+    queryKey: ['project_time_entries', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data } = await supabase.from('time_entries').select('*').eq('project_id', id).not('clock_out', 'is', null)
+      return data ?? []
+    },
+  })
+
+  if (projectLoading) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-[var(--text-tertiary)]">Loading project…</p>
+      </div>
+    )
+  }
+
   if (!project) {
     return (
       <div className="p-8 text-center">
@@ -32,26 +135,16 @@ export function ProjectDetailPage() {
     )
   }
 
-  const phases = MOCK_PHASES[id ?? ''] ?? []
-  const expenses = MOCK_EXPENSES.filter(e => e.project_id === id)
-  const invoices = MOCK_INVOICES.filter(i => i.project_id === id)
-  const tasks = MOCK_TASKS.filter(t => t.project_id === id)
-  const logs = MOCK_DAILY_LOGS.filter(l => l.project_id === id)
-  const changeOrders = MOCK_CHANGE_ORDERS.filter(co => co.project_id === id)
-  const punchList = MOCK_PUNCH_LIST.filter(pl => pl.project_id === id)
-  const warrantyClaims = MOCK_WARRANTY_CLAIMS_FULL.filter((w) => w.project_id === id)
-  const commEntries = MOCK_COMM_LOG.filter((c) => c.project_id === id)
-  const projectPhotos = MOCK_PORTFOLIO_PHOTOS.filter((p) => p.project_id === id)
-  const projectReel = MOCK_PROJECT_REELS.find((r) => r.project_id === id)
-  const projectInspections = MOCK_INSPECTION_REPORTS.filter((i) => i.project_id === id)
+  // Comm log — no real table yet, show empty state
+  const commEntries: never[] = []
 
-  const expenseTotal = expenses.reduce((s, e) => s + e.amount, 0)
-  const invoiceTotal = invoices.reduce((s, i) => s + i.total, 0)
+  const expenseTotal = (expenses as Array<{ amount: number }>).reduce((s, e) => s + e.amount, 0)
+  const invoiceTotal = (invoices as Array<{ total: number }>).reduce((s, i) => s + i.total, 0)
   const margin = project.contract_value > 0 ? (project.contract_value - expenseTotal) / project.contract_value : null
 
   const isBudgetProject = project.project_type === 'addition' || project.project_type === 'large_remodel'
-  const budgetSettings  = MOCK_BUDGET_SETTINGS[project.id]
-  const budgetTrades    = MOCK_BUDGET_TRADES.filter(t => t.project_id === project.id)
+  const budgetSettings  = null as Record<string, number> | null
+  const budgetTrades    = [] as Array<{ is_locked: boolean; awarded_amount?: number }>
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview',   label: 'Overview' },
@@ -59,7 +152,7 @@ export function ProjectDetailPage() {
     ...(isBudgetProject ? [{ id: 'budget' as Tab, label: 'Budget' }] : []),
     ...(isBudgetProject ? [{ id: 'subs' as Tab, label: 'Subs' }] : []),
     { id: 'photos',     label: `Photos${projectPhotos.length ? ` (${projectPhotos.length})` : ''}` },
-    { id: 'tasks',      label: `Tasks${tasks.length ? ` (${tasks.filter(t=>t.status!=='done').length})` : ''}` },
+    { id: 'tasks',      label: `Tasks${tasks.length ? ` (${(tasks as Array<{status: string}>).filter(t=>t.status!=='done').length})` : ''}` },
     { id: 'logs',       label: 'Logs' },
     { id: 'comms',      label: `Comms${commEntries.length ? ` (${commEntries.length})` : ''}` },
     { id: 'changes',    label: `Changes${changeOrders.length ? ` (${changeOrders.length})` : ''}` },
@@ -165,12 +258,12 @@ export function ProjectDetailPage() {
                         <p className={cn('text-sm', phase.status === 'upcoming' ? 'text-[var(--text-tertiary)]' : 'font-medium text-[var(--text)]')}>
                           {phase.name}
                         </p>
-                        {phase.status === 'active' && phase.pct > 0 && (
+                        {phase.status === 'active' && (phase.percent_complete ?? 0) > 0 && (
                           <div className="flex items-center gap-2 mt-1">
                             <div className="flex-1 h-1 bg-[var(--border-light)] rounded-full overflow-hidden">
-                              <div className="h-full bg-[var(--navy)] rounded-full" style={{ width: `${phase.pct}%` }} />
+                              <div className="h-full bg-[var(--navy)] rounded-full" style={{ width: `${phase.percent_complete ?? 0}%` }} />
                             </div>
-                            <span className="text-[10px] font-mono text-[var(--text-tertiary)]">{phase.pct}%</span>
+                            <span className="text-[10px] font-mono text-[var(--text-tertiary)]">{phase.percent_complete ?? 0}%</span>
                           </div>
                         )}
                       </div>
@@ -336,31 +429,28 @@ export function ProjectDetailPage() {
                 {(() => {
                   const USER_NAMES: Record<string, string> = { 'admin-1': 'Adam', 'employee-1': 'Jeff', 'employee-2': 'Steven' }
                   const WORK_LABELS: Record<string, string> = { field_carpentry: 'Carpentry', project_management: 'PM', site_visit: 'Site Visit', design: 'Design', administrative: 'Admin', travel: 'Travel', other: 'Other' }
-                  const projectEntries = MOCK_TIME_ENTRIES.filter(e => e.project_id === project?.id && e.clock_out !== null)
+                  const projectEntries = timeEntries as Array<{ id: string; employee_id: string; work_type?: string; total_hours?: number; is_billable?: boolean }>
                   if (projectEntries.length === 0) return (
                     <div className="px-4 py-6 text-center">
                       <p className="text-sm text-[var(--text-tertiary)]">No labor logged yet</p>
                     </div>
                   )
-                  const totalHrs = projectEntries.reduce((s, e) => s + (e.total_minutes ?? 0), 0) / 60
-                  const billedTotal = projectEntries.filter(e => e.is_billable).reduce((s, e) => s + (e.billed_amount ?? 0), 0)
-                  const pendingTotal = projectEntries.filter(e => e.is_billable && e.billing_status === 'pending').reduce((s, e) => s + (e.billed_amount ?? 0), 0)
+                  const totalHrs = projectEntries.reduce((s, e) => s + (e.total_hours ?? 0), 0)
+                  const billableEntries = projectEntries.filter(e => e.is_billable)
                   return (
                     <>
                       {projectEntries.map(e => (
                         <div key={e.id} className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 items-center border-t border-[var(--border-light)]">
                           <div>
-                            <p className="text-sm font-semibold text-[var(--text)]">{USER_NAMES[e.user_id] ?? e.user_id}</p>
-                            <p className="text-xs text-[var(--text-secondary)]">{WORK_LABELS[e.work_type] ?? e.work_type}</p>
+                            <p className="text-sm font-semibold text-[var(--text)]">{USER_NAMES[e.employee_id] ?? e.employee_id}</p>
+                            <p className="text-xs text-[var(--text-secondary)]">{WORK_LABELS[e.work_type ?? ''] ?? (e.work_type ?? '—')}</p>
                           </div>
-                          <p className="font-mono text-sm text-[var(--text)] w-14 text-right">{((e.total_minutes ?? 0)/60).toFixed(1)}h</p>
-                          <p className="font-mono text-sm text-[var(--text)] w-20 text-right">${(e.billed_amount ?? 0).toFixed(0)}</p>
+                          <p className="font-mono text-sm text-[var(--text)] w-14 text-right">{(e.total_hours ?? 0).toFixed(1)}h</p>
+                          <p className="font-mono text-sm text-[var(--text)] w-20 text-right">—</p>
                           <div className="w-16 flex justify-end">
                             <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded-full ${
-                              e.billing_status === 'invoiced' ? 'bg-[var(--success-bg)] text-[var(--success)]' :
-                              e.billing_status === 'pending' ? 'bg-[var(--warning-bg)] text-[var(--warning)]' :
-                              'bg-[var(--bg)] text-[var(--text-tertiary)]'
-                            }`}>{e.billing_status === 'na' ? 'N/A' : e.billing_status}</span>
+                              e.is_billable ? 'bg-[var(--success-bg)] text-[var(--success)]' : 'bg-[var(--bg)] text-[var(--text-tertiary)]'
+                            }`}>{e.is_billable ? 'Billable' : 'N/A'}</span>
                           </div>
                         </div>
                       ))}
@@ -368,8 +458,8 @@ export function ProjectDetailPage() {
                       <div className="grid grid-cols-[1fr_auto_auto_auto] gap-3 px-4 py-3 bg-[var(--bg)] border-t border-[var(--border)]">
                         <p className="text-xs font-semibold text-[var(--text)]">Total</p>
                         <p className="font-mono text-sm font-bold text-[var(--text)] w-14 text-right">{totalHrs.toFixed(1)}h</p>
-                        <p className="font-mono text-sm font-bold text-[var(--success)] w-20 text-right">${billedTotal.toFixed(0)}</p>
-                        <p className="text-[10px] text-[var(--text-tertiary)] w-16 text-right">${pendingTotal.toFixed(0)} pend.</p>
+                        <p className="font-mono text-sm font-bold text-[var(--success)] w-20 text-right">{billableEntries.length} billable</p>
+                        <p className="text-[10px] text-[var(--text-tertiary)] w-16 text-right"></p>
                       </div>
                     </>
                   )
@@ -421,14 +511,16 @@ export function ProjectDetailPage() {
             {logs.length === 0 ? (
               <Card><p className="text-center text-sm text-[var(--text-tertiary)]">No logs yet</p></Card>
             ) : (
-              logs.map(log => (
+              (logs as Array<{ id: string; log_date: string; employee_id: string; weather?: string; summary: string; workers_on_site?: string[] }>).map(log => (
                 <Card key={log.id}>
                   <div className="flex items-center gap-2 mb-2">
-                    <p className="font-semibold text-sm text-[var(--text)]">{log.date}</p>
-                    <span className="text-xs text-[var(--text-tertiary)]">· {log.employee} · {log.weather}</span>
+                    <p className="font-semibold text-sm text-[var(--text)]">{log.log_date}</p>
+                    {log.weather && <span className="text-xs text-[var(--text-tertiary)]">· {log.weather}</span>}
                   </div>
                   <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{log.summary}</p>
-                  <p className="text-xs text-[var(--text-tertiary)] mt-2">{log.workers.join(', ')}</p>
+                  {log.workers_on_site && log.workers_on_site.length > 0 && (
+                    <p className="text-xs text-[var(--text-tertiary)] mt-2">{log.workers_on_site.join(', ')}</p>
+                  )}
                 </Card>
               ))
             )}
@@ -441,7 +533,7 @@ export function ProjectDetailPage() {
             {changeOrders.length === 0 ? (
               <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No change orders</div>
             ) : (
-              changeOrders.map(co => (
+              (changeOrders as Array<{ id: string; title: string; description: string; flagged_at?: string; status: string; cost_change?: number; schedule_change_days?: number }>).map(co => (
                 <div key={co.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -449,17 +541,17 @@ export function ProjectDetailPage() {
                       <div>
                         <p className="font-semibold text-sm text-[var(--text)]">{co.title}</p>
                         <p className="text-xs text-[var(--text-secondary)] mt-0.5">{co.description}</p>
-                        <p className="text-xs text-[var(--text-tertiary)] mt-1">Flagged by {co.flagged_by} · {co.flagged_at}</p>
+                        {co.flagged_at && <p className="text-xs text-[var(--text-tertiary)] mt-1">Flagged {co.flagged_at.split('T')[0]}</p>}
                       </div>
                     </div>
                     <StatusPill status={co.status} />
                   </div>
-                  {co.cost_change !== 0 && (
+                  {(co.cost_change ?? 0) !== 0 && (
                     <div className="flex items-center gap-1 mt-2">
                       <AlertCircle size={12} className="text-[var(--warning)]" />
                       <p className="text-xs text-[var(--warning)]">
-                        +${co.cost_change.toLocaleString()} cost change
-                        {co.schedule_change_days > 0 && ` · +${co.schedule_change_days} days`}
+                        +${(co.cost_change ?? 0).toLocaleString()} cost change
+                        {(co.schedule_change_days ?? 0) > 0 && ` · +${co.schedule_change_days} days`}
                       </p>
                     </div>
                   )}
@@ -481,31 +573,14 @@ export function ProjectDetailPage() {
                 Generate progress reel
               </Button>
             </div>
-            {projectReel && (
-              <Card>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">
-                  Progress reel
-                </p>
-                <p className="text-sm text-[var(--text)]">
-                  {projectReel.photo_count} photos · generated {projectReel.generated_at.split('T')[0]}
-                </p>
-                <a
-                  href={`/gallery/${projectReel.gallery_token}`}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-xs text-[var(--navy)] font-semibold mt-2 inline-block"
-                >
-                  Open shareable gallery →
-                </a>
-              </Card>
-            )}
+{/* progress reel not yet implemented */}
             <div className="grid grid-cols-2 gap-3">
-              {projectPhotos.map((p) => (
+              {(projectPhotos as Array<{ id: string; image_url: string; caption?: string; category?: string }>).map((p) => (
                 <Card key={p.id} padding="none">
                   <div className="aspect-[4/3] rounded-t-xl overflow-hidden bg-[var(--bg)] relative">
-                    <img src={p.image_url} alt={p.caption} className="w-full h-full object-cover" />
+                    <img src={p.image_url} alt={p.caption ?? ''} className="w-full h-full object-cover" />
                     <div className="absolute top-2 right-2 bg-white/90 rounded-full p-1.5">
-                      <Star size={12} className={p.featured ? 'text-[var(--rust)] fill-[var(--rust)]' : 'text-[var(--text-tertiary)]'} />
+                      <Star size={12} className="text-[var(--text-tertiary)]" />
                     </div>
                   </div>
                   <div className="p-2.5">
@@ -541,48 +616,7 @@ export function ProjectDetailPage() {
               </Button>
             </div>
             <Card padding="none">
-              {commEntries.length === 0 ? (
-                <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No communication yet</div>
-              ) : (
-                commEntries.map((c) => (
-                  <div key={c.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
-                    <div className="flex items-center gap-2 mb-1">
-                      <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${
-                        c.comm_type === 'logged_conversation' ? 'bg-[var(--rust-subtle)] text-[var(--rust)]' :
-                        c.comm_type === 'sms' ? 'bg-blue-100 text-blue-700' :
-                        'bg-[var(--bg)] text-[var(--text-tertiary)]'
-                      }`}>
-                        {c.comm_type === 'logged_conversation' ? 'Logged' : c.comm_type}
-                      </span>
-                      <p className="text-[11px] text-[var(--text-tertiary)]">
-                        {c.participant_name} · {c.date.split('T')[0]}
-                      </p>
-                      {c.has_audio && <Mic size={11} className="text-[var(--text-tertiary)]" />}
-                    </div>
-                    <p className="text-sm text-[var(--text)] leading-relaxed">{c.summary}</p>
-                    {c.action_items.length > 0 && (
-                      <div className="mt-2 space-y-1">
-                        {c.action_items.map((a, i) => (
-                          <div key={i} className="flex items-center gap-2 text-[11px]">
-                            <div className={`w-3 h-3 rounded border ${a.done ? 'bg-[var(--success)] border-[var(--success)]' : 'border-[var(--border)]'}`}>
-                              {a.done && <Check size={10} className="text-white" />}
-                            </div>
-                            <p className={a.done ? 'text-[var(--text-tertiary)] line-through' : 'text-[var(--text-secondary)]'}>
-                              {a.task}
-                              {a.due_date && <span className="text-[var(--text-tertiary)]"> · {a.due_date}</span>}
-                            </p>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                    {c.client_sentiment && (
-                      <p className="text-[10px] text-[var(--text-tertiary)] mt-1.5 italic">
-                        Sentiment: {c.client_sentiment}
-                      </p>
-                    )}
-                  </div>
-                ))
-              )}
+              <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No communication yet</div>
             </Card>
           </div>
         )}
@@ -620,10 +654,9 @@ export function ProjectDetailPage() {
               {warrantyClaims.length === 0 ? (
                 <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No warranty claims</div>
               ) : (
-                warrantyClaims.map((c) => (
+                (warrantyClaims as Array<{ id: string; description: string; status: string; reported_at?: string; resolution?: string }>).map((c) => (
                   <div key={c.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
                     <div className="flex items-start justify-between gap-2">
-                      <p className="font-mono text-[10px] text-[var(--text-tertiary)]">{c.claim_number}</p>
                       <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${
                         c.status === 'resolved' ? 'bg-[var(--success-bg)] text-[var(--success)]' :
                         c.status === 'scheduled' ? 'bg-[var(--warning-bg)] text-[var(--warning)]' :
@@ -633,12 +666,9 @@ export function ProjectDetailPage() {
                       </span>
                     </div>
                     <p className="text-sm font-semibold text-[var(--text)] mt-1">{c.description}</p>
-                    <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
-                      {c.area} · reported {c.reported_at}
-                    </p>
-                    {c.actual_repair_cost != null && (
-                      <p className="text-[11px] font-mono text-[var(--text-secondary)] mt-1">
-                        Repair cost: <span className="font-mono">${c.actual_repair_cost}</span>
+                    {c.reported_at && (
+                      <p className="text-[11px] text-[var(--text-secondary)] mt-0.5">
+                        Reported {c.reported_at.split('T')[0]}
                       </p>
                     )}
                     {c.resolution && (
@@ -649,37 +679,7 @@ export function ProjectDetailPage() {
               )}
             </Card>
 
-            {projectInspections.length > 0 && (
-              <>
-                <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] pt-3">
-                  Inspection reports
-                </p>
-                <Card padding="none">
-                  {projectInspections.map((i) => (
-                    <div key={i.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
-                      <div className="flex items-center justify-between gap-2">
-                        <p className="text-sm font-semibold text-[var(--text)] capitalize">
-                          {i.inspection_type.replace('_', ' ')}
-                        </p>
-                        <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${
-                          i.overall_condition === 'ready_to_proceed' ? 'bg-[var(--success-bg)] text-[var(--success)]' :
-                          i.overall_condition === 'minor_issues' ? 'bg-[var(--warning-bg)] text-[var(--warning)]' :
-                          'bg-[var(--danger-bg)] text-[var(--danger)]'
-                        }`}>
-                          {i.overall_condition.replace('_', ' ')}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
-                        {i.area_count} areas · {i.conducted_at.split('T')[0]} · {i.conducted_by_name}
-                      </p>
-                      {i.ai_summary && (
-                        <p className="text-[11px] text-[var(--text-secondary)] mt-1.5 italic">{i.ai_summary}</p>
-                      )}
-                    </div>
-                  ))}
-                </Card>
-              </>
-            )}
+{/* inspection reports not yet implemented */}
           </div>
         )}
 
@@ -695,10 +695,10 @@ export function ProjectDetailPage() {
                 deliverableType="punch_list"
                 instanceId={id ?? ''}
                 instanceTable="projects"
-                items={punchList.map((item): EditableItem => ({
+                items={(punchList as Array<{ id: string; description: string; location?: string; status?: string }>).map((item): EditableItem => ({
                   id: item.id,
                   title: item.description,
-                  description: [item.location, item.assigned_to].filter(Boolean).join(' · '),
+                  description: item.location ?? '',
                 }))}
                 onSave={async () => {
                   // TODO: persist punch list edits to Supabase punch_list_items table

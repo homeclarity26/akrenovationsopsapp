@@ -1,15 +1,34 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import { Sparkles, Check, X, Send, Mic, AlertCircle, Clock } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { MOCK_AI_ACTIONS } from '@/data/mock'
 
 type ActionStatus = 'pending' | 'executed' | 'approved' | 'rejected'
 type ActionItem = { id: string; request_text: string; action_type: string; risk_level: string; status: string; created_at: string; requires_approval: boolean; preview: string }
 
 export function AICommandPage() {
-  const [actions, setActions] = useState<ActionItem[]>(MOCK_AI_ACTIONS as ActionItem[])
+  const { data: dbActions = [] } = useQuery({
+    queryKey: ['ai_actions'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('ai_actions')
+        .select('*')
+        .order('created_at', { ascending: false })
+      return (data ?? []) as ActionItem[]
+    },
+  })
+  const [localActions, setLocalActions] = useState<ActionItem[]>([])
+  const actions = localActions.length > 0 ? [...localActions, ...dbActions] : dbActions
+  const setActions = (updater: ActionItem[] | ((prev: ActionItem[]) => ActionItem[])) => {
+    setLocalActions(prev => {
+      const merged = [...prev, ...dbActions]
+      const next = typeof updater === 'function' ? updater(merged) : updater
+      return next.filter(a => !dbActions.some(d => d.id === a.id))
+    })
+  }
   const [input, setInput] = useState('')
   const [processing, setProcessing] = useState(false)
   const [lastResult, setLastResult] = useState<string | null>(null)
@@ -155,6 +174,9 @@ export function AICommandPage() {
       <div>
         <SectionHeader title="Recent Activity" />
         <Card padding="none">
+          {executed.length === 0 && (
+            <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No AI actions yet.</div>
+          )}
           {executed.map(action => (
             <div key={action.id} className="flex items-start gap-3 p-4 border-b border-[var(--border-light)] last:border-0">
               <div className="w-7 h-7 rounded-full bg-[var(--success-bg)] flex items-center justify-center flex-shrink-0 mt-0.5">

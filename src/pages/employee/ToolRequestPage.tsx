@@ -4,20 +4,53 @@ import { ArrowLeft, Wrench, Mic, Check } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { Input } from '@/components/ui/Input'
-import { MOCK_PROJECTS, MOCK_TOOL_REQUESTS } from '@/data/mock'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 export function ToolRequestPage() {
   const navigate = useNavigate()
-  const activeProjects = MOCK_PROJECTS.filter((p) => p.status === 'active')
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+
+  const { data: activeProjects = [] } = useQuery({
+    queryKey: ['active-projects-tool'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('projects')
+        .select('id, title')
+        .eq('status', 'active')
+        .order('title')
+      return data ?? []
+    },
+  })
+
+  const { data: myRequests = [] } = useQuery({
+    queryKey: ['tool-requests', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('tool_requests')
+        .select('*, projects(title)')
+        .eq('employee_id', user!.id)
+        .order('submitted_at', { ascending: false })
+      return (data ?? []).map((r: any) => ({
+        id: r.id,
+        tool_name: r.item_name,
+        project_title: r.projects?.title ?? '',
+        needed_by: r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : '',
+        status: r.status ?? 'pending',
+        admin_response: r.reason ?? null,
+      }))
+    },
+  })
 
   const [toolName, setToolName] = useState('')
-  const [projectId, setProjectId] = useState(activeProjects[0]?.id ?? '')
-  const [neededBy, setNeededBy] = useState('2026-04-08')
+  const [projectId, setProjectId] = useState('')
+  const [neededBy, setNeededBy] = useState(new Date().toISOString().slice(0, 10))
   const [urgency, setUrgency] = useState<'normal' | 'urgent'>('normal')
   const [notes, setNotes] = useState('')
   const [submitted, setSubmitted] = useState(false)
-
-  const myRequests = MOCK_TOOL_REQUESTS.filter((r) => r.requested_by === 'employee-1')
 
   if (submitted) {
     return (
@@ -84,7 +117,8 @@ export function ToolRequestPage() {
               onChange={(e) => setProjectId(e.target.value)}
               className="w-full bg-[var(--bg)] border border-[var(--border)] rounded-2xl px-3 py-2.5 text-sm"
             >
-              {activeProjects.map((p) => (
+              <option value="">-- Select project --</option>
+              {activeProjects.map((p: any) => (
                 <option key={p.id} value={p.id}>
                   {p.title}
                 </option>
@@ -139,20 +173,36 @@ export function ToolRequestPage() {
           <Button
             className="w-full"
             disabled={!toolName.trim()}
-            onClick={() => setSubmitted(true)}
+            onClick={async () => {
+              await supabase.from('tool_requests').insert({
+                employee_id: user?.id,
+                item_name: toolName,
+                project_id: projectId || null,
+                reason: notes || null,
+                status: 'pending',
+                submitted_at: new Date().toISOString(),
+              })
+              queryClient.invalidateQueries({ queryKey: ['tool-requests', user?.id] })
+              setSubmitted(true)
+            }}
           >
             Submit request
           </Button>
         </div>
       </Card>
 
+      {myRequests.length === 0 && (
+        <div className="mt-2">
+          <p className="text-sm text-[var(--text-secondary)] text-center py-4">No tool requests yet.</p>
+        </div>
+      )}
       {myRequests.length > 0 && (
         <div className="mt-4">
           <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-2">
             Your recent requests
           </p>
           <Card padding="none">
-            {myRequests.map((r) => (
+            {myRequests.map((r: any) => (
               <div key={r.id} className="p-3 border-b border-[var(--border-light)] last:border-0">
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0 flex-1">

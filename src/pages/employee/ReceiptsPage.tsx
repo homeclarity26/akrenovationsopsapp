@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { Camera, Check, Clock, ChevronRight } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { MOCK_RECEIPTS } from '@/data/mock'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 type ReceiptStatus = 'pending' | 'submitted'
 
@@ -15,8 +17,44 @@ interface ScanState {
   items: string[]
 }
 
+interface ReceiptRow {
+  id: string
+  vendor: string | null
+  amount: number
+  date: string
+  project?: string
+  project_id: string | null
+  status: ReceiptStatus
+  projects?: { title: string } | null
+}
+
 export function ReceiptsPage() {
-  const [receipts, setReceipts] = useState(MOCK_RECEIPTS)
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+
+  const { data: receipts = [] } = useQuery({
+    queryKey: ['receipts', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('expenses')
+        .select('id, vendor, amount, date, project_id, receipt_image_url, projects(title)')
+        .eq('entered_by', user!.id)
+        .not('receipt_image_url', 'is', null)
+        .order('date', { ascending: false })
+      return (data ?? []).map((r: any) => ({
+        id: r.id,
+        vendor: r.vendor ?? 'Unknown',
+        amount: r.amount,
+        date: r.date,
+        project: r.projects?.title ?? 'No Project',
+        project_id: r.project_id,
+        status: 'submitted' as ReceiptStatus,
+      })) as ReceiptRow[]
+    },
+  })
+
+  const [localReceipts, setLocalReceipts] = useState<ReceiptRow[]>([])
   const [scan, setScan] = useState<ScanState>({
     step: 'idle',
     vendor: '',
@@ -42,16 +80,17 @@ export function ReceiptsPage() {
   }
 
   const submitReceipt = () => {
-    setReceipts(prev => [{
+    setLocalReceipts(prev => [{
       id: `rec-${Date.now()}`,
       vendor: scan.vendor,
       amount: parseFloat(scan.amount),
       date: scan.date,
       project: scan.project,
-      items: scan.items,
+      project_id: null,
       status: 'submitted' as ReceiptStatus,
     }, ...prev])
     setScan({ step: 'idle', vendor: '', amount: '', date: '', project: '', items: [] })
+    queryClient.invalidateQueries({ queryKey: ['receipts', user?.id] })
   }
 
   if (scan.step === 'scanning') {
@@ -165,29 +204,35 @@ export function ReceiptsPage() {
       {/* History */}
       <div>
         <SectionHeader title="Recent Receipts" />
-        <Card padding="none">
-          {receipts.map(r => (
-            <div key={r.id} className="flex items-center gap-3 p-4 border-b border-[var(--border-light)] last:border-0">
-              <div className="w-10 h-10 rounded-xl bg-[var(--cream-light)] flex items-center justify-center flex-shrink-0">
-                {r.status === 'submitted'
-                  ? <Check size={16} className="text-[var(--success)]" />
-                  : <Clock size={16} className="text-[var(--warning)]" />
-                }
+        {[...localReceipts, ...receipts].length === 0 ? (
+          <Card>
+            <p className="text-sm text-[var(--text-secondary)] text-center py-4">No receipts submitted yet.</p>
+          </Card>
+        ) : (
+          <Card padding="none">
+            {[...localReceipts, ...receipts].map(r => (
+              <div key={r.id} className="flex items-center gap-3 p-4 border-b border-[var(--border-light)] last:border-0">
+                <div className="w-10 h-10 rounded-xl bg-[var(--cream-light)] flex items-center justify-center flex-shrink-0">
+                  {r.status === 'submitted'
+                    ? <Check size={16} className="text-[var(--success)]" />
+                    : <Clock size={16} className="text-[var(--warning)]" />
+                  }
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-sm text-[var(--text)]">{r.vendor}</p>
+                  <p className="text-xs text-[var(--text-secondary)]">{r.project} · {r.date}</p>
+                </div>
+                <div className="text-right flex-shrink-0">
+                  <p className="font-mono text-sm font-semibold text-[var(--text)]">${r.amount.toFixed(2)}</p>
+                  <p className={`text-[11px] capitalize ${r.status === 'submitted' ? 'text-[var(--success)]' : 'text-[var(--warning)]'}`}>
+                    {r.status}
+                  </p>
+                </div>
+                <ChevronRight size={15} className="text-[var(--text-tertiary)] flex-shrink-0" />
               </div>
-              <div className="flex-1 min-w-0">
-                <p className="font-semibold text-sm text-[var(--text)]">{r.vendor}</p>
-                <p className="text-xs text-[var(--text-secondary)]">{r.project} · {r.date}</p>
-              </div>
-              <div className="text-right flex-shrink-0">
-                <p className="font-mono text-sm font-semibold text-[var(--text)]">${r.amount.toFixed(2)}</p>
-                <p className={`text-[11px] capitalize ${r.status === 'submitted' ? 'text-[var(--success)]' : 'text-[var(--warning)]'}`}>
-                  {r.status}
-                </p>
-              </div>
-              <ChevronRight size={15} className="text-[var(--text-tertiary)] flex-shrink-0" />
-            </div>
-          ))}
-        </Card>
+            ))}
+          </Card>
+        )}
       </div>
     </div>
   )

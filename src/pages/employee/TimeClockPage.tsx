@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react'
 import { Plus, Clock, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { MOCK_TIME_ENTRIES, MOCK_PROJECTS } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -81,10 +83,52 @@ function fmtMoney(n: number) {
 // ── Main Component ─────────────────────────────────────────────────────────────
 
 export function TimeClockPage() {
-  const TODAY = '2026-04-07'
-  const CURRENT_USER = 'employee-1'
+  const { user } = useAuth()
+  const TODAY = new Date().toISOString().slice(0, 10)
 
-  const [entries, setEntries] = useState<TimeEntry[]>(MOCK_TIME_ENTRIES as TimeEntry[])
+  const { data: dbEntries = [], refetch: refetchEntries } = useQuery({
+    queryKey: ['time-entries', user?.id, TODAY],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('time_entries')
+        .select('*, projects(title)')
+        .eq('employee_id', user!.id)
+        .gte('clock_in', `${TODAY}T00:00:00`)
+        .lte('clock_in', `${TODAY}T23:59:59`)
+        .order('clock_in', { ascending: false })
+      return (data ?? []).map((e: any) => ({
+        ...e,
+        user_id: e.employee_id,
+        project_title: e.projects?.title ?? null,
+        total_minutes: e.total_hours != null ? Math.round(e.total_hours * 60) : null,
+        work_type: (e.work_type ?? 'other') as WorkType,
+        entry_method: (e.entry_method ?? 'live') as EntryMethod,
+        billing_status: (e.billing_status ?? 'na') as BillingStatus,
+        is_billable: e.is_billable ?? false,
+        billing_rate: e.billing_rate ?? null,
+        billed_amount: e.billed_amount ?? null,
+      })) as TimeEntry[]
+    },
+  })
+
+  const { data: activeProjects = [] } = useQuery({
+    queryKey: ['active-projects'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('projects')
+        .select('id, title, client_name')
+        .eq('status', 'active')
+        .order('title')
+      return data ?? []
+    },
+  })
+
+  const [localEntries, setLocalEntries] = useState<TimeEntry[]>([])
+  const entries: TimeEntry[] = [...localEntries, ...dbEntries.filter(
+    db => !localEntries.find(l => l.id === db.id)
+  )]
+
   const [now, setNow] = useState(Date.now())
   const [showClockIn, setShowClockIn] = useState(false)
   const [showClockOut, setShowClockOut] = useState(false)
@@ -118,7 +162,7 @@ export function TimeClockPage() {
   }, [])
 
   const todayEntries = entries.filter(e =>
-    e.user_id === CURRENT_USER && e.clock_in.startsWith(TODAY)
+    e.clock_in.startsWith(TODAY)
   )
   const openEntry = todayEntries.find(e => e.clock_out === null)
   const closedEntries = todayEntries.filter(e => e.clock_out !== null)
@@ -130,10 +174,9 @@ export function TimeClockPage() {
   const billableMins = closedEntries.filter(e => e.is_billable).reduce((sum, e) => sum + (e.total_minutes ?? 0), 0)
   const totalBilled = closedEntries.reduce((sum, e) => sum + (e.billed_amount ?? 0), 0)
 
-  const activeProjects = MOCK_PROJECTS.filter(p => p.status === 'active')
-  const filteredProjects = activeProjects.filter(p =>
+  const filteredProjects = activeProjects.filter((p: any) =>
     p.title.toLowerCase().includes(projectSearch.toLowerCase()) ||
-    p.client_name.toLowerCase().includes(projectSearch.toLowerCase())
+    (p.client_name ?? '').toLowerCase().includes(projectSearch.toLowerCase())
   )
 
   // ── Clock In ─────────────────────────────────────────────────────────────────
@@ -151,7 +194,7 @@ export function TimeClockPage() {
   const handleClockInConfirm = () => {
     const newEntry: TimeEntry = {
       id: `te-${Date.now()}`,
-      user_id: CURRENT_USER,
+      user_id: user?.id ?? '',
       project_id: ciProject?.id ?? null,
       project_title: ciProject?.title ?? null,
       work_type: ciWorkType,
@@ -165,7 +208,7 @@ export function TimeClockPage() {
       entry_method: 'live',
       geofence_verified: true,
     }
-    setEntries(prev => [newEntry, ...prev])
+    setLocalEntries(prev => [newEntry, ...prev])
     setShowClockIn(false)
     setCiStep(1)
   }
@@ -176,13 +219,14 @@ export function TimeClockPage() {
     const clockOut = new Date()
     const mins = Math.floor((clockOut.getTime() - new Date(openEntry.clock_in).getTime()) / 60000)
     const billed = openEntry.is_billable && openEntry.billing_rate ? (mins / 60) * openEntry.billing_rate : null
-    setEntries(prev => prev.map(e =>
+    setLocalEntries(prev => prev.map(e =>
       e.id === openEntry.id
         ? { ...e, clock_out: clockOut.toISOString(), total_minutes: mins, billed_amount: billed }
         : e
     ))
     setClockOutNote('')
     setShowClockOut(false)
+    refetchEntries()
   }
 
   // ── Manual Entry ─────────────────────────────────────────────────────────────
@@ -199,7 +243,7 @@ export function TimeClockPage() {
     const billed = manualBillable && manualRate ? (mins / 60) * manualRate : null
     const entry: TimeEntry = {
       id: `te-m-${Date.now()}`,
-      user_id: CURRENT_USER,
+      user_id: user?.id ?? '',
       project_id: manualProject.id,
       project_title: manualProject.title,
       work_type: manualWorkType,
@@ -216,7 +260,7 @@ export function TimeClockPage() {
       approved_by: null,
       approved_at: null,
     }
-    setEntries(prev => [entry, ...prev])
+    setLocalEntries(prev => [entry, ...prev])
     setShowManual(false)
     setManualReason('')
     setManualStart('')
@@ -229,7 +273,7 @@ export function TimeClockPage() {
     const clockOut = new Date()
     const mins = Math.floor((clockOut.getTime() - new Date(openEntry.clock_in).getTime()) / 60000)
     const billed = openEntry.is_billable && openEntry.billing_rate ? (mins / 60) * openEntry.billing_rate : null
-    setEntries(prev => prev.map(e =>
+    setLocalEntries(prev => prev.map(e =>
       e.id === openEntry.id
         ? { ...e, clock_out: clockOut.toISOString(), total_minutes: mins, billed_amount: billed }
         : e
@@ -569,7 +613,7 @@ export function TimeClockPage() {
               <div>
                 <label className="text-xs text-[var(--text-tertiary)] block mb-1">Project</label>
                 <div className="space-y-1.5">
-                  {activeProjects.map(p => (
+                  {activeProjects.map((p: any) => (
                     <button key={p.id} onClick={() => setManualProject({ id: p.id, title: p.title })}
                       className={`w-full text-left p-3 rounded-xl border text-sm font-semibold transition-colors ${manualProject?.id === p.id ? 'border-[var(--navy)] bg-[var(--navy)] text-white' : 'border-[var(--border-light)] text-[var(--text)]'}`}>
                       {p.title}

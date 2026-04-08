@@ -2,29 +2,72 @@ import { useState } from 'react'
 import { Plus, Check } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { MOCK_SHOPPING_ITEMS } from '@/data/mock'
 import { cn } from '@/lib/utils'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+
+interface ShoppingItem {
+  id: string
+  item_name: string
+  quantity: number | null
+  unit: string | null
+  status: string
+  project_id: string | null
+  project_title?: string
+}
 
 // N40: Template generation happens when a phase starts — see agent-calibrate-templates edge function
 export function ShoppingListPage() {
-  const [items, setItems] = useState(MOCK_SHOPPING_ITEMS)
+  const queryClient = useQueryClient()
 
-  const toggle = (id: string) => {
-    setItems(prev =>
-      prev.map(i =>
-        i.id === id ? { ...i, status: i.status === 'needed' ? 'purchased' as const : 'needed' as const } : i
-      )
-    )
+  const { data: rawItems = [], isLoading } = useQuery({
+    queryKey: ['shopping-list-items'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('shopping_list_items')
+        .select('*, projects(title)')
+        .order('created_at', { ascending: false })
+      return (data ?? []).map((i: any) => ({
+        ...i,
+        project_title: i.projects?.title ?? 'No Project',
+      })) as ShoppingItem[]
+    },
+  })
+
+  const [localOverrides, setLocalOverrides] = useState<Record<string, string>>({})
+
+  const items: ShoppingItem[] = rawItems.map(i => ({
+    ...i,
+    status: localOverrides[i.id] ?? i.status,
+  }))
+
+  const toggle = async (id: string) => {
+    const item = items.find(i => i.id === id)
+    if (!item) return
+    const newStatus = item.status === 'needed' ? 'purchased' : 'needed'
+    setLocalOverrides(prev => ({ ...prev, [id]: newStatus }))
+    await supabase.from('shopping_list_items').update({ status: newStatus }).eq('id', id)
+    queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
   }
 
   const needed = items.filter(i => i.status === 'needed')
-  const purchased = items.filter(i => i.status === 'purchased')
+  const purchased = items.filter(i => i.status !== 'needed')
 
   const grouped = needed.reduce((acc, item) => {
-    if (!acc[item.project_title]) acc[item.project_title] = []
-    acc[item.project_title].push(item)
+    const key = item.project_title ?? 'No Project'
+    if (!acc[key]) acc[key] = []
+    acc[key].push(item)
     return acc
-  }, {} as Record<string, typeof items>)
+  }, {} as Record<string, ShoppingItem[]>)
+
+  if (isLoading) {
+    return (
+      <div className="p-4 pt-6">
+        <h1 className="font-display text-2xl text-[var(--navy)] mb-4">Shopping List</h1>
+        <p className="text-sm text-[var(--text-secondary)]">Loading...</p>
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 space-y-5">
@@ -35,6 +78,10 @@ export function ShoppingListPage() {
           Add Item
         </button>
       </div>
+
+      {needed.length === 0 && purchased.length === 0 && (
+        <p className="text-sm text-[var(--text-secondary)] text-center py-8">No items on the list.</p>
+      )}
 
       {Object.entries(grouped).map(([project, projectItems]) => (
         <div key={project}>

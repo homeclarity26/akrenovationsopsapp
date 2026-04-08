@@ -2,6 +2,9 @@ import { useState } from 'react'
 import { Camera, Check } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 const CATEGORIES = [
   { id: 'progress',    label: 'Progress',     color: 'bg-blue-100',   text: 'text-blue-700' },
@@ -12,28 +15,48 @@ const CATEGORIES = [
   { id: 'before_after',label: 'Before/After', color: 'bg-purple-100', text: 'text-purple-700' },
 ]
 
-const MOCK_PHOTOS = [
-  { id: 'ph-1', category: 'progress', caption: 'Shower floor tile set', date: 'Apr 5', project: 'Johnson Bath', color: '#e8dcc4' },
-  { id: 'ph-2', category: 'rough_in', caption: 'Waterproofing membrane', date: 'Apr 4', project: 'Johnson Bath', color: '#ddd' },
-  { id: 'ph-3', category: 'progress', caption: 'Framing – north wall', date: 'Apr 5', project: 'Thompson Addition', color: '#c8d8e8' },
-]
+interface Photo {
+  id: string
+  category: string
+  caption?: string | null
+  taken_at?: string | null
+  project?: string   // derived from project join
+  image_url: string
+  thumbnail_url?: string | null
+}
 
 export function PhotosPage() {
+  const { user } = useAuth()
   const [selected, setSelected] = useState<string | null>(null)
-  const [photos, setPhotos] = useState(MOCK_PHOTOS)
   const [uploading, setUploading] = useState(false)
+  const [localPhotos, setLocalPhotos] = useState<Photo[]>([])
+
+  const { data: dbPhotos = [] } = useQuery({
+    queryKey: ['my_photos', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('project_photos')
+        .select('id, category, caption, taken_at, image_url, thumbnail_url, project_id')
+        .eq('uploaded_by', user!.id)
+        .order('taken_at', { ascending: false })
+        .limit(50)
+      return (data ?? []) as Photo[]
+    },
+  })
+
+  const photos = [...localPhotos, ...dbPhotos.filter(p => !localPhotos.find(l => l.id === p.id))]
 
   const takePhoto = (categoryId: string) => {
     setUploading(true)
     const cat = CATEGORIES.find(c => c.id === categoryId)
     setTimeout(() => {
-      setPhotos(prev => [{
+      setLocalPhotos(prev => [{
         id: `ph-${Date.now()}`,
         category: categoryId,
         caption: `${cat?.label ?? 'Photo'} — ${new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`,
-        date: 'Just now',
-        project: 'Johnson Bath',
-        color: '#f0e8d8',
+        taken_at: new Date().toISOString(),
+        image_url: '',
       }, ...prev])
       setSelected(null)
       setUploading(false)
@@ -105,31 +128,42 @@ export function PhotosPage() {
       <div>
         <SectionHeader title="Recent Photos" />
         <Card padding="none">
-          {photos.map(photo => (
-            <div key={photo.id} className="flex items-center gap-3 p-3 border-b border-[var(--border-light)] last:border-0">
-              {/* Thumbnail placeholder */}
-              <div
-                className="w-16 h-14 rounded-xl flex-shrink-0"
-                style={{ background: photo.color }}
-              />
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-0.5">
-                  <p className="font-semibold text-sm text-[var(--text)] truncate">{photo.caption}</p>
+          {photos.length === 0 ? (
+            <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No photos yet. Take one above.</div>
+          ) : (
+            photos.map(photo => (
+              <div key={photo.id} className="flex items-center gap-3 p-3 border-b border-[var(--border-light)] last:border-0">
+                {photo.thumbnail_url || photo.image_url ? (
+                  <img
+                    src={photo.thumbnail_url ?? photo.image_url}
+                    alt={photo.caption ?? ''}
+                    className="w-16 h-14 rounded-xl object-cover flex-shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-14 rounded-xl flex-shrink-0 bg-[var(--cream-light)]" />
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2 mb-0.5">
+                    <p className="font-semibold text-sm text-[var(--text)] truncate">{photo.caption ?? 'Photo'}</p>
+                  </div>
+                  {photo.taken_at && (
+                    <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">
+                      {new Date(photo.taken_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                    </p>
+                  )}
                 </div>
-                <p className="text-xs text-[var(--text-secondary)]">{photo.project}</p>
-                <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5">{photo.date}</p>
+                <div className="flex-shrink-0">
+                  <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full ${
+                    CATEGORIES.find(c => c.id === photo.category)?.color ?? 'bg-gray-100'
+                  } ${
+                    CATEGORIES.find(c => c.id === photo.category)?.text ?? 'text-gray-600'
+                  }`}>
+                    {CATEGORIES.find(c => c.id === photo.category)?.label ?? photo.category}
+                  </span>
+                </div>
               </div>
-              <div className="flex-shrink-0">
-                <span className={`text-[10px] font-semibold uppercase tracking-wide px-2 py-1 rounded-full ${
-                  CATEGORIES.find(c => c.id === photo.category)?.color ?? 'bg-gray-100'
-                } ${
-                  CATEGORIES.find(c => c.id === photo.category)?.text ?? 'text-gray-600'
-                }`}>
-                  {CATEGORIES.find(c => c.id === photo.category)?.label ?? photo.category}
-                </span>
-              </div>
-            </div>
-          ))}
+            ))
+          )}
         </Card>
       </div>
 

@@ -3,9 +3,10 @@ import { CheckCircle2, Circle, AlertTriangle, ExternalLink, X } from 'lucide-rea
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
-import { MOCK_CHECKLIST_INSTANCE_ITEMS, MOCK_CHECKLIST_INSTANCES } from '@/data/mock'
-import type { ChecklistInstanceItem } from '@/data/mock'
 import { cn } from '@/lib/utils'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 function today(): string {
   return new Date().toISOString().slice(0, 10)
@@ -16,44 +17,78 @@ function isOverdue(dueDate: string | null): boolean {
   return dueDate < today()
 }
 
-// Jeff is employee-1 in mock data
-const CURRENT_EMPLOYEE_ID = 'employee-1'
+interface ChecklistItem {
+  id: string
+  instance_id: string
+  item_text: string
+  is_completed: boolean
+  completed_at: string | null
+  status: string
+  title?: string
+  description?: string | null
+  due_date?: string | null
+  external_link?: string | null
+  instance_title?: string
+}
 
 export function EmployeeChecklistsPage() {
-  const [items, setItems] = useState<ChecklistInstanceItem[]>(
-    MOCK_CHECKLIST_INSTANCE_ITEMS.filter(
-      (i) =>
-        i.assigned_to === CURRENT_EMPLOYEE_ID ||
-        (i.assigned_role === 'employee' && !i.assigned_to) ||
-        i.assigned_role === 'any',
-    ),
-  )
-  const [activeItem, setActiveItem] = useState<ChecklistInstanceItem | null>(null)
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+
+  const { data: rawItems = [], isLoading } = useQuery({
+    queryKey: ['checklist-instance-items', user?.id],
+    enabled: !!user?.id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('checklist_instance_items')
+        .select('*, checklist_instances(title, project_id, projects(title))')
+        .order('created_at', { ascending: true })
+      return (data ?? []).map((i: any) => ({
+        id: i.id,
+        instance_id: i.instance_id,
+        item_text: i.item_text,
+        is_completed: i.is_completed ?? false,
+        completed_at: i.completed_at ?? null,
+        status: i.is_completed ? 'completed' : 'pending',
+        title: i.item_text,
+        description: null,
+        due_date: null,
+        external_link: null,
+        instance_title: i.checklist_instances?.projects?.title ?? i.checklist_instances?.title ?? 'Unassigned',
+      })) as ChecklistItem[]
+    },
+  })
+
+  const [localOverrides, setLocalOverrides] = useState<Record<string, string>>({})
+  const items: ChecklistItem[] = rawItems.map(i => ({
+    ...i,
+    status: localOverrides[i.id] ?? i.status,
+    is_completed: (localOverrides[i.id] ?? i.status) === 'completed',
+  }))
+
+  const [activeItem, setActiveItem] = useState<ChecklistItem | null>(null)
 
   const grouped = useMemo(() => {
-    const map: Record<string, ChecklistInstanceItem[]> = {}
+    const map: Record<string, ChecklistItem[]> = {}
     for (const item of items) {
-      const inst = MOCK_CHECKLIST_INSTANCES.find((i) => i.id === item.instance_id)
-      const label = inst?.entity_label ?? 'Unassigned'
+      const label = item.instance_title ?? 'Unassigned'
       if (!map[label]) map[label] = []
       map[label].push(item)
-    }
-    // sort each group by due date ascending
-    for (const key of Object.keys(map)) {
-      map[key].sort((a, b) => (a.due_date ?? '9999').localeCompare(b.due_date ?? '9999'))
     }
     return map
   }, [items])
 
   const pendingCount = items.filter((i) => i.status !== 'completed').length
 
-  function markComplete(id: string) {
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'completed' } : i)))
+  async function markComplete(id: string) {
+    setLocalOverrides(prev => ({ ...prev, [id]: 'completed' }))
+    await supabase.from('checklist_instance_items').update({ is_completed: true, completed_at: new Date().toISOString() }).eq('id', id)
+    queryClient.invalidateQueries({ queryKey: ['checklist-instance-items', user?.id] })
     setActiveItem(null)
   }
 
-  function markBlocked(id: string) {
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'blocked' } : i)))
+  async function markBlocked(id: string) {
+    setLocalOverrides(prev => ({ ...prev, [id]: 'blocked' }))
     setActiveItem(null)
   }
 
@@ -61,10 +96,10 @@ export function EmployeeChecklistsPage() {
     <div className="space-y-4 pb-24">
       <PageHeader title="Checklists" subtitle={`${pendingCount} items assigned to you`} />
 
-      {Object.keys(grouped).length === 0 && (
+      {(isLoading || Object.keys(grouped).length === 0) && (
         <Card padding="lg">
           <p className="text-sm text-[var(--text-secondary)] text-center">
-            No checklist items assigned to you right now.
+            {isLoading ? 'Loading...' : 'No checklists assigned.'}
           </p>
         </Card>
       )}
@@ -95,24 +130,19 @@ export function EmployeeChecklistsPage() {
                         : 'text-[var(--text)]',
                     )}
                   >
-                    {item.title}
+                    {item.item_text}
                   </p>
-                  {item.description && (
-                    <p className="text-[11px] text-[var(--text-tertiary)] uppercase tracking-wider mt-0.5">
-                      {item.description}
-                    </p>
-                  )}
                   {item.due_date && (
                     <p
                       className={cn(
                         'text-[11px] mt-0.5',
-                        isOverdue(item.due_date) && item.status !== 'completed'
+                        isOverdue(item.due_date ?? null) && item.status !== 'completed'
                           ? 'text-[var(--danger)] font-semibold'
                           : 'text-[var(--text-tertiary)]',
                       )}
                     >
                       Due {item.due_date}
-                      {isOverdue(item.due_date) && item.status !== 'completed' ? ' · overdue' : ''}
+                      {isOverdue(item.due_date ?? null) && item.status !== 'completed' ? ' · overdue' : ''}
                     </p>
                   )}
                 </div>
@@ -127,7 +157,7 @@ export function EmployeeChecklistsPage() {
           <Card className="w-full rounded-b-none" padding="lg">
             <div className="flex items-start justify-between gap-3 mb-3">
               <h3 className="font-display text-xl text-[var(--navy)] leading-tight">
-                {activeItem.title}
+                {activeItem.item_text}
               </h3>
               <button
                 onClick={() => setActiveItem(null)}
@@ -146,7 +176,7 @@ export function EmployeeChecklistsPage() {
             )}
             {activeItem.external_link && (
               <a
-                href={activeItem.external_link}
+                href={activeItem.external_link ?? '#'}
                 target="_blank"
                 rel="noreferrer"
                 className="w-full mb-2 flex items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-white px-4 py-3 text-sm font-body font-medium text-[var(--navy)]"

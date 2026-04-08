@@ -7,13 +7,9 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
-import {
-  MOCK_SUB_SCOPES,
-  MOCK_PROJECTS,
-  MOCK_SUBCONTRACTORS,
-  MOCK_SUB_CONTRACTS,
-} from '@/data/mock'
 import type { SubContract, SubContractStatus } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 
 const statusMap: Record<SubContractStatus, string> = {
   draft: 'draft',
@@ -28,14 +24,57 @@ export function SubContractPage() {
   const { id: projectId, subId: scopeId } = useParams<{ id: string; subId: string }>()
   const navigate = useNavigate()
 
-  const scope = MOCK_SUB_SCOPES.find((s) => s.id === scopeId)
-  const project = MOCK_PROJECTS.find((p) => p.id === projectId)
-  const existing = MOCK_SUB_CONTRACTS.find((c) => c.scope_id === scopeId)
-  const sub = MOCK_SUBCONTRACTORS.find((s) => s.id === scope?.subcontractor_id)
+  const { data: scope, isLoading: scopeLoading } = useQuery({
+    queryKey: ['sub_scope', scopeId],
+    enabled: !!scopeId,
+    queryFn: async () => {
+      const { data } = await supabase.from('sub_scopes').select('*').eq('id', scopeId!).single()
+      return data as import('@/data/mock').SubScope | null
+    },
+  })
 
-  const [contract, setContract] = useState<SubContract | undefined>(existing)
+  const { data: existing } = useQuery({
+    queryKey: ['sub_contract_for_scope', scopeId],
+    enabled: !!scopeId,
+    queryFn: async () => {
+      const { data } = await supabase.from('sub_contracts').select('*').eq('scope_id', scopeId!).maybeSingle()
+      return data as SubContract | null
+    },
+  })
 
-  if (!scope || !project) {
+  const { data: project } = useQuery({
+    queryKey: ['project', projectId],
+    enabled: !!projectId,
+    queryFn: async () => {
+      const { data } = await supabase.from('projects').select('id, title, address').eq('id', projectId).single()
+      return data
+    },
+  })
+
+  const { data: sub } = useQuery({
+    queryKey: ['subcontractor', scope?.subcontractor_id],
+    enabled: !!scope?.subcontractor_id,
+    queryFn: async () => {
+      const { data } = await supabase.from('subcontractors').select('id, company_name, contact_name, phone').eq('id', scope!.subcontractor_id!).single()
+      return data
+    },
+  })
+
+  const [contract, setContract] = useState<SubContract | undefined>(undefined)
+  // Sync existing contract from DB into local state once
+  if (existing !== undefined && contract === undefined) {
+    setContract(existing ?? undefined)
+  }
+
+  if (scopeLoading || !project) {
+    return (
+      <div className="p-8 text-center">
+        <p className="text-[var(--text-secondary)]">Loading...</p>
+      </div>
+    )
+  }
+
+  if (!scope) {
     return (
       <div className="p-8 text-center">
         <p className="text-[var(--text-secondary)]">Scope not found.</p>

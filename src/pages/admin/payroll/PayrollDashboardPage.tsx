@@ -6,14 +6,8 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { StatusPill } from '@/components/ui/StatusPill'
-import {
-  MOCK_PAY_PERIODS,
-  MOCK_PAYROLL_RECORDS,
-  MOCK_PAYROLL_WORKERS,
-  MOCK_PAYROLL_YTD,
-  MOCK_PAST_PAYROLL_RUNS,
-  MOCK_TIME_ENTRIES,
-} from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 
 function fmtCurrency(n: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 0 }).format(n)
@@ -29,34 +23,76 @@ function daysBetween(dateStr: string): number {
   return Math.ceil((target.getTime() - today.getTime()) / 86400000)
 }
 
+type PayPeriodRow = { id: string; status: string; period_start: string; period_end: string; pay_date: string; period_number: number; year: number }
+type PayrollRecordRow = { id: string; pay_period_id: string; gross_pay: number; total_hours?: number; bonus_amount?: number; status: string }
+type ProfileRow = { id: string; full_name: string; role: string }
+
 export function PayrollDashboardPage() {
+  const { data: payPeriods = [] } = useQuery({
+    queryKey: ['pay_periods'],
+    queryFn: async () => {
+      const { data } = await supabase.from('pay_periods').select('*').order('period_start', { ascending: false })
+      return (data ?? []) as PayPeriodRow[]
+    },
+  })
+
+  const { data: employees = [] } = useQuery({
+    queryKey: ['employee_profiles'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name, role').in('role', ['employee', 'admin'])
+      return (data ?? []) as ProfileRow[]
+    },
+  })
+
   const upcomingPeriod = useMemo(
-    () => MOCK_PAY_PERIODS.find((p) => p.status === 'open' || p.status === 'upcoming') ?? MOCK_PAY_PERIODS[0],
-    [],
+    () => payPeriods.find((p) => p.status === 'open' || p.status === 'upcoming') ?? payPeriods[0],
+    [payPeriods],
   )
 
+  const { data: currentRecords = [] } = useQuery({
+    queryKey: ['payroll_records', upcomingPeriod?.id],
+    enabled: !!upcomingPeriod?.id,
+    queryFn: async () => {
+      const { data } = await supabase.from('payroll_records').select('*').eq('pay_period_id', upcomingPeriod!.id)
+      return (data ?? []) as PayrollRecordRow[]
+    },
+  })
+
+  const { data: pendingApprovals = 0 } = useQuery({
+    queryKey: ['pending_manual_time_entries'],
+    queryFn: async () => {
+      const { count } = await supabase.from('time_entries').select('id', { count: 'exact', head: true }).eq('entry_type', 'manual')
+      return count ?? 0
+    },
+  })
+
+  const pastPeriods = useMemo(() => payPeriods.filter((p) => p.status === 'closed'), [payPeriods])
+
   const estimatedTotal = useMemo(
-    () => MOCK_PAYROLL_RECORDS.reduce((s, r) => s + r.gross_pay, 0),
-    [],
+    () => currentRecords.reduce((s, r) => s + (r.gross_pay ?? 0), 0),
+    [currentRecords],
   )
 
   const ytdLaborCost = useMemo(
-    () => MOCK_PAYROLL_YTD.reduce((s, y) => s + y.gross_pay_ytd, 0),
-    [],
+    () => currentRecords.reduce((s, r) => s + (r.gross_pay ?? 0), 0),
+    [currentRecords],
   )
 
-  const pendingApprovals = useMemo(
-    () =>
-      MOCK_TIME_ENTRIES.filter(
-        (t) => t.entry_method === 'manual' && !('approved_by' in t ? t.approved_by : null),
-      ).length,
-    [],
-  )
+  if (!upcomingPeriod) {
+    return (
+      <div className="px-4 lg:px-8 py-4 space-y-4 max-w-5xl mx-auto">
+        <PageHeader title="Payroll" subtitle="Bi-weekly · Every other Friday · Powered by Gusto" />
+        <Card padding="lg">
+          <p className="text-sm text-[var(--text-tertiary)]">No pay periods found. Set up pay periods to get started.</p>
+        </Card>
+      </div>
+    )
+  }
 
   const daysAway = daysBetween(upcomingPeriod.pay_date)
-  const workersWithHours = MOCK_PAYROLL_RECORDS.filter((r) => r.total_hours > 0 || r.contractor_payment > 0).length
-  const totalWorkers = MOCK_PAYROLL_WORKERS.length
-  const adjustmentsCount = MOCK_PAYROLL_RECORDS.filter((r) => r.bonus_amount > 0).length
+  const workersWithHours = currentRecords.filter((r) => (r.total_hours ?? 0) > 0).length
+  const totalWorkers = employees.length
+  const adjustmentsCount = currentRecords.filter((r) => (r.bonus_amount ?? 0) > 0).length
 
   return (
     <div className="px-4 lg:px-8 py-4 space-y-4 max-w-5xl mx-auto">
@@ -184,12 +220,12 @@ export function PayrollDashboardPage() {
       <div>
         <SectionHeader title="Recent payroll history" />
         <Card padding="none">
-          {MOCK_PAST_PAYROLL_RUNS.length === 0 ? (
+          {pastPeriods.length === 0 ? (
             <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">
               No past payroll runs yet
             </div>
           ) : (
-            MOCK_PAST_PAYROLL_RUNS.map(({ period, total_paid }) => (
+            pastPeriods.slice(0, 5).map((period) => (
               <Link
                 key={period.id}
                 to={`/admin/payroll/${period.id}`}
@@ -204,7 +240,6 @@ export function PayrollDashboardPage() {
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="font-mono text-sm text-[var(--text)]">{fmtCurrency(total_paid)}</span>
                   <StatusPill status="paid" />
                 </div>
               </Link>

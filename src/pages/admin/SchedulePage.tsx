@@ -1,32 +1,12 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { MapPin, CalendarDays, Grid3x3, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react'
-import { MOCK_CREW_SCHEDULE, MOCK_CREW_CAPACITY, MOCK_USERS } from '@/data/mock'
 import { cn } from '@/lib/utils'
-
-const EVENTS = [
-  { date: 'Mon Apr 6', items: [
-    { time: '7:00 AM', project: 'Johnson Master Bath', desc: 'Tile installation – shower floor', address: '142 Maple Ridge Dr, Hudson' },
-    { time: '3:00 PM', project: 'Thompson Addition', desc: 'Sub check-in – framing crew', address: '88 Crestwood Ln, Stow' },
-  ]},
-  { date: 'Tue Apr 7', items: [
-    { time: 'All Day', project: 'Johnson Master Bath', desc: 'Tile walls – shower surround', address: '142 Maple Ridge Dr, Hudson' },
-  ]},
-  { date: 'Wed Apr 8', items: [
-    { time: '8:00 AM', project: 'Davis Consultation', desc: 'Kitchen site walk', address: '775 Oakdale Ave, Akron' },
-    { time: '1:00 PM', project: 'Johnson Master Bath', desc: 'Grouting', address: '142 Maple Ridge Dr, Hudson' },
-  ]},
-  { date: 'Thu Apr 9', items: [
-    { time: 'All Day', project: 'Thompson Addition', desc: 'Exterior framing', address: '88 Crestwood Ln, Stow' },
-  ]},
-  { date: 'Fri Apr 10', items: [
-    { time: 'All Day', project: 'Thompson Addition', desc: 'Roof structure', address: '88 Crestwood Ln, Stow' },
-    { time: '5:00 PM', project: 'Foster Proposal', desc: 'Review call', address: 'Phone' },
-  ]},
-]
+import { supabase } from '@/lib/supabase'
 
 const WEEK_DAYS = [
   { date: '2026-04-06', label: 'Mon Apr 6' },
@@ -36,16 +16,58 @@ const WEEK_DAYS = [
   { date: '2026-04-10', label: 'Fri Apr 10' },
 ]
 
-const EMPLOYEES = MOCK_USERS.filter((u) => u.role === 'employee')
+function calcEmployeeHours(employeeId: string, events: Record<string, unknown>[]): number {
+  return events
+    .filter((e) => Array.isArray(e.assigned_to) && (e.assigned_to as string[]).includes(employeeId))
+    .length * 8 // 8h per assignment
+}
 
-function calcEmployeeHours(employeeId: string): number {
-  return MOCK_CREW_SCHEDULE
-    .filter((e) => e.employee_id === employeeId)
-    .reduce((sum) => sum + 8, 0) // 8h per assignment for mock
+function formatEventTime(event: Record<string, unknown>): string {
+  if (event.all_day) return 'All Day'
+  if (event.start_time) return event.start_time as string
+  return ''
+}
+
+// Group schedule events by date label
+function groupByDate(events: Record<string, unknown>[]): { date: string; items: Record<string, unknown>[] }[] {
+  const map = new Map<string, Record<string, unknown>[]>()
+  for (const ev of events) {
+    const d = ev.start_date as string
+    if (!map.has(d)) map.set(d, [])
+    map.get(d)!.push(ev)
+  }
+  return Array.from(map.entries())
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, items]) => ({ date, items }))
 }
 
 export function SchedulePage() {
   const [view, setView] = useState<'calendar' | 'crew'>('calendar')
+
+  const { data: scheduleEvents = [], isLoading } = useQuery({
+    queryKey: ['schedule_events'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('schedule_events')
+        .select('*, projects(title, address)')
+        .order('start_date', { ascending: true })
+      return (data ?? []) as Record<string, unknown>[]
+    },
+  })
+
+  const { data: employees = [] } = useQuery({
+    queryKey: ['profiles', 'employees'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('profiles')
+        .select('id, full_name, role')
+        .eq('role', 'employee')
+        .eq('is_active', true)
+      return (data ?? []) as Record<string, unknown>[]
+    },
+  })
+
+  const groupedEvents = groupByDate(scheduleEvents)
 
   return (
     <div className="p-4 space-y-4 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">
@@ -80,28 +102,51 @@ export function SchedulePage() {
 
       {view === 'calendar' && (
         <div className="space-y-4">
-          {EVENTS.map((day) => (
-            <div key={day.date}>
-              <SectionHeader title={day.date} />
-              <Card padding="none">
-                {day.items.map((item, i) => (
-                  <div key={i} className="flex gap-3 p-4 border-b border-[var(--border-light)] last:border-0">
-                    <div className="w-16 flex-shrink-0">
-                      <p className="text-[11px] font-mono text-[var(--text-tertiary)]">{item.time}</p>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-semibold text-sm text-[var(--text)]">{item.project}</p>
-                      <p className="text-xs text-[var(--text-secondary)] mt-0.5">{item.desc}</p>
-                      <div className="flex items-center gap-1 mt-1">
-                        <MapPin size={11} className="text-[var(--text-tertiary)]" />
-                        <p className="text-[11px] text-[var(--text-tertiary)]">{item.address}</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </Card>
+          {isLoading ? (
+            <div className="py-8 text-center">
+              <p className="text-sm text-[var(--text-tertiary)]">Loading...</p>
             </div>
-          ))}
+          ) : groupedEvents.length === 0 ? (
+            <div className="text-center py-12 px-4">
+              <p className="font-medium text-sm text-[var(--text)]">No events scheduled</p>
+              <p className="text-xs text-[var(--text-tertiary)] mt-1">Add events to see them here.</p>
+            </div>
+          ) : (
+            groupedEvents.map((day) => {
+              const dateLabel = new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+              return (
+                <div key={day.date}>
+                  <SectionHeader title={dateLabel} />
+                  <Card padding="none">
+                    {day.items.map((item) => {
+                      const project = item.projects as Record<string, unknown> | null
+                      return (
+                        <div key={item.id as string} className="flex gap-3 p-4 border-b border-[var(--border-light)] last:border-0">
+                          <div className="w-16 flex-shrink-0">
+                            <p className="text-[11px] font-mono text-[var(--text-tertiary)]">{formatEventTime(item)}</p>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-semibold text-sm text-[var(--text)]">{String(item.title ?? '')}</p>
+                            {!!item.description && (
+                              <p className="text-xs text-[var(--text-secondary)] mt-0.5">{String(item.description)}</p>
+                            )}
+                            {!!(item.location || project?.address) && (
+                              <div className="flex items-center gap-1 mt-1">
+                                <MapPin size={11} className="text-[var(--text-tertiary)]" />
+                                <p className="text-[11px] text-[var(--text-tertiary)]">
+                                  {String(item.location ?? project?.address ?? '')}
+                                </p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      )
+                    })}
+                  </Card>
+                </div>
+              )
+            })
+          )}
         </div>
       )}
 
@@ -141,15 +186,17 @@ export function SchedulePage() {
             </div>
 
             {/* Employee rows */}
-            {EMPLOYEES.map((emp) => {
-              const totalHours = calcEmployeeHours(emp.id)
-              const standard = MOCK_CREW_CAPACITY[emp.id] ?? 40
+            {employees.length === 0 ? (
+              <div className="col-span-6 text-center py-8 text-sm text-[var(--text-tertiary)]">No employees found.</div>
+            ) : employees.map((emp) => {
+              const totalHours = calcEmployeeHours(emp.id as string, scheduleEvents)
+              const standard = 40
               const pct = Math.min(100, (totalHours / standard) * 100)
               const barColor = pct >= 100 ? 'bg-[var(--danger)]' : pct >= 80 ? 'bg-[var(--warning)]' : 'bg-[var(--success)]'
               return (
-                <div key={emp.id} className="grid grid-cols-[140px_repeat(5,1fr)] gap-px bg-[var(--border-light)] border-t border-[var(--border-light)]">
+                <div key={emp.id as string} className="grid grid-cols-[140px_repeat(5,1fr)] gap-px bg-[var(--border-light)] border-t border-[var(--border-light)]">
                   <div className="bg-white px-3 py-3">
-                    <p className="text-sm font-semibold text-[var(--text)]">{emp.full_name.split(' ')[0]}</p>
+                    <p className="text-sm font-semibold text-[var(--text)]">{(emp.full_name as string).split(' ')[0]}</p>
                     <div className="flex items-center gap-1.5 mt-1.5">
                       <div className="flex-1 h-1 bg-[var(--border-light)] rounded-full overflow-hidden">
                         <div className={`h-full ${barColor} rounded-full`} style={{ width: `${pct}%` }} />
@@ -158,8 +205,8 @@ export function SchedulePage() {
                     </div>
                   </div>
                   {WEEK_DAYS.map((d) => {
-                    const cellEvents = MOCK_CREW_SCHEDULE.filter(
-                      (e) => e.employee_id === emp.id && e.date === d.date
+                    const cellEvents = scheduleEvents.filter(
+                      (e) => e.start_date === d.date && Array.isArray(e.assigned_to) && (e.assigned_to as string[]).includes(emp.id as string)
                     )
                     return (
                       <div key={d.date} className="bg-white p-1.5 min-h-[72px]">
@@ -170,16 +217,15 @@ export function SchedulePage() {
                         ) : (
                           cellEvents.map((ev) => (
                             <div
-                              key={ev.id}
-                              className="rounded p-1.5 mb-1 last:mb-0 cursor-pointer"
-                              style={{ backgroundColor: `${ev.project_color}15`, borderLeft: `3px solid ${ev.project_color}` }}
-                              title={ev.task}
+                              key={ev.id as string}
+                              className="rounded p-1.5 mb-1 last:mb-0 cursor-pointer bg-[var(--cream-light)]"
+                              title={ev.title as string}
                             >
-                              <p className="text-[11px] font-semibold text-[var(--text)] truncate" style={{ color: ev.project_color }}>
-                                {ev.project_title}
+                              <p className="text-[11px] font-semibold text-[var(--navy)] truncate">
+                                {(ev.projects as Record<string, unknown> | null)?.title as string ?? ev.title as string}
                               </p>
-                              <p className="text-[10px] font-mono text-[var(--text-tertiary)]">{ev.start_time}</p>
-                              <p className="text-[10px] text-[var(--text-secondary)] truncate">{ev.task}</p>
+                              <p className="text-[10px] font-mono text-[var(--text-tertiary)]">{ev.start_time as string}</p>
+                              <p className="text-[10px] text-[var(--text-secondary)] truncate">{ev.event_type as string}</p>
                             </div>
                           ))
                         )}

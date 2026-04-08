@@ -5,13 +5,8 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import {
-  MOCK_PAYROLL_WORKERS,
-  MOCK_PAYROLL_RECORDS,
-  MOCK_PAYROLL_YTD,
-  MOCK_TIME_ENTRIES,
-  MOCK_PROJECTS,
-} from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 
 type ReportKey = 'labor_by_project' | 'payroll_register' | 'ytd_summary' | 'employer_cost_summary'
 
@@ -42,8 +37,45 @@ function fmtCurrency(n: number): string {
   return new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n)
 }
 
+type PayrollRecordRow = { id: string; employee_id?: string; profile_id?: string; pay_period_id: string; gross_pay: number; total_hours: number; total_deductions: number; est_net_pay: number; contractor_payment: number; employer_health_cost: number; employer_retirement_cost: number; employer_ss_tax: number; employer_medicare_tax: number; employer_futa: number; employer_suta: number; total_employer_cost: number; est_federal_withholding: number; est_state_withholding: number; bonus_amount: number }
+type WorkerRow = { id: string; full_name: string }
+type TimeEntryRow = { id: string; project_id?: string; total_hours?: number; is_billable?: boolean }
+type ProjectRow = { id: string; title: string }
+
 export function PayrollReportsPage() {
   const [selected, setSelected] = useState<ReportKey>('ytd_summary')
+
+  const { data: payrollRecords = [] } = useQuery({
+    queryKey: ['all_payroll_records'],
+    queryFn: async () => {
+      const { data } = await supabase.from('payroll_records').select('*')
+      return (data ?? []) as PayrollRecordRow[]
+    },
+  })
+
+  const { data: workers = [] } = useQuery({
+    queryKey: ['worker_profiles_report'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name').in('role', ['employee', 'admin'])
+      return (data ?? []) as WorkerRow[]
+    },
+  })
+
+  const { data: timeEntries = [] } = useQuery({
+    queryKey: ['all_time_entries'],
+    queryFn: async () => {
+      const { data } = await supabase.from('time_entries').select('id, project_id, total_hours, is_billable').not('clock_out', 'is', null)
+      return (data ?? []) as TimeEntryRow[]
+    },
+  })
+
+  const { data: projects = [] } = useQuery({
+    queryKey: ['projects_list'],
+    queryFn: async () => {
+      const { data } = await supabase.from('projects').select('id, title')
+      return (data ?? []) as ProjectRow[]
+    },
+  })
 
   return (
     <div className="px-4 lg:px-8 py-4 space-y-4 max-w-5xl mx-auto">
@@ -104,10 +136,10 @@ export function PayrollReportsPage() {
           }
         />
         <Card padding="lg">
-          {selected === 'labor_by_project' && <LaborByProjectReport />}
-          {selected === 'payroll_register' && <PayrollRegisterReport />}
-          {selected === 'ytd_summary' && <YTDSummaryReport />}
-          {selected === 'employer_cost_summary' && <EmployerCostSummaryReport />}
+          {selected === 'labor_by_project' && <LaborByProjectReport timeEntries={timeEntries} projects={projects} />}
+          {selected === 'payroll_register' && <PayrollRegisterReport records={payrollRecords} workers={workers} />}
+          {selected === 'ytd_summary' && <YTDSummaryReport records={payrollRecords} workers={workers} />}
+          {selected === 'employer_cost_summary' && <EmployerCostSummaryReport records={payrollRecords} />}
         </Card>
       </div>
 
@@ -118,27 +150,20 @@ export function PayrollReportsPage() {
   )
 }
 
-function LaborByProjectReport() {
+function LaborByProjectReport({ timeEntries, projects }: { timeEntries: TimeEntryRow[]; projects: ProjectRow[] }) {
   const data = useMemo(() => {
-    const byProject: Record<string, { project_id: string; project_title: string; minutes: number; cost: number }> = {}
-    for (const t of MOCK_TIME_ENTRIES) {
-      if (!t.total_minutes || !t.project_id) continue
+    const byProject: Record<string, { project_id: string; project_title: string; hours: number }> = {}
+    for (const t of timeEntries) {
+      if (!t.project_id) continue
       const key = t.project_id
-      const proj = MOCK_PROJECTS.find((p) => p.id === t.project_id)
+      const proj = projects.find((p) => p.id === key)
       if (!byProject[key]) {
-        byProject[key] = {
-          project_id: key,
-          project_title: proj?.title ?? t.project_title ?? 'Unknown',
-          minutes: 0,
-          cost: 0,
-        }
+        byProject[key] = { project_id: key, project_title: proj?.title ?? 'Unknown', hours: 0 }
       }
-      byProject[key].minutes += t.total_minutes
-      const billing = (t.billing_rate ?? 0)
-      byProject[key].cost += (t.total_minutes / 60) * billing * 0.6 // labor cost ~ 60% of bill rate
+      byProject[key].hours += t.total_hours ?? 0
     }
     return Object.values(byProject)
-  }, [])
+  }, [timeEntries, projects])
 
   return (
     <div className="space-y-1">
@@ -147,18 +172,20 @@ function LaborByProjectReport() {
         <div className="col-span-2 text-right">Hours</div>
         <div className="col-span-3 text-right">Labor cost</div>
       </div>
-      {data.map((row) => (
+      {data.length === 0 ? (
+        <div className="text-sm text-[var(--text-tertiary)] py-4 text-center">No labor data yet</div>
+      ) : data.map((row) => (
         <div key={row.project_id} className="grid grid-cols-12 gap-2 text-sm py-2 border-b border-[var(--border-light)]">
           <div className="col-span-7 truncate">{row.project_title}</div>
-          <div className="col-span-2 text-right font-mono">{(row.minutes / 60).toFixed(1)}</div>
-          <div className="col-span-3 text-right font-mono">{fmtCurrency(row.cost)}</div>
+          <div className="col-span-2 text-right font-mono">{row.hours.toFixed(1)}</div>
+          <div className="col-span-3 text-right font-mono">—</div>
         </div>
       ))}
     </div>
   )
 }
 
-function PayrollRegisterReport() {
+function PayrollRegisterReport({ records, workers }: { records: PayrollRecordRow[]; workers: WorkerRow[] }) {
   return (
     <div className="space-y-1">
       <div className="grid grid-cols-12 gap-2 text-[10px] uppercase font-semibold tracking-wide text-[var(--text-tertiary)] pb-2 border-b border-[var(--border-light)]">
@@ -168,14 +195,17 @@ function PayrollRegisterReport() {
         <div className="col-span-2 text-right">Deductions</div>
         <div className="col-span-3 text-right">Est. net</div>
       </div>
-      {MOCK_PAYROLL_RECORDS.map((r) => {
-        const w = MOCK_PAYROLL_WORKERS.find((x) => x.profile_id === r.profile_id)
+      {records.length === 0 ? (
+        <div className="text-sm text-[var(--text-tertiary)] py-4 text-center">No payroll records yet</div>
+      ) : records.map((r) => {
+        const profileId = r.employee_id ?? r.profile_id
+        const w = workers.find((x) => x.id === profileId)
         return (
           <div
             key={r.id}
             className="grid grid-cols-12 gap-2 text-sm py-2 border-b border-[var(--border-light)]"
           >
-            <div className="col-span-3 truncate">{w?.full_name}</div>
+            <div className="col-span-3 truncate">{w?.full_name ?? '—'}</div>
             <div className="col-span-2 text-right font-mono">{r.total_hours.toFixed(1)}</div>
             <div className="col-span-2 text-right font-mono">{fmtCurrency(r.gross_pay)}</div>
             <div className="col-span-2 text-right font-mono">{fmtCurrency(r.total_deductions)}</div>
@@ -187,7 +217,20 @@ function PayrollRegisterReport() {
   )
 }
 
-function YTDSummaryReport() {
+function YTDSummaryReport({ records, workers }: { records: PayrollRecordRow[]; workers: WorkerRow[] }) {
+  const ytdByWorker = useMemo(() => {
+    const map: Record<string, { id: string; gross: number; federal: number; state: number; net: number }> = {}
+    for (const r of records) {
+      const profileId = r.employee_id ?? r.profile_id ?? ''
+      if (!map[profileId]) map[profileId] = { id: profileId, gross: 0, federal: 0, state: 0, net: 0 }
+      map[profileId].gross += r.gross_pay ?? 0
+      map[profileId].federal += r.est_federal_withholding ?? 0
+      map[profileId].state += r.est_state_withholding ?? 0
+      map[profileId].net += r.est_net_pay ?? 0
+    }
+    return Object.values(map)
+  }, [records])
+
   return (
     <div className="space-y-1">
       <div className="grid grid-cols-12 gap-2 text-[10px] uppercase font-semibold tracking-wide text-[var(--text-tertiary)] pb-2 border-b border-[var(--border-light)]">
@@ -197,18 +240,20 @@ function YTDSummaryReport() {
         <div className="col-span-2 text-right">State</div>
         <div className="col-span-3 text-right">Net</div>
       </div>
-      {MOCK_PAYROLL_YTD.map((y) => {
-        const w = MOCK_PAYROLL_WORKERS.find((x) => x.profile_id === y.profile_id)
+      {ytdByWorker.length === 0 ? (
+        <div className="text-sm text-[var(--text-tertiary)] py-4 text-center">No YTD data yet</div>
+      ) : ytdByWorker.map((y) => {
+        const w = workers.find((x) => x.id === y.id)
         return (
           <div
-            key={y.profile_id}
+            key={y.id}
             className="grid grid-cols-12 gap-2 text-sm py-2 border-b border-[var(--border-light)]"
           >
-            <div className="col-span-3 truncate">{w?.full_name}</div>
-            <div className="col-span-2 text-right font-mono">{fmtCurrency(y.gross_pay_ytd)}</div>
-            <div className="col-span-2 text-right font-mono">{fmtCurrency(y.federal_withholding_ytd)}</div>
-            <div className="col-span-2 text-right font-mono">{fmtCurrency(y.state_withholding_ytd)}</div>
-            <div className="col-span-3 text-right font-mono">{fmtCurrency(y.net_pay_ytd)}</div>
+            <div className="col-span-3 truncate">{w?.full_name ?? '—'}</div>
+            <div className="col-span-2 text-right font-mono">{fmtCurrency(y.gross)}</div>
+            <div className="col-span-2 text-right font-mono">{fmtCurrency(y.federal)}</div>
+            <div className="col-span-2 text-right font-mono">{fmtCurrency(y.state)}</div>
+            <div className="col-span-3 text-right font-mono">{fmtCurrency(y.net)}</div>
           </div>
         )
       })}
@@ -216,20 +261,20 @@ function YTDSummaryReport() {
   )
 }
 
-function EmployerCostSummaryReport() {
+function EmployerCostSummaryReport({ records }: { records: PayrollRecordRow[] }) {
   const totals = useMemo(() => {
-    return MOCK_PAYROLL_RECORDS.reduce(
+    return records.reduce(
       (acc, r) => {
-        acc.wages += r.gross_pay - r.contractor_payment
-        acc.benefits += r.employer_health_cost + r.employer_retirement_cost
-        acc.taxes += r.employer_ss_tax + r.employer_medicare_tax + r.employer_futa + r.employer_suta
-        acc.contractors += r.contractor_payment
-        acc.total += r.total_employer_cost
+        acc.wages += (r.gross_pay ?? 0) - (r.contractor_payment ?? 0)
+        acc.benefits += (r.employer_health_cost ?? 0) + (r.employer_retirement_cost ?? 0)
+        acc.taxes += (r.employer_ss_tax ?? 0) + (r.employer_medicare_tax ?? 0) + (r.employer_futa ?? 0) + (r.employer_suta ?? 0)
+        acc.contractors += r.contractor_payment ?? 0
+        acc.total += r.total_employer_cost ?? 0
         return acc
       },
       { wages: 0, benefits: 0, taxes: 0, contractors: 0, total: 0 },
     )
-  }, [])
+  }, [records])
 
   return (
     <div className="space-y-2">

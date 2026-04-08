@@ -4,7 +4,8 @@ import { Card, MetricCard } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { SectionHeader } from '@/components/ui/SectionHeader'
-import { MOCK_COMPLIANCE_ITEMS } from '@/data/mock'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import type { ComplianceItem, CompliancePriority, ComplianceCategory } from '@/data/mock'
 import { cn } from '@/lib/utils'
 
@@ -40,7 +41,14 @@ const STATUS_LABELS: Record<string, { label: string; cls: string }> = {
 type Filter = 'all' | 'critical' | 'high' | 'expiring'
 
 export function CompliancePage() {
-  const [items, setItems] = useState<ComplianceItem[]>(MOCK_COMPLIANCE_ITEMS)
+  const queryClient = useQueryClient()
+  const { data: items = [], isLoading } = useQuery({
+    queryKey: ['compliance-items'],
+    queryFn: async () => {
+      const { data } = await supabase.from('compliance_items').select('*').order('priority', { ascending: true })
+      return (data ?? []) as ComplianceItem[]
+    },
+  })
   const [filter, setFilter] = useState<Filter>('all')
   const [categoryFilter, setCategoryFilter] = useState<ComplianceCategory | 'all'>('all')
 
@@ -94,19 +102,32 @@ export function CompliancePage() {
     return cats
   }, [items])
 
+  const updateStatus = async (id: string, status: string) => {
+    await supabase.from('compliance_items').update({ status }).eq('id', id)
+    queryClient.invalidateQueries({ queryKey: ['compliance-items'] })
+  }
+
   const handleMarkComplete = (item: ComplianceItem) => {
     const num = prompt(`Mark "${item.title}" as complete. Enter account/policy/license number (optional):`)
-    setItems((prev) =>
-      prev.map((i) =>
-        i.id === item.id
-          ? { ...i, status: 'completed', account_number: num || i.account_number }
-          : i,
-      ),
-    )
+    updateStatus(item.id, 'completed')
+    if (num) {
+      supabase.from('compliance_items').update({ account_number: num }).eq('id', item.id).then(() => {
+        queryClient.invalidateQueries({ queryKey: ['compliance-items'] })
+      })
+    }
   }
 
   const handleAiHelp = (item: ComplianceItem) => {
     alert(`AI Command Bar would open with:\n\n"${item.ai_help_prompt}"`)
+  }
+
+  if (isLoading) {
+    return (
+      <div className="p-4 lg:px-8 lg:py-6 max-w-2xl mx-auto lg:max-w-none space-y-4 pb-24">
+        <PageHeader title="Compliance" subtitle="Loading..." />
+        <div className="text-sm text-[var(--text-secondary)] text-center py-8">Loading compliance items...</div>
+      </div>
+    )
   }
 
   return (
@@ -314,7 +335,13 @@ function ComplianceCard({
 }
 
 export function ComplianceStatusMini() {
-  const items = MOCK_COMPLIANCE_ITEMS
+  const { data: items = [] } = useQuery({
+    queryKey: ['compliance-items'],
+    queryFn: async () => {
+      const { data } = await supabase.from('compliance_items').select('*').order('priority', { ascending: true })
+      return (data ?? []) as ComplianceItem[]
+    },
+  })
   const critical = items.filter((i) => i.priority === 'critical' && i.status !== 'completed' && i.status !== 'not_applicable').length
   const expiring = items.filter((i) => {
     if (!i.expiry_date) return false

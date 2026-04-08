@@ -7,7 +7,8 @@ import { useNavigate } from 'react-router-dom'
 import { ArrowLeft, Star, Plus, BookmarkPlus } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
-import { MOCK_MATERIAL_SPECS } from '@/data/mock'
+import { useQuery } from '@tanstack/react-query'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 const FINISH_LEVEL_COLORS: Record<string, string> = {
@@ -20,8 +21,37 @@ const FINISH_LEVEL_COLORS: Record<string, string> = {
 export function MaterialsPage() {
   const navigate = useNavigate()
   const [filter, setFilter] = useState<string>('all')
-  const categories = Array.from(new Set(MOCK_MATERIAL_SPECS.map((m) => m.category)))
-  const filtered = filter === 'all' ? MOCK_MATERIAL_SPECS : MOCK_MATERIAL_SPECS.filter((m) => m.category === filter)
+
+  const { data: materialSpecs = [], isLoading } = useQuery({
+    queryKey: ['material-specs'],
+    queryFn: async () => {
+      const { data } = await supabase.from('material_specs').select('*').order('created_at', { ascending: false })
+      return (data ?? []) as Array<{
+        id: string
+        category: string
+        brand: string | null
+        product_name: string
+        supplier_name: string | null
+        price_typical: number | null
+        unit: string
+        finish_level: string
+        is_preferred: boolean
+        times_specified: number
+        notes: string | null
+      }>
+    },
+  })
+
+  const categories = Array.from(new Set(materialSpecs.map((m) => m.category)))
+  const filtered = filter === 'all' ? materialSpecs : materialSpecs.filter((m) => m.category === filter)
+
+  if (isLoading) {
+    return (
+      <div className="p-4 space-y-4 max-w-4xl mx-auto lg:px-8 lg:py-6">
+        <div className="text-sm text-[var(--text-secondary)] text-center py-8">Loading material specs...</div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 space-y-4 max-w-4xl mx-auto lg:px-8 lg:py-6">
@@ -71,7 +101,12 @@ export function MaterialsPage() {
         ))}
       </div>
 
-      <Card padding="none">
+      {filtered.length === 0 && (
+        <Card>
+          <p className="text-sm text-[var(--text-secondary)] text-center py-4">No material specs added yet.</p>
+        </Card>
+      )}
+      {filtered.length > 0 && <Card padding="none">
         {filtered.map((m) => (
           <div key={m.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
             <div className="flex items-start justify-between gap-3">
@@ -118,7 +153,7 @@ export function MaterialsPage() {
             </div>
           </div>
         ))}
-      </Card>
+      </Card>}
     </div>
   )
 }
