@@ -46,10 +46,15 @@ FROM time_entries_legacy
 WHERE id IN (
   -- Keep all closed entries
   SELECT id FROM time_entries_legacy WHERE clock_out IS NOT NULL
-  UNION
-  -- Keep only the most recent open entry per employee
-  SELECT DISTINCT ON (employee_id) id
-  FROM time_entries_legacy
-  WHERE clock_out IS NULL
-  ORDER BY employee_id, clock_in DESC
+  UNION ALL
+  -- Keep only the most recent open entry per employee (window function in a subquery
+  -- avoids the UNION-ORDER-BY gotcha where the outer UNION rejects ORDER BY on a
+  -- non-selected column)
+  SELECT id FROM (
+    SELECT id,
+           ROW_NUMBER() OVER (PARTITION BY employee_id ORDER BY clock_in DESC) AS rn
+    FROM time_entries_legacy
+    WHERE clock_out IS NULL
+  ) ranked
+  WHERE rn = 1
 );
