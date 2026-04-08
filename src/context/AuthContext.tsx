@@ -84,22 +84,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (mounted) setLoading(false)
     }, 8000)
 
-    // Initial session check
-    supabase.auth.getSession().then(async ({ data }) => {
+    // Initial session check — race against timeout so a stuck token-refresh
+    // never blocks the UI indefinitely.
+    const sessionPromise = supabase.auth.getSession()
+    const sessionTimeout = new Promise<{ data: { session: null } }>(r =>
+      setTimeout(() => r({ data: { session: null } }), 6000)
+    )
+    Promise.race([sessionPromise, sessionTimeout]).then(async ({ data }) => {
       if (!mounted) return
-      clearTimeout(timeout)
       setSession(data.session)
       if (data.session?.user) {
         const profile = await fetchProfile(data.session.user.id, data.session.user.email)
         if (mounted) setUser(profile)
       }
-      if (mounted) setLoading(false)
+      if (mounted) { clearTimeout(timeout); setLoading(false) }
     })
 
     // Subscribe to auth changes (sign in, sign out, token refresh)
     const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       if (!mounted) return
-      clearTimeout(timeout)
       setSession(newSession)
       if (newSession?.user) {
         const profile = await fetchProfile(newSession.user.id, newSession.user.email)
@@ -107,6 +110,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else {
         setUser(null)
       }
+      clearTimeout(timeout)
       setLoading(false)
     })
 
