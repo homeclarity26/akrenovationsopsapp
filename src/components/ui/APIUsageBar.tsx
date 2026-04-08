@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { X, Zap } from 'lucide-react'
-import { useApiUsage, UsageRange } from '@/hooks/useApiUsage'
+import { useApiUsage } from '@/hooks/useApiUsage'
+import type { UsageRange } from '@/hooks/useApiUsage'
 
 // ─── Formatting helpers ────────────────────────────────────────────────────────
 
