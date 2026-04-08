@@ -87,8 +87,29 @@ import HomeownerDemoShell from '@/demo/homeowner/HomeownerDemoShell'
 
 const qc = new QueryClient()
 
+function AuthLoadingScreen() {
+  return (
+    <div
+      className="min-h-svh flex items-center justify-center"
+      style={{ background: 'var(--bg)' }}
+    >
+      <div
+        className="w-8 h-8 rounded-full border-2 animate-spin"
+        style={{
+          borderColor: 'var(--border)',
+          borderTopColor: 'var(--rust)',
+        }}
+      />
+    </div>
+  )
+}
+
 function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'client'; children: React.ReactNode }) {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
+  // Wait for the initial Supabase session check to complete before deciding
+  // where to send the user. Without this, a page refresh redirects to /login
+  // before the session restores.
+  if (loading) return <AuthLoadingScreen />
   if (!user) return <Navigate to="/login" replace />
   if (user.role !== role) {
     if (user.role === 'admin') return <Navigate to="/admin" replace />
@@ -99,7 +120,8 @@ function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'clie
 }
 
 function RootRedirect() {
-  const { user } = useAuth()
+  const { user, loading } = useAuth()
+  if (loading) return <AuthLoadingScreen />
   if (!user) return <Navigate to="/login" replace />
   if (user.role === 'admin') return <Navigate to="/admin" replace />
   if (user.role === 'employee') return <Navigate to="/employee" replace />
