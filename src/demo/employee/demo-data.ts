@@ -3,8 +3,8 @@
 
 export const EMPLOYEE_DEMO_DATA = {
   employee: {
-    name: 'Marcus',
-    initials: 'MR',
+    name: 'Jeff',
+    initials: 'JM',
     role: 'Lead Remodeler',
     start_date: 'Today is your first look at how we work',
   },

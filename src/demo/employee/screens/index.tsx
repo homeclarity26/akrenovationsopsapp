@@ -3,6 +3,7 @@
 // No state, no backend, no auth.
 
 import { EMPLOYEE_DEMO_DATA } from '../demo-data'
+import { EMPLOYEE_RECENT_PHOTOS } from '../../shared/demo-images'
 
 const D = EMPLOYEE_DEMO_DATA
 
@@ -187,14 +188,6 @@ export function TimeClockWorkTypeScreen({ highlight }: { highlight?: string | nu
           >
             <div style={{ ...s.workTileLabel, color: i === 0 ? '#FFFFFF' : '#1A1A1A' }}>
               {w.label}
-            </div>
-            <div
-              style={{
-                ...s.workTileRate,
-                color: i === 0 ? 'rgba(255,255,255,0.65)' : '#9CA3AF',
-              }}
-            >
-              {w.rate}
             </div>
           </div>
         ))}
@@ -401,9 +394,9 @@ export function PhotosScreen({ highlight }: { highlight?: string | null }) {
 
       <div style={{ ...s.sectionTitle, marginTop: 22 }}>RECENT PHOTOS</div>
       <div style={s.photoGrid}>
-        {[1, 2, 3, 4].map((i) => (
+        {EMPLOYEE_RECENT_PHOTOS.map((src, i) => (
           <div key={i} style={s.photoBox}>
-            <div style={s.photoIcon}>📷</div>
+            <img src={src} alt={`Recent job photo ${i + 1}`} style={s.photoImg} />
           </div>
         ))}
       </div>
@@ -990,13 +983,14 @@ const s = {
     aspectRatio: '1',
     background: '#F5F0E6',
     borderRadius: 10,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+    overflow: 'hidden',
+    position: 'relative' as const,
   } as const,
-  photoIcon: {
-    fontSize: 28,
-    opacity: 0.4,
+  photoImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+    display: 'block',
   } as const,
 
   // bonus

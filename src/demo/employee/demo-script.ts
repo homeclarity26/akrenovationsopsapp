@@ -118,7 +118,7 @@ export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
     ai_scene_type: 'field_question',
     suggested_prompt:
       'What grout should I use for the Carter bathroom floor tile?',
-    ai_system_prompt: `You are the AI assistant for AK Renovations, a high-end residential renovation contractor in Summit County, Ohio. You are talking to Marcus, a lead remodeler, through the field app on his phone.
+    ai_system_prompt: `You are the AI assistant for AK Renovations, a high-end residential renovation contractor in Summit County, Ohio. You are talking to Jeff, a lead remodeler, through the field app on his phone.
 
 The current project context:
 - Carter Bathroom — Master Suite at 923 Elmhurst Ave, Hudson OH
@@ -129,7 +129,7 @@ The current project context:
 
 Answer field questions concisely and practically. You are a knowledgeable colleague, not a chatbot. Use specific product names, measurements, and techniques. Never be vague. Max 3-4 sentences unless a step-by-step is genuinely needed.`,
     scene_description:
-      "The AI gives Marcus exactly what he needs — right grout, right technique, note about joint size. Not a Google search. Not a call to Adam.",
+      "The AI gives Jeff exactly what he needs — right grout, right technique, note about joint size. Not a Google search. Not a call to Adam.",
   },
   {
     step: 11,
@@ -150,7 +150,7 @@ Answer field questions concisely and practically. You are a knowledgeable collea
     ai_scene_type: 'change_order',
     suggested_prompt:
       "I pulled the cabinet off the wall next to the sink and there's water damage on the drywall and the bottom plate looks rotted. It wasn't in the original scope.",
-    ai_system_prompt: `You are the AI assistant for AK Renovations, a high-end residential renovation contractor in Summit County, Ohio. You are talking to Marcus, a lead remodeler, through the field app on his phone.
+    ai_system_prompt: `You are the AI assistant for AK Renovations, a high-end residential renovation contractor in Summit County, Ohio. You are talking to Jeff, a lead remodeler, through the field app on his phone.
 
 The current project context:
 - Henderson Kitchen Remodel at 1847 Ridgewood Dr, Stow OH
@@ -158,7 +158,7 @@ The current project context:
 - Original scope: Full kitchen remodel — demo, cabinets, countertops, backsplash, flooring, plumbing, electrical
 - Client: Tom & Dana Henderson
 
-Marcus has just found unexpected water damage. Your job:
+Jeff has just found unexpected water damage. Your job:
 1. Acknowledge what he found
 2. Tell him to take photos immediately (specific: the damage, the rotted plate, the extent of moisture)
 3. Tell him not to proceed with cabinet install in that area yet
@@ -167,7 +167,7 @@ Marcus has just found unexpected water damage. Your job:
 
 Keep it under 5 sentences. Sound like a knowledgeable colleague, not a bot.`,
     scene_description:
-      "The AI tells Marcus what to do — take photos, don't proceed, Adam is being notified. A change order draft is automatically created and Adam sees it before Marcus puts his phone away.",
+      "The AI tells Jeff what to do — take photos, don't proceed, Adam is being notified. A change order draft is automatically created and Adam sees it before Jeff puts his phone away.",
   },
   {
     step: 13,

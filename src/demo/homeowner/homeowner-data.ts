@@ -6,7 +6,7 @@ export const HOMEOWNER_DEMO_DATA = {
     name: 'Sarah Mitchell',
     address: '2841 Maple Ridge Dr, Stow OH 44224',
     project: 'Kitchen Remodel',
-    contract_value: '$54,800',
+    contract_value: '$84,850',
     start_date: 'June 2, 2025',
     completion_date: 'July 18, 2025',
   },
@@ -54,10 +54,11 @@ export const HOMEOWNER_DEMO_DATA = {
   ],
 
   payment_schedule: [
-    { milestone: 'Contract signing', amount: '$16,440', status: 'paid' as const, date: 'May 28' },
-    { milestone: 'Demo complete & rough-in', amount: '$16,440', status: 'paid' as const, date: 'Jun 9' },
-    { milestone: 'Cabinet installation', amount: '$13,700', status: 'pending' as const, date: 'Jul 1' },
-    { milestone: 'Final completion', amount: '$8,220', status: 'upcoming' as const, date: 'Jul 18' },
+    // 30/30/25/15 split of $84,850
+    { milestone: 'Contract signing', amount: '$25,455', status: 'paid' as const, date: 'May 28' },
+    { milestone: 'Demo complete & rough-in', amount: '$25,455', status: 'paid' as const, date: 'Jun 9' },
+    { milestone: 'Cabinet installation', amount: '$21,213', status: 'pending' as const, date: 'Jul 1' },
+    { milestone: 'Final completion', amount: '$12,727', status: 'upcoming' as const, date: 'Jul 18' },
   ],
 
   selections: [

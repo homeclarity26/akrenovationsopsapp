@@ -2,6 +2,12 @@
 // Pure presentational. No backend.
 
 import { HOMEOWNER_DEMO_DATA } from '../homeowner-data'
+import {
+  KITCHEN,
+  PROGRESS_SEQUENCE,
+  WEEKLY_UPDATE_PHOTOS,
+  BEFORE_AFTER,
+} from '../../shared/demo-images'
 
 const D = HOMEOWNER_DEMO_DATA
 
@@ -109,39 +115,106 @@ export function ProposalSectionsScreen({
 }
 
 // ───────────────────────── Portal welcome ─────────────────────────
+// High-end homeowner portal. Full-width hero image of the project vision,
+// overlaid with the warm greeting. Below: a progress ring, a "this week"
+// card with a real photo, then the tab tiles in a refined layout.
+
 export function PortalWelcomeScreen() {
   return (
-    <div>
-      <div style={s.portalHeader}>
-        <div style={s.portalGreeting}>Welcome, Sarah</div>
-        <div style={s.portalProject}>{D.client.project}</div>
-      </div>
-
-      <div style={s.portalProgressCard}>
-        <div style={s.portalProgressLabel}>PROJECT PROGRESS</div>
-        <div style={s.portalProgressBar}>
-          <div style={{ ...s.portalProgressFill, width: '58%' }} />
-        </div>
-        <div style={s.portalProgressMeta}>
-          <span>Week 3 of 7</span>
-          <span>Cabinets installed</span>
-        </div>
-      </div>
-
-      <div style={s.sectionTitle}>YOUR PORTAL</div>
-      <div style={s.tabsGrid}>
-        {D.portal_tabs.map((t) => (
-          <div key={t.id} style={s.tabTile}>
-            {t.label}
+    <div style={{ margin: '-16px -14px 0' }}>
+      {/* Full-bleed hero with image + gradient overlay + welcome text */}
+      <div style={s.heroWrap}>
+        <img
+          src={KITCHEN.heroLuxury}
+          alt="Your kitchen vision"
+          style={s.heroImg}
+        />
+        <div style={s.heroGradient} />
+        <div style={s.heroContent}>
+          <div style={s.heroKicker}>YOUR PROJECT · STOW, OH</div>
+          <div style={s.heroGreeting}>Welcome home, Sarah.</div>
+          <div style={s.heroTagline}>
+            Your kitchen, every detail. In one place, always.
           </div>
-        ))}
+        </div>
       </div>
 
-      <div style={s.portalFooter}>
-        Available on any device. No app to download.
+      {/* Progress + This Week card — elevated, warm */}
+      <div style={{ padding: '18px 18px 0' }}>
+        <div style={s.elevatedCard}>
+          <div style={s.progressRow}>
+            <div>
+              <div style={s.tinyLabel}>PROJECT PROGRESS</div>
+              <div style={s.progressBig}>58%</div>
+              <div style={s.progressSub}>Week 3 of 7 · On schedule</div>
+            </div>
+            <div style={s.ring}>
+              <svg width="72" height="72" viewBox="0 0 72 72">
+                <circle cx="36" cy="36" r="30" stroke="#F0F0EE" strokeWidth="6" fill="none" />
+                <circle
+                  cx="36"
+                  cy="36"
+                  r="30"
+                  stroke="#B7410E"
+                  strokeWidth="6"
+                  fill="none"
+                  strokeDasharray="188.5"
+                  strokeDashoffset="79.2"
+                  strokeLinecap="round"
+                  transform="rotate(-90 36 36)"
+                />
+              </svg>
+            </div>
+          </div>
+          <div style={s.phaseDivider} />
+          <div style={s.currentPhase}>
+            <img
+              src={KITCHEN.shakerCream}
+              alt="Cabinets installed"
+              style={s.currentPhaseImg}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={s.tinyLabel}>CURRENTLY</div>
+              <div style={s.currentPhaseLabel}>Cabinet installation</div>
+              <div style={s.currentPhaseSub}>
+                Uppers complete · Lowers starting today
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ height: 18 }} />
+
+        <div style={s.sectionTitle}>YOUR PORTAL</div>
+        <div style={s.tabsGrid}>
+          {D.portal_tabs.map((t) => (
+            <div key={t.id} style={s.tabTile}>
+              <div style={s.tabTileIcon}>{iconFor(t.id)}</div>
+              <div>{t.label}</div>
+            </div>
+          ))}
+        </div>
+
+        <div style={s.portalFooter}>
+          Available on any device. No app to download.
+        </div>
       </div>
     </div>
   )
+}
+
+// Small inline icons for the portal tabs — simple unicode-free approach
+function iconFor(id: string): string {
+  const map: Record<string, string> = {
+    progress:   '◐',
+    photos:     '▣',
+    selections: '✓',
+    invoices:   '$',
+    messages:   '✉',
+    docs:       '⎋',
+    schedule:   '◷',
+  }
+  return map[id] ?? '·'
 }
 
 // ───────────────────────── Selections ─────────────────────────
@@ -193,14 +266,6 @@ export function SelectionsScreen({ highlight }: { highlight?: string }) {
 }
 
 // ───────────────────────── Progress photos ─────────────────────────
-const PHOTO_GRADIENTS = [
-  'linear-gradient(135deg, #6B7280 0%, #374151 100%)',
-  'linear-gradient(135deg, #92400E 0%, #451A03 100%)',
-  'linear-gradient(135deg, #E8DCC4 0%, #B7410E 100%)',
-  'linear-gradient(135deg, #1B2B4D 0%, #2A3F6B 100%)',
-  'linear-gradient(135deg, #B7410E 0%, #7C2D12 100%)',
-  'linear-gradient(135deg, #ECFDF5 0%, #059669 100%)',
-]
 
 export function ProgressPhotosScreen({
   highlight,
@@ -220,13 +285,13 @@ export function ProgressPhotosScreen({
       >
         {D.photos.map((p, i) => (
           <div key={i} style={s.progressPhoto}>
-            <div
-              style={{
-                ...s.progressImg,
-                background: PHOTO_GRADIENTS[i % PHOTO_GRADIENTS.length],
-              }}
-            >
-              <div style={s.progressPhase}>{p.phase}</div>
+            <div style={s.progressImg}>
+              <img
+                src={PROGRESS_SEQUENCE[i % PROGRESS_SEQUENCE.length]}
+                alt={p.label}
+                style={s.progressImgTag}
+              />
+              <div style={s.progressPhaseOverlay}>{p.phase}</div>
             </div>
             <div style={s.progressMeta}>
               <div style={s.progressLabel}>{p.label}</div>
@@ -249,14 +314,10 @@ export function WeeklyUpdateScreen() {
         <div style={s.updateBody}>{D.weekly_update.summary}</div>
 
         <div style={s.updatePhotos}>
-          {[0, 1, 2, 3].map((i) => (
-            <div
-              key={i}
-              style={{
-                ...s.updatePhoto,
-                background: PHOTO_GRADIENTS[i % PHOTO_GRADIENTS.length],
-              }}
-            />
+          {WEEKLY_UPDATE_PHOTOS.map((src, i) => (
+            <div key={i} style={s.updatePhoto}>
+              <img src={src} alt={`Week 3 photo ${i + 1}`} style={s.updatePhotoImg} />
+            </div>
           ))}
         </div>
 
@@ -278,22 +339,12 @@ export function CompletionScreen({
   return (
     <div style={s.completeWrap}>
       <div style={s.beforeAfter}>
-        <div
-          style={{
-            ...s.beforeAfterBox,
-            background:
-              'linear-gradient(135deg, #6B7280 0%, #374151 100%)',
-          }}
-        >
+        <div style={s.beforeAfterBox}>
+          <img src={BEFORE_AFTER.before} alt="Before" style={s.beforeAfterImg} />
           <div style={s.baLabel}>BEFORE</div>
         </div>
-        <div
-          style={{
-            ...s.beforeAfterBox,
-            background:
-              'linear-gradient(135deg, #E8DCC4 0%, #B7410E 100%)',
-          }}
-        >
+        <div style={s.beforeAfterBox}>
+          <img src={BEFORE_AFTER.after} alt="After" style={s.beforeAfterImg} />
           <div style={s.baLabel}>AFTER</div>
         </div>
       </div>
@@ -542,6 +593,125 @@ const s = {
     color: '#9CA3AF',
     marginTop: 2,
   } as const,
+  // HERO — full-bleed kitchen image with overlay
+  heroWrap: {
+    position: 'relative' as const,
+    width: '100%',
+    aspectRatio: '4/3',
+    overflow: 'hidden',
+  } as const,
+  heroImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+    display: 'block',
+  } as const,
+  heroGradient: {
+    position: 'absolute' as const,
+    inset: 0,
+    background:
+      'linear-gradient(180deg, rgba(27,43,77,0.15) 0%, rgba(27,43,77,0.55) 65%, rgba(27,43,77,0.92) 100%)',
+  } as const,
+  heroContent: {
+    position: 'absolute' as const,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    padding: '20px 22px 22px',
+    color: '#FFF',
+  } as const,
+  heroKicker: {
+    fontSize: 10,
+    fontWeight: 700,
+    letterSpacing: '0.14em',
+    color: 'rgba(255,255,255,0.78)',
+    marginBottom: 8,
+  } as const,
+  heroGreeting: {
+    fontFamily: "'Newsreader', Georgia, serif",
+    fontSize: 30,
+    fontWeight: 500,
+    lineHeight: 1.1,
+    marginBottom: 6,
+  } as const,
+  heroTagline: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.82)',
+    lineHeight: 1.45,
+    maxWidth: 300,
+  } as const,
+
+  // ELEVATED CARD — the progress + current phase block
+  elevatedCard: {
+    background: '#FFFFFF',
+    border: '1px solid #F0F0EE',
+    borderRadius: 18,
+    padding: 20,
+    boxShadow: '0 12px 32px -18px rgba(27,43,77,0.22)',
+    marginTop: -30,
+    position: 'relative' as const,
+    zIndex: 2,
+  } as const,
+  progressRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 16,
+  } as const,
+  tinyLabel: {
+    fontSize: 9,
+    fontWeight: 700,
+    letterSpacing: '0.12em',
+    color: '#9CA3AF',
+  } as const,
+  progressBig: {
+    fontFamily: "'Newsreader', Georgia, serif",
+    fontSize: 38,
+    fontWeight: 500,
+    color: '#1B2B4D',
+    lineHeight: 1,
+    marginTop: 4,
+  } as const,
+  progressSub: {
+    fontSize: 11.5,
+    color: '#6B7280',
+    marginTop: 4,
+    fontFamily: "'JetBrains Mono', monospace",
+  } as const,
+  ring: {
+    marginLeft: 'auto',
+    flexShrink: 0,
+  } as const,
+  phaseDivider: {
+    height: 1,
+    background: '#F0F0EE',
+    margin: '18px -4px 16px',
+  } as const,
+  currentPhase: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+  } as const,
+  currentPhaseImg: {
+    width: 54,
+    height: 54,
+    borderRadius: 10,
+    objectFit: 'cover' as const,
+    flexShrink: 0,
+  } as const,
+  currentPhaseLabel: {
+    fontFamily: "'Newsreader', Georgia, serif",
+    fontSize: 16,
+    fontWeight: 500,
+    color: '#1B2B4D',
+    marginTop: 3,
+  } as const,
+  currentPhaseSub: {
+    fontSize: 11,
+    color: '#9CA3AF',
+    marginTop: 2,
+  } as const,
+
+  // LEGACY (left in case other screens still reference — safe to keep)
   portalProgressCard: {
     background: '#1B2B4D',
     color: '#FFF',
@@ -572,6 +742,8 @@ const s = {
     fontSize: 11,
     color: 'rgba(255,255,255,0.65)',
   } as const,
+
+  // PORTAL TABS — refined with icon
   tabsGrid: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
@@ -579,17 +751,35 @@ const s = {
   } as const,
   tabTile: {
     background: '#FFFFFF',
-    border: '1px solid #E8E8E6',
-    borderRadius: 12,
-    padding: '14px 16px',
+    border: '1px solid #F0F0EE',
+    borderRadius: 14,
+    padding: '16px 16px',
     fontSize: 13,
     fontWeight: 600,
     color: '#1A1A1A',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 12,
+    transition: 'transform 120ms ease',
+  } as const,
+  tabTileIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    background: '#F5F0E6',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: '#B7410E',
+    fontSize: 16,
+    fontWeight: 700,
+    flexShrink: 0,
   } as const,
   portalFooter: {
     fontSize: 11,
     color: '#9CA3AF',
-    marginTop: 18,
+    marginTop: 20,
+    marginBottom: 4,
     textAlign: 'center' as const,
   } as const,
 
@@ -651,8 +841,16 @@ const s = {
   progressImg: {
     aspectRatio: '4/3',
     position: 'relative' as const,
+    overflow: 'hidden',
+    background: '#F5F0E6',
   } as const,
-  progressPhase: {
+  progressImgTag: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+    display: 'block',
+  } as const,
+  progressPhaseOverlay: {
     position: 'absolute' as const,
     top: 8,
     left: 8,
@@ -708,6 +906,14 @@ const s = {
   updatePhoto: {
     aspectRatio: '1',
     borderRadius: 8,
+    overflow: 'hidden',
+    background: '#F5F0E6',
+  } as const,
+  updatePhotoImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+    display: 'block',
   } as const,
   updateNext: {
     background: '#F5F0E6',
@@ -743,6 +949,14 @@ const s = {
     aspectRatio: '4/3',
     borderRadius: 12,
     position: 'relative' as const,
+    overflow: 'hidden',
+    background: '#F5F0E6',
+  } as const,
+  beforeAfterImg: {
+    width: '100%',
+    height: '100%',
+    objectFit: 'cover' as const,
+    display: 'block',
   } as const,
   baLabel: {
     position: 'absolute' as const,
