@@ -91,7 +91,7 @@ export function MemoryInspectorPage() {
   const [expandedId, setExpandedId]     = useState<string | null>(null)
   const [editingId, setEditingId]       = useState<string | null>(null)
   const [editValue, setEditValue]       = useState('')
-  const { data: bcData = [] } = useQuery({
+  const { data: bcData = [], error: bcError, refetch: bcRefetch } = useQuery({
     queryKey: ['memory_business_context'],
     queryFn: async () => {
       const { data } = await supabase.from('business_context').select('*').order('category')
@@ -179,6 +179,13 @@ export function MemoryInspectorPage() {
   )
 
   const agentNames = Array.from(new Set(displayHistory.map(h => h.agent_name)))
+
+  if (bcError) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load memory data. Check your connection and try again.</p>
+      <button onClick={() => bcRefetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="max-w-2xl mx-auto lg:max-w-4xl px-4 py-6 space-y-5">

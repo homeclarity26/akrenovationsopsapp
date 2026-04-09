@@ -28,7 +28,7 @@ type PayrollRecordRow = { id: string; pay_period_id: string; gross_pay: number; 
 type ProfileRow = { id: string; full_name: string; role: string }
 
 export function PayrollDashboardPage() {
-  const { data: payPeriods = [] } = useQuery({
+  const { data: payPeriods = [], error: payPeriodsError, refetch: payPeriodsRefetch } = useQuery({
     queryKey: ['pay_periods'],
     queryFn: async () => {
       const { data } = await supabase.from('pay_periods').select('*').order('period_start', { ascending: false })
@@ -77,6 +77,13 @@ export function PayrollDashboardPage() {
     () => currentRecords.reduce((s, r) => s + (r.gross_pay ?? 0), 0),
     [currentRecords],
   )
+
+  if (payPeriodsError) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load payroll. Check your connection and try again.</p>
+      <button onClick={() => payPeriodsRefetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   if (!upcomingPeriod) {
     return (

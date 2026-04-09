@@ -10,7 +10,7 @@ export function BonusTrackerPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
 
-  const { data: records = [], isLoading } = useQuery({
+  const { data: records = [], isLoading, error, refetch } = useQuery({
     queryKey: ['bonus-records', user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -29,6 +29,13 @@ export function BonusTrackerPage() {
   const hit_rate = ytd_projects > 0 ? ytd_qualified / ytd_projects : 0
 
   const yearLabel = new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load bonus tracker. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4 space-y-5">

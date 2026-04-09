@@ -37,7 +37,7 @@ export function EmployeeChecklistsPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
-  const { data: rawItems = [], isLoading } = useQuery({
+  const { data: rawItems = [], isLoading, error, refetch } = useQuery({
     queryKey: ['checklist-instance-items', user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -93,6 +93,13 @@ export function EmployeeChecklistsPage() {
     setLocalOverrides(prev => ({ ...prev, [id]: 'blocked' }))
     setActiveItem(null)
   }
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load checklists. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="space-y-4 pb-24">

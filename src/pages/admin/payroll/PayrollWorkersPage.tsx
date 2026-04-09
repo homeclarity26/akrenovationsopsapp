@@ -21,7 +21,7 @@ function fmtCurrency(n: number | null): string {
 type WorkerProfile = { id: string; full_name: string; role: string; email?: string; start_date?: string; hourly_rate?: number; base_salary?: number }
 
 export function PayrollWorkersPage() {
-  const { data: workers = [], isLoading } = useQuery({
+  const { data: workers = [], isLoading, error, refetch } = useQuery({
     queryKey: ['payroll_worker_profiles'],
     queryFn: async () => {
       const { data } = await supabase
@@ -33,6 +33,13 @@ export function PayrollWorkersPage() {
       return (data ?? []) as WorkerProfile[]
     },
   })
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load workers. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="px-4 lg:px-8 py-4 space-y-4 max-w-4xl mx-auto">

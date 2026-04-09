@@ -38,7 +38,7 @@ function isOverdue(dueDate: string | null): boolean {
 export function ChecklistsPage() {
   const navigate = useNavigate()
 
-  const { data: instancesData = [] } = useQuery({
+  const { data: instancesData = [], error: instancesError, refetch: instancesRefetch } = useQuery({
     queryKey: ['checklist_instances'],
     queryFn: async () => {
       const { data } = await supabase
@@ -122,6 +122,13 @@ export function ChecklistsPage() {
     setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'skipped' } : i)))
     setActiveItem(null)
   }
+
+  if (instancesError) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load checklists. Check your connection and try again.</p>
+      <button onClick={() => instancesRefetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="space-y-5 pb-10">

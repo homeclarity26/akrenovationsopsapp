@@ -37,7 +37,7 @@ export function ClientPunchList() {
     },
   })
 
-  const { data: dbItems = [] } = useQuery({
+  const { data: dbItems = [], error, refetch } = useQuery({
     queryKey: ['punch_list_items', projectId],
     enabled: !!projectId,
     queryFn: async () => {
@@ -59,6 +59,13 @@ export function ClientPunchList() {
     for (const item of next) overrides[item.id] = item
     setLocalOverrides(overrides)
   }
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load punch list. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   if (dbItems.length === 0) {
     return (

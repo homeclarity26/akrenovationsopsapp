@@ -24,7 +24,7 @@ type DbProfile = { id: string; full_name: string; role: string }
 type RateRow = { id: string; user_id: string; work_type: WorkType; rate_per_hour: number; is_default_billable: boolean }
 
 export function WorkTypeRatesPage() {
-  const { data: dbRates = [], isLoading: ratesLoading } = useQuery({
+  const { data: dbRates = [], isLoading: ratesLoading, error: ratesError, refetch: ratesRefetch } = useQuery({
     queryKey: ['work-type-rates'],
     queryFn: async () => {
       const { data } = await supabase.from('work_type_rates').select('*').order('work_type')
@@ -84,6 +84,13 @@ export function WorkTypeRatesPage() {
       </div>
     )
   }
+
+  if (ratesError) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load work type rates. Check your connection and try again.</p>
+      <button onClick={() => ratesRefetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4 space-y-6 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">

@@ -44,7 +44,7 @@ function groupByDate(events: Record<string, unknown>[]): { date: string; items: 
 export function SchedulePage() {
   const [view, setView] = useState<'calendar' | 'crew'>('calendar')
 
-  const { data: scheduleEvents = [], isLoading } = useQuery({
+  const { data: scheduleEvents = [], isLoading, error, refetch } = useQuery({
     queryKey: ['schedule_events'],
     queryFn: async () => {
       const { data } = await supabase
@@ -68,6 +68,13 @@ export function SchedulePage() {
   })
 
   const groupedEvents = groupByDate(scheduleEvents)
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load schedule. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4 space-y-4 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">

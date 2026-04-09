@@ -329,7 +329,7 @@ function CategorySection({ category, records, onUpdate, onDelete }: CategorySect
 export function BusinessContextPage() {
   const queryClient = useQueryClient()
 
-  const { data: records = [], isLoading } = useQuery<BusinessContextRecord[]>({
+  const { data: records = [], isLoading, error: recordsError, refetch: recordsRefetch } = useQuery<BusinessContextRecord[]>({
     queryKey: ['business_context'],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -384,6 +384,13 @@ export function BusinessContextPage() {
 
   const totalCategories = CATEGORY_ORDER.filter(cat => grouped[cat].length > 0).length
   const totalRecords = records.length
+
+  if (recordsError) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load business context. Check your connection and try again.</p>
+      <button onClick={() => recordsRefetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4 space-y-6 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">

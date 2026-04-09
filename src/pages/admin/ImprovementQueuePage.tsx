@@ -84,7 +84,7 @@ export function ImprovementQueuePage() {
   const [prs, setPrs] = useState<Record<string, ImprovementPr>>({})
   const [openingPrId, setOpeningPrId] = useState<string | null>(null)
 
-  const { data: rawImprovements = [], isLoading } = useQuery({
+  const { data: rawImprovements = [], isLoading, error, refetch } = useQuery({
     queryKey: ['improvement_specs'],
     queryFn: async () => {
       const { data } = await supabase
@@ -212,6 +212,13 @@ export function ImprovementQueuePage() {
       </div>
     )
   }
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load improvement queue. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4 space-y-6 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">

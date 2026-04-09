@@ -58,7 +58,7 @@ export function PhotosPage() {
   })
 
   // Photos from DB
-  const { data: photos = [] } = useQuery<Photo[]>({
+  const { data: photos = [], error, refetch } = useQuery<Photo[]>({
     queryKey: ['my_photos', user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -123,6 +123,13 @@ export function PhotosPage() {
       if (fileInputRef.current) fileInputRef.current.value = ''
     }
   }
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load photos. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   // Step: project selection
   if (step === 'project') {

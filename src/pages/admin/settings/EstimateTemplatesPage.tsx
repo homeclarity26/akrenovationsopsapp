@@ -48,7 +48,7 @@ export function EstimateTemplatesPage() {
   const [selected, setSelected] = useState<EstimateTemplate | null>(null)
   const [innerTab, setInnerTab] = useState<'materials' | 'labor'>('materials')
 
-  const { data: rawTemplates = [], isLoading } = useQuery({
+  const { data: rawTemplates = [], isLoading, error, refetch } = useQuery({
     queryKey: ['estimate-templates'],
     queryFn: async () => {
       const { data } = await supabase.from('estimate_templates').select('*').order('project_type')
@@ -69,6 +69,13 @@ export function EstimateTemplatesPage() {
       </div>
     )
   }
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load estimate templates. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="space-y-5 pb-10">

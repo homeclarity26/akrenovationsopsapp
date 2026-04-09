@@ -32,7 +32,7 @@ export function NotesPage() {
   const [logWeather, setLogWeather] = useState('')
   const [submittingLog, setSubmittingLog] = useState(false)
 
-  const { data: projects = [] } = useQuery<Project[]>({
+  const { data: projects = [], error: projectsError, refetch: projectsRefetch } = useQuery<Project[]>({
     queryKey: ['active-projects-notes'],
     queryFn: async () => {
       const { data } = await supabase.from('projects').select('id, title').eq('status', 'active').order('title')
@@ -119,6 +119,13 @@ export function NotesPage() {
   }
 
   const selectedProject = projects.find(p => p.id === selectedProjectId)
+
+  if (projectsError) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load notes. Check your connection and try again.</p>
+      <button onClick={() => projectsRefetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4 space-y-5">

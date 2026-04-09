@@ -89,7 +89,7 @@ export function TimeClockPage() {
   const queryClient = useQueryClient()
   const TODAY = new Date().toISOString().slice(0, 10)
 
-  const { data: dbEntries = [] } = useQuery({
+  const { data: dbEntries = [], error, refetch } = useQuery({
     queryKey: ['today-time-entries', user?.id, TODAY],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -314,6 +314,13 @@ export function TimeClockPage() {
       setShowClockIn(true)
     }, 150)
   }
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load time entries. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   // ── Render ────────────────────────────────────────────────────────────────────
 

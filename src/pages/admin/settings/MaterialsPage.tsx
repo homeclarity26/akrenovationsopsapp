@@ -22,7 +22,7 @@ export function MaterialsPage() {
   const navigate = useNavigate()
   const [filter, setFilter] = useState<string>('all')
 
-  const { data: materialSpecs = [], isLoading } = useQuery({
+  const { data: materialSpecs = [], isLoading, error, refetch } = useQuery({
     queryKey: ['material-specs'],
     queryFn: async () => {
       const { data } = await supabase.from('material_specs').select('*').order('created_at', { ascending: false })
@@ -52,6 +52,13 @@ export function MaterialsPage() {
       </div>
     )
   }
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load material specs. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4 space-y-4 max-w-4xl mx-auto lg:px-8 lg:py-6">

@@ -19,7 +19,7 @@ export function SchedulePageEmployee() {
   const weekStartStr = weekStart.toISOString().slice(0, 10)
   const weekEndStr = weekEnd.toISOString().slice(0, 10)
 
-  const { data: events = [], isLoading } = useQuery({
+  const { data: events = [], isLoading, error, refetch } = useQuery({
     queryKey: ['schedule-events-week', user?.id, weekStartStr],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -33,6 +33,13 @@ export function SchedulePageEmployee() {
       return data ?? []
     },
   })
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load schedule. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   const todayEvents = events.filter((e: any) => e.start_date === todayStr)
   const todayFirst: any = todayEvents[0] ?? null

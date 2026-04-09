@@ -32,7 +32,7 @@ function groupByCategory(templates: ChecklistTemplate[]): Record<string, Checkli
 }
 
 export function ChecklistTemplatesPage() {
-  const { data: templates = [], isLoading } = useQuery({
+  const { data: templates = [], isLoading, error, refetch } = useQuery({
     queryKey: ['checklist-templates'],
     queryFn: async () => {
       const { data } = await supabase.from('checklist_templates').select('*').order('created_at', { ascending: false })
@@ -50,6 +50,13 @@ export function ChecklistTemplatesPage() {
       </div>
     )
   }
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load checklist templates. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   if (templates.length === 0) {
     return (

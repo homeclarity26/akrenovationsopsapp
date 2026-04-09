@@ -24,7 +24,7 @@ function fmtDuration(hours: number | null) {
 }
 
 export function PendingTimeEntriesPage() {
-  const { data: dbEntries = [] } = useQuery({
+  const { data: dbEntries = [], error, refetch } = useQuery({
     queryKey: ['pending_time_entries'],
     queryFn: async () => {
       const { data } = await supabase
@@ -47,6 +47,13 @@ export function PendingTimeEntriesPage() {
   const reject = (id: string) => { setRemovedIds(prev => new Set([...prev, id])); setRejectId(null); setRejectReason('') }
   const bulkApprove = () => { setRemovedIds(prev => new Set([...prev, ...selected])); setSelected(new Set()) }
   const toggleSelect = (id: string) => setSelected(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s })
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load time entries. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   if (entries.length === 0) {
     return (

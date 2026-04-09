@@ -26,7 +26,7 @@ export function PaystubsPage() {
   const { user } = useAuth()
   const [expanded, setExpanded] = useState<string | null>(null)
 
-  const { data: myRecords = [] } = useQuery({
+  const { data: myRecords = [], error, refetch } = useQuery({
     queryKey: ['my_payroll_records', user?.id],
     enabled: !!user?.id,
     queryFn: async () => {
@@ -57,6 +57,13 @@ export function PaystubsPage() {
     employee_ss_ytd: myRecords.reduce((s, r) => s + (r.est_employee_ss ?? 0), 0),
     employee_medicare_ytd: myRecords.reduce((s, r) => s + (r.est_employee_medicare ?? 0), 0),
   }
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load paystubs. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="px-4 lg:px-8 py-4 space-y-4 max-w-2xl mx-auto">

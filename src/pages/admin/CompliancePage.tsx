@@ -42,7 +42,7 @@ type Filter = 'all' | 'critical' | 'high' | 'expiring'
 
 export function CompliancePage() {
   const queryClient = useQueryClient()
-  const { data: items = [], isLoading } = useQuery({
+  const { data: items = [], isLoading, error, refetch } = useQuery({
     queryKey: ['compliance-items'],
     queryFn: async () => {
       const { data } = await supabase.from('compliance_items').select('*').order('priority', { ascending: true })
@@ -129,6 +129,13 @@ export function CompliancePage() {
       </div>
     )
   }
+
+  if (error) return (
+    <div className="p-8 text-center">
+      <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load compliance. Check your connection and try again.</p>
+      <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
+    </div>
+  );
 
   return (
     <div className="p-4 lg:px-8 lg:py-6 max-w-2xl mx-auto lg:max-w-none space-y-4 pb-24">
