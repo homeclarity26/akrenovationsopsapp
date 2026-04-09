@@ -9,6 +9,18 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  user_id: z.string(),
+  user_role: z.enum(['admin', 'employee', 'client']),
+  agent_name: z.string(),
+  capability_required: z.string().optional(),
+  entity_type: z.string().optional(),
+  entity_id: z.string().optional(),
+  query: z.string().optional(),
+  include_sections: z.array(z.string()).optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -115,7 +127,15 @@ serve(async (req) => {
   if (!rl.allowed) return rateLimitResponse(rl)
 
   try {
-    const input: AssembleContextInput = await req.json()
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+    const input: AssembleContextInput = parsedInput.data
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

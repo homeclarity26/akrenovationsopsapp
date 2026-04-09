@@ -6,6 +6,11 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  project_id: z.string().uuid('project_id must be a valid UUID'),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -52,13 +57,15 @@ serve(async (req) => {
   const rl = await checkRateLimit(req, 'agent-calibrate-templates')
   if (!rl.allowed) return rateLimitResponse(rl)
   try {
-    const { project_id } = (await req.json()) as CalibrateRequest
-    if (!project_id) {
-      return new Response(JSON.stringify({ error: 'project_id required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
+    const { project_id } = parsedInput.data
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

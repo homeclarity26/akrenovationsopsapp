@@ -2,6 +2,16 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  project_id: z.string().uuid('project_id must be a valid UUID'),
+  scope_id: z.string().uuid('scope_id must be a valid UUID'),
+  retention_percent: z.number().optional(),
+  start_date: z.string().optional(),
+  completion_date: z.string().optional(),
+  liquidated_damages_per_day: z.number().optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -109,7 +119,14 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
-    const body = await req.json().catch(() => ({}))
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
     const {
       project_id,
       scope_id,
@@ -117,14 +134,7 @@ serve(async (req) => {
       start_date,
       completion_date,
       liquidated_damages_per_day,
-    } = body
-
-    if (!project_id || !scope_id) {
-      return new Response(
-        JSON.stringify({ error: 'project_id and scope_id are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
-      )
-    }
+    } = parsedInput.data
 
     // Assemble context
     const basePrompt = await callAssembleContext('agent-generate-contract', `generate sub contract from scope ${scope_id}`, project_id)

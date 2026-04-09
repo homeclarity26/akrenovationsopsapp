@@ -11,6 +11,16 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  html_content: z.string().optional(),
+  file_name: z.string(),
+  document_type: z.string(),
+  document_id: z.string(),
+  project_id: z.string().uuid('project_id must be a valid UUID').optional(),
+  replace_existing: z.boolean().optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -152,14 +162,15 @@ serve(async (req) => {
   if (!rl.allowed) return rateLimitResponse(rl)
 
   try {
-    const input: SyncToDriveInput = await req.json()
-    const { html_content, file_name, document_type, document_id, project_id, replace_existing = true } = input
-
-    if (!file_name || !document_type || !document_id) {
-      return new Response(JSON.stringify({ error: 'file_name, document_type, document_id required' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
+    const { html_content, file_name, document_type, document_id, project_id, replace_existing = true } = parsedInput.data
 
     // Check if Google Drive is configured
     const serviceAccountJson = Deno.env.get('GOOGLE_SERVICE_ACCOUNT_JSON')

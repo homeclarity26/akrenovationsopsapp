@@ -5,6 +5,11 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  improvement_spec_id: z.string().uuid('improvement_spec_id must be a valid UUID'),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -120,13 +125,15 @@ serve(async (req) => {
   }
 
   try {
-    const { improvement_spec_id } = await req.json()
-    if (!improvement_spec_id) {
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
       return new Response(
-        JSON.stringify({ error: 'Missing improvement_spec_id' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
+    const { improvement_spec_id } = parsedInput.data
 
     const supabase = createClient(supabaseUrl(), serviceKey())
 

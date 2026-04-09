@@ -7,6 +7,13 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  message: z.string(),
+  session_id: z.string(),
+  user_id: z.string(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -433,14 +440,15 @@ serve(async (req) => {
   if (!rl.allowed) return rateLimitResponse(rl)
 
   try {
-    const input: ChatInput = await req.json()
-    const { message, session_id, user_id } = input
-
-    if (!message || !session_id || !user_id) {
-      return new Response(JSON.stringify({ error: 'message, session_id, user_id required' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
+    const { message, session_id, user_id } = parsedInput.data
 
     const supabase = createClient(supabaseUrl(), serviceKey())
 

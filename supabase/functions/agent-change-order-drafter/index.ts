@@ -1,6 +1,14 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  change_order_id: z.string().uuid('change_order_id must be a valid UUID').optional(),
+  project_id: z.string().uuid('project_id must be a valid UUID').optional(),
+  flag_description: z.string().optional(),
+  flag_photos: z.array(z.string()).optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -72,8 +80,14 @@ serve(async (req) => {
     )
 
     const body = await req.json().catch(() => ({}))
-    const { change_order_id, project_id, flag_description, flag_photos } = body
-
+    const parsed = InputSchema.safeParse(body)
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+    const { change_order_id, project_id, flag_description, flag_photos } = parsed.data
     if (!change_order_id && !project_id) {
       return new Response(JSON.stringify({ error: 'change_order_id or project_id required' }), {
         status: 400,

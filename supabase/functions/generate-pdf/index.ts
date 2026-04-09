@@ -6,6 +6,16 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  document_type: z.enum(['proposal', 'invoice', 'contract', 'change_order', 'daily_log', 'punch_list', 'pl_report', 'bonus_summary', 'quote_comparison']),
+  document_id: z.string(),
+  options: z.object({
+    include_signature_block: z.boolean().optional(),
+    watermark: z.string().optional(),
+  }).optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -423,14 +433,15 @@ serve(async (req) => {
   if (!rl.allowed) return rateLimitResponse(rl)
 
   try {
-    const input: GeneratePdfInput = await req.json()
-    const { document_type, document_id, options = {} } = input
-
-    if (!document_type || !document_id) {
-      return new Response(JSON.stringify({ error: 'document_type and document_id required' }), {
-        status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
-      })
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
+    const { document_type, document_id, options = {} } = parsedInput.data
 
     const supabase = createClient(supabaseUrl(), serviceKey())
 

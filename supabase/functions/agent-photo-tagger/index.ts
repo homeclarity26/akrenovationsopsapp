@@ -1,6 +1,12 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  photo_id: z.string().uuid('photo_id must be a valid UUID'),
+  image_url: z.string().url('image_url must be a valid URL'),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -85,14 +91,14 @@ serve(async (req) => {
     )
 
     const body = await req.json().catch(() => ({}))
-    const { photo_id, image_url } = body
-
-    if (!photo_id || !image_url) {
-      return new Response(JSON.stringify({ error: 'photo_id and image_url required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const parsed = InputSchema.safeParse(body)
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
+    const { photo_id, image_url } = parsed.data
 
     await callAssembleContext('agent-photo-tagger', 'analyze construction photo and generate tags and description')
 

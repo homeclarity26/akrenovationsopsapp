@@ -1,6 +1,16 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const JsonInputSchema = z.object({
+  From: z.string().optional(),
+  from_phone: z.string().optional(),
+  Body: z.string().optional(),
+  message: z.string().optional(),
+  MessageSid: z.string().optional(),
+  message_sid: z.string().optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -80,7 +90,15 @@ serve(async (req) => {
       messageBody = params.get('Body') ?? ''
       messageSid = params.get('MessageSid') ?? ''
     } else {
-      const body = await req.json().catch(() => ({}))
+      const rawBody = await req.json().catch(() => ({}))
+      const parsed = JsonInputSchema.safeParse(rawBody)
+      if (!parsed.success) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
+          { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        )
+      }
+      const body = parsed.data
       fromPhone = body.From ?? body.from_phone ?? ''
       messageBody = body.Body ?? body.message ?? ''
       messageSid = body.MessageSid ?? body.message_sid ?? ''

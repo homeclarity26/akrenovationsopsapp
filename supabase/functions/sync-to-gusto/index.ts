@@ -9,6 +9,12 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  pay_period_id: z.string().uuid('pay_period_id must be a valid UUID'),
+  dry_run: z.boolean().optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -170,13 +176,15 @@ serve(async (req) => {
   await callAssembleContext('sync-to-gusto')
 
   try {
-    const { pay_period_id, dry_run } = (await req.json()) as { pay_period_id: string; dry_run?: boolean }
-    if (!pay_period_id) {
-      return new Response(JSON.stringify({ error: 'pay_period_id required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
+    const { pay_period_id, dry_run } = parsedInput.data
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

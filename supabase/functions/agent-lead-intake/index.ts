@@ -1,6 +1,11 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  lead_id: z.string().uuid('lead_id must be a valid UUID'),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -87,14 +92,14 @@ serve(async (req) => {
     )
 
     const body = await req.json().catch(() => ({}))
-    const { lead_id } = body
-
-    if (!lead_id) {
-      return new Response(JSON.stringify({ error: 'lead_id required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const parsed = InputSchema.safeParse(body)
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
+    const { lead_id } = parsed.data
 
     const basePrompt = await callAssembleContext('agent-lead-intake', 'score new lead and draft acknowledgment response')
     const ackSystemPrompt =

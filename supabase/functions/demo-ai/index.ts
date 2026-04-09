@@ -9,6 +9,14 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  system: z.string(),
+  message: z.string(),
+  model: z.string().optional(),
+  max_tokens: z.number().optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,27 +52,20 @@ serve(async (req) => {
     })
   }
 
-  let body: DemoAIRequest
-  try {
-    body = await req.json()
-  } catch {
-    return new Response(JSON.stringify({ error: 'invalid json' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
+  const rawBody = await req.json().catch(() => ({}))
+  const parsedInput = InputSchema.safeParse(rawBody)
+  if (!parsedInput.success) {
+    return new Response(
+      JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+    )
   }
+  const body = parsedInput.data
 
   const system = (body.system || '').toString().slice(0, 8000)
   const message = (body.message || '').toString().slice(0, 2000)
   const model = body.model || 'claude-haiku-4-5'
   const maxTokens = Math.min(body.max_tokens || 300, 500)
-
-  if (!system || !message) {
-    return new Response(JSON.stringify({ error: 'system and message required' }), {
-      status: 400,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-    })
-  }
 
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY')
   if (!apiKey) {

@@ -2,6 +2,11 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  week_start: z.string().optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -62,7 +67,15 @@ serve(async (req) => {
       'You are an AI assistant for AK Renovations, a high-end residential remodeling contractor in Summit County, Ohio.')
       + `\n\nSCHEDULE OPTIMIZER TASK\nReview crew schedule and project status. Suggest optimal crew assignments. Consider time-sensitive phases, employee strengths, inspections, and sub coordination.`
 
-    const { week_start } = await req.json().catch(() => ({}))
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+    const { week_start } = parsedInput.data
     const weekStart = week_start ?? new Date().toISOString().split('T')[0]
 
     const { data: projects } = await supabase.from('projects').select('id,title,status,current_phase,target_completion_date').eq('status', 'active')

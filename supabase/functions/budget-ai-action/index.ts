@@ -6,6 +6,15 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  project_id: z.string().uuid('project_id must be a valid UUID'),
+  user_message: z.string(),
+  action_type: z.string().optional(),
+  user_id: z.string().uuid('user_id must be a valid UUID').optional(),
+  user_role: z.enum(['admin', 'employee', 'client']).optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -68,15 +77,15 @@ serve(async (req) => {
   if (!rl.allowed) return rateLimitResponse(rl)
 
   try {
-    const body: RequestBody = await req.json()
-    const { project_id, user_message, action_type, user_id, user_role = 'admin' } = body
-
-    if (!project_id || !user_message) {
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
       return new Response(
-        JSON.stringify({ error: 'project_id and user_message are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
+    const { project_id, user_message, action_type, user_id, user_role = 'admin' } = parsedInput.data
 
     const supabase = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',

@@ -3,6 +3,18 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  improvement: z.object({
+    title: z.string(),
+    problem: z.string(),
+    evidence: z.string(),
+    solution: z.string(),
+    priority: z.string(),
+    category: z.string(),
+  }),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -27,7 +39,15 @@ serve(async (req) => {
   if (!rl.allowed) return rateLimitResponse(rl)
 
   try {
-    const { improvement }: ImprovementInput = await req.json()
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+    const { improvement } = parsedInput.data
 
     const systemPrompt = `You are generating a Claude Code improvement spec for AK Ops — a React/TypeScript/Supabase app for a renovation contractor.
 

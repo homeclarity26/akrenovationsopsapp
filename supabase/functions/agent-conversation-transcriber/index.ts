@@ -2,6 +2,11 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  log_id: z.string().uuid('log_id must be a valid UUID'),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -71,7 +76,15 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
-    const { log_id } = await req.json()
+    const rawBody = await req.json().catch(() => ({}))
+    const parsed = InputSchema.safeParse(rawBody)
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+    const { log_id } = parsed.data
     const { data: log } = await supabase.from('communication_log').select('*').eq('id', log_id).single()
     if (!log) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: corsHeaders })
 

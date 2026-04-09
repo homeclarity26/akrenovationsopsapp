@@ -4,6 +4,16 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  file_url: z.string().url('file_url must be a valid URL'),
+  project_id: z.string().uuid('project_id must be a valid UUID'),
+  trade_id: z.string().uuid('trade_id must be a valid UUID').optional(),
+  quote_id: z.string().uuid('quote_id must be a valid UUID').optional(),
+  user_id: z.string().uuid('user_id must be a valid UUID').optional(),
+  user_role: z.enum(['admin', 'employee', 'client']).optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -71,15 +81,15 @@ serve(async (req) => {
   if (!rl.allowed) return rateLimitResponse(rl)
 
   try {
-    const body: RequestBody = await req.json()
-    const { file_url, project_id, trade_id, quote_id, user_id, user_role = 'admin' } = body
-
-    if (!file_url || !project_id) {
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
       return new Response(
-        JSON.stringify({ error: 'file_url and project_id are required' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
+    const { file_url, project_id, trade_id, quote_id, user_id, user_role = 'admin' } = parsedInput.data
 
     // Call assemble-context to get memory-enriched base
     let baseSystemPrompt: string | null = null

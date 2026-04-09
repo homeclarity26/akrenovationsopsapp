@@ -19,6 +19,11 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  text: z.string(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -104,13 +109,15 @@ serve(async (req) => {
   if (!rl.allowed) return rateLimitResponse(rl)
 
   try {
-    const { text } = await req.json()
-    if (!text || typeof text !== 'string') {
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
       return new Response(
-        JSON.stringify({ error: 'text is required and must be a string' }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
       )
     }
+    const { text } = parsedInput.data
 
     const geminiKey = Deno.env.get('GEMINI_API_KEY')
     const openaiKey = Deno.env.get('OPENAI_API_KEY')

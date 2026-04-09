@@ -1,6 +1,13 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  file_id: z.string().uuid('file_id must be a valid UUID'),
+  project_id: z.string().uuid('project_id must be a valid UUID').optional(),
+  entered_by: z.string().uuid('entered_by must be a valid UUID').optional(),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -100,14 +107,14 @@ serve(async (req) => {
     )
 
     const body = await req.json().catch(() => ({}))
-    const { file_id, project_id, entered_by } = body
-
-    if (!file_id) {
-      return new Response(JSON.stringify({ error: 'file_id required' }), {
-        status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-      })
+    const parsed = InputSchema.safeParse(body)
+    if (!parsed.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
     }
+    const { file_id, project_id, entered_by } = parsed.data
 
     await callAssembleContext('agent-receipt-processor', 'extract receipt data and create expense record')
 

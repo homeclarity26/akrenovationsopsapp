@@ -9,6 +9,13 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { z } from 'npm:zod@3'
+
+const InputSchema = z.object({
+  trigger_event: z.string(),
+  entity_id: z.string(),
+  entity_type: z.enum(['project', 'lead', 'employee', 'subcontractor', 'general']),
+})
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -56,7 +63,15 @@ serve(async (req) => {
   const rl = await checkRateLimit(req, 'generate-checklists')
   if (!rl.allowed) return rateLimitResponse(rl)
   try {
-    const { trigger_event, entity_id, entity_type } = (await req.json()) as GenerateRequest
+    const rawBody = await req.json().catch(() => ({}))
+    const parsedInput = InputSchema.safeParse(rawBody)
+    if (!parsedInput.success) {
+      return new Response(
+        JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      )
+    }
+    const { trigger_event, entity_id, entity_type } = parsedInput.data
     if (!trigger_event || !entity_id || !entity_type) {
       return new Response(
         JSON.stringify({ error: 'trigger_event, entity_id, entity_type required' }),
