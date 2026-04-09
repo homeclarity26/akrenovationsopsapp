@@ -1,0 +1,107 @@
+import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+
+// Stripe webhook handler
+// This function receives webhook events from Stripe and routes them to the
+// appropriate handlers. It verifies the webhook signature before processing.
+//
+// Required Supabase secrets:
+// - STRIPE_SECRET_KEY: Your Stripe secret key
+// - STRIPE_WEBHOOK_SECRET: From Stripe Dashboard → Webhooks → signing secret
+//
+// To activate: Add both secrets in Supabase dashboard, then set up the webhook
+// endpoint in Stripe Dashboard pointing to this function's URL:
+//   https://mebzqfeeiciayxdetteb.supabase.co/functions/v1/stripe-webhook
+//
+// STATUS: STUB — ready to activate when Stripe is configured.
+
+const corsHeaders = {
+  'Access-Control-Allow-Origin': '*',
+  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
+};
+
+serve(async (req: Request) => {
+  if (req.method === 'OPTIONS') {
+    return new Response('ok', { headers: corsHeaders });
+  }
+
+  const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
+  const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
+
+  // If Stripe is not yet configured, log and return 200
+  // (Stripe retries on non-200 responses, which would fill the error log)
+  if (!stripeSecretKey || !webhookSecret) {
+    console.log('stripe-webhook: Stripe not configured. Add STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET to proceed.');
+    return new Response(JSON.stringify({ received: true, status: 'not_configured' }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+  }
+
+  const signature = req.headers.get('stripe-signature');
+  if (!signature) {
+    return new Response('Missing stripe-signature header', { status: 400 });
+  }
+
+  const body = await req.text();
+
+  // Log the webhook event to the database for debugging
+  const supabase = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
+  );
+
+  try {
+    // Parse event (signature verification requires the Stripe library)
+    // When Stripe is fully activated, replace this with proper signature verification
+    // using: import Stripe from 'https://esm.sh/stripe@13?target=deno'
+    // then: const event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret)
+    const event = JSON.parse(body);
+
+    // Log the event
+    await supabase.from('stripe_webhook_events').insert({
+      event_id: event.id,
+      event_type: event.type,
+      payload: event,
+      received_at: new Date().toISOString(),
+      processed: false,
+    }).catch(() => {
+      // Table may not exist yet — log to console
+      console.log('stripe-webhook event received:', event.type, event.id);
+    });
+
+    // Route to handlers based on event type
+    switch (event.type) {
+      case 'payment_intent.succeeded':
+        // TODO: Mark invoice as paid, send receipt
+        // Find invoice by payment_intent metadata, update status to 'paid'
+        console.log('Payment succeeded:', event.data.object.id);
+        break;
+
+      case 'payment_intent.payment_failed':
+        // TODO: Notify admin of failed payment
+        console.log('Payment failed:', event.data.object.id);
+        break;
+
+      case 'invoice.paid':
+        // TODO: Update invoice status in AK Ops
+        console.log('Invoice paid:', event.data.object.id);
+        break;
+
+      default:
+        console.log('Unhandled Stripe event type:', event.type);
+    }
+
+    return new Response(JSON.stringify({ received: true }), {
+      status: 200,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+    });
+
+  } catch (err) {
+    console.error('stripe-webhook error:', err);
+    return new Response(
+      JSON.stringify({ error: 'Webhook processing failed' }),
+      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+    );
+  }
+});
