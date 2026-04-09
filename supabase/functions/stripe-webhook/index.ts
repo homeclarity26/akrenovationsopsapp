@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts';
 
 // Stripe webhook handler
 // This function receives webhook events from Stripe and routes them to the
@@ -24,6 +25,9 @@ serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
   }
+
+  const rateLimitResult = await checkRateLimit(req, 'stripe-webhook');
+  if (!rateLimitResult.allowed) return rateLimitResponse();
 
   const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
   const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
