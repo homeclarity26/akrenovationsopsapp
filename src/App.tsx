@@ -54,6 +54,8 @@ import { TemplatesPage } from '@/pages/admin/settings/TemplatesPage'
 import { BackupsPage } from '@/pages/admin/settings/BackupsPage'
 import { SecurityPage } from '@/pages/admin/settings/SecurityPage'
 import { BusinessContextPage } from '@/pages/admin/settings/BusinessContextPage'
+// Phase O — Reliability
+import { HealthPage } from '@/pages/admin/settings/HealthPage'
 import { OnboardingPage } from '@/pages/admin/OnboardingPage'
 
 // Employee pages
@@ -186,6 +188,7 @@ function AppRoutes() {
         {/* Phase M — Backups & Security */}
         <Route path="settings/backups" element={<BackupsPage />} />
         <Route path="settings/security" element={<SecurityPage />} />
+        <Route path="settings/health" element={<HealthPage />} />
         {/* Business context editor + onboarding */}
         <Route path="settings/context" element={<BusinessContextPage />} />
         <Route path="onboard" element={<OnboardingPage />} />

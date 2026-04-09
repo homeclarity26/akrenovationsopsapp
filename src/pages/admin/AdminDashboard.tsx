@@ -4,6 +4,7 @@ import { ScanLine, FileText, Send, Sparkles, TrendingUp, AlertCircle, Clock, Ima
 import { Card, MetricCard } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { SectionHeader } from '@/components/ui/SectionHeader'
+import { HealthMonitor } from '@/components/HealthMonitor'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 
@@ -186,6 +187,9 @@ export function AdminDashboard() {
           subtitle="All time"
         />
       </div>
+
+      {/* System Health */}
+      <HealthMonitor />
 
       {/* Alerts */}
       {hasAlerts && (
