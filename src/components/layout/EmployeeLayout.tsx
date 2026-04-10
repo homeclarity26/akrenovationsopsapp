@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { NavLink, Outlet } from 'react-router-dom'
 import {
   Home, ShoppingCart, Clock, Calendar,
@@ -7,7 +7,12 @@ import {
 import { AIBar } from '@/components/ui/AIBar'
 import { Badge } from '@/components/ui/Badge'
 import { ModeToggle } from '@/components/ui/ModeToggle'
+import { PWAPrompt } from '@/components/ui/PWAPrompt'
+import { PasswordChangePage } from '@/pages/onboarding/PasswordChangePage'
+import { EmployeeOnboarding } from '@/pages/onboarding/EmployeeOnboarding'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
+import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -21,6 +26,23 @@ const NAV = [
 export function EmployeeLayout() {
   const [aiOpen, setAiOpen] = useState(false)
   const { data: company } = useCompanyProfile()
+  const { user } = useAuth()
+  const [mustChangePassword, setMustChangePassword] = useState(false)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+  const [showPWA, setShowPWA] = useState(false)
+
+  useEffect(() => {
+    if (!user) return
+    supabase.from('profiles')
+      .select('must_change_password, onboarding_complete')
+      .eq('id', user.id)
+      .single()
+      .then(({ data }) => {
+        if (data?.must_change_password) setMustChangePassword(true)
+        else if (!data?.onboarding_complete) setShowOnboarding(true)
+        else setShowPWA(true)
+      })
+  }, [user])
 
   return (
     <div className="flex flex-col min-h-svh bg-[var(--bg)]">
@@ -72,6 +94,15 @@ export function EmployeeLayout() {
       </nav>
 
       {aiOpen && <AIBar onClose={() => setAiOpen(false)} placeholder="Ask about today's job, materials, or schedule..." />}
+      {mustChangePassword && (
+        <PasswordChangePage onComplete={() => { setMustChangePassword(false); setShowOnboarding(true) }} />
+      )}
+      {!mustChangePassword && showOnboarding && (
+        <EmployeeOnboarding onComplete={() => { setShowOnboarding(false); setShowPWA(true) }} />
+      )}
+      {!mustChangePassword && !showOnboarding && showPWA && (
+        <PWAPrompt role="employee" />
+      )}
     </div>
   )
 }

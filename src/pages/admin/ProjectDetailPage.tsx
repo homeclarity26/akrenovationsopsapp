@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, MapPin, Phone, Mail, Check, Flag, AlertCircle, ChevronRight, Mic, Sparkles, Star, Image as ImageIcon, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, MapPin, Phone, Mail, Check, Flag, AlertCircle, ChevronRight, Mic, Sparkles, Star, Image as ImageIcon, ShieldCheck, UserPlus } from 'lucide-react'
+import { InviteClientModal } from '@/components/ui/InviteClientModal'
 import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -19,6 +20,7 @@ export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const [tab, setTab] = useState<Tab>('overview')
+  const [showInviteClient, setShowInviteClient] = useState(false)
 
   const { data: project, isLoading: projectLoading, error: projectError, refetch: projectRefetch } = useQuery({
     queryKey: ['project', id],
@@ -227,7 +229,16 @@ export function ProjectDetailPage() {
           <>
             {/* Client */}
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-3">Client</p>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Client</p>
+                <button
+                  onClick={() => setShowInviteClient(true)}
+                  className="flex items-center gap-1.5 text-xs font-semibold text-[var(--navy)] px-2.5 py-1.5 rounded-lg border border-[var(--navy)]"
+                >
+                  <UserPlus size={12} />
+                  Invite Client
+                </button>
+              </div>
               <p className="font-semibold text-[var(--text)]">{project.client_name}</p>
               <div className="space-y-2 mt-3">
                 <div className="flex items-center gap-2">
@@ -717,6 +728,13 @@ export function ProjectDetailPage() {
           </Card>
         )}
       </div>
+      {showInviteClient && project && (
+        <InviteClientModal
+          projectId={project.id}
+          projectName={project.title}
+          onClose={() => setShowInviteClient(false)}
+        />
+      )}
     </div>
   )
 }
