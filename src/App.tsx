@@ -93,6 +93,9 @@ const ClientSelections = lazy(() => import('./pages/client/ClientSelections').th
 const ClientPunchList = lazy(() => import('./pages/client/ClientPunchList').then(m => ({ default: m.ClientPunchList })))
 const ClientSchedule = lazy(() => import('./pages/client/ClientSchedule').then(m => ({ default: m.ClientSchedule })))
 const ClientReferral = lazy(() => import('./pages/client/ClientReferral').then(m => ({ default: m.ClientReferral })))
+// Client onboarding (public — user creates account during wizard)
+const ClientOnboardingWizard = lazy(() => import('./pages/onboarding/ClientOnboardingWizard').then(m => ({ default: m.ClientOnboardingWizard })))
+
 // Public gallery (no auth)
 const PublicGallery = lazy(() => import('./pages/public/PublicGallery').then(m => ({ default: m.PublicGallery })))
 // Public demos (no auth, no Supabase)
@@ -266,6 +269,10 @@ function AppRoutes() {
           <Route path="companies/:id" element={<PlatformCompanyDetail />} />
           <Route path="users" element={<PlatformUsers />} />
         </Route>
+
+        {/* Client onboarding wizard (public — account is created during flow) */}
+        <Route path="/welcome" element={<ClientOnboardingWizard />} />
+        <Route path="/onboard/client" element={<ClientOnboardingWizard />} />
 
         {/* Phase K — public shareable gallery (no auth) */}
         <Route path="/gallery/:token" element={<PublicGallery />} />
