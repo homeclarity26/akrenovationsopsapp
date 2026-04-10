@@ -16,7 +16,7 @@ export function ClientProgress() {
     <div className="p-4 space-y-5 max-w-lg mx-auto">
       {/* Welcome */}
       <div className="bg-[var(--navy)] rounded-xl p-4">
-        <p className="text-white/60 text-xs mb-1">AK Renovations</p>
+        <p className="text-white/60 text-xs mb-1">Your Contractor</p>
         <h1 className="font-display text-white text-2xl mb-0.5">Johnson Master Bath</h1>
         <p className="text-white/60 text-sm">142 Maple Ridge Drive, Hudson</p>
       </div>
@@ -83,11 +83,11 @@ export function ClientProgress() {
         <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-3">Your Contractor</p>
         <div className="flex items-center gap-3">
           <div className="w-10 h-10 rounded-full bg-[var(--navy)] flex items-center justify-center">
-            <span className="text-white font-semibold text-sm">AK</span>
+            <span className="text-white font-semibold text-sm">C</span>
           </div>
           <div>
             <p className="font-semibold text-sm text-[var(--text)]">Adam Kilgore</p>
-            <p className="text-xs text-[var(--text-secondary)]">AK Renovations · (330) 555-0100</p>
+            <p className="text-xs text-[var(--text-secondary)]">Your Contractor</p>
           </div>
         </div>
       </Card>

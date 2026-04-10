@@ -4,6 +4,7 @@ import { ChevronRight, User, Brain, Zap, AlertTriangle, Layers, Wrench, BookOpen
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 
 const INTEGRATIONS = [
   { name: 'QuickBooks Online',  desc: 'Sync invoices, expenses, payments', connected: false, icon: '📊' },
@@ -19,6 +20,7 @@ const EMPLOYEES = [
 
 export function SettingsPage() {
   const navigate = useNavigate()
+  const { data: company } = useCompanyProfile()
   const [notifications, setNotifications] = useState({
     new_lead: true,
     invoice_paid: true,
@@ -157,12 +159,16 @@ export function SettingsPage() {
         <SectionHeader title="Company" />
         <Card>
           <div className="flex items-center gap-3 mb-4">
-            <div className="w-10 h-10 rounded-xl bg-[var(--rust)] flex items-center justify-center flex-shrink-0">
-              <span className="text-white font-bold text-sm">AK</span>
-            </div>
+            {company?.logo_url ? (
+              <img src={company.logo_url} alt={company.name} className="w-10 h-10 rounded-xl object-cover flex-shrink-0" />
+            ) : (
+              <div className="w-10 h-10 rounded-xl bg-[var(--rust)] flex items-center justify-center flex-shrink-0">
+                <span className="text-white font-bold text-sm">{company?.name?.[0] ?? 'C'}</span>
+              </div>
+            )}
             <div>
-              <p className="font-semibold text-[var(--text)]">AK Renovations</p>
-              <p className="text-xs text-[var(--text-secondary)]">Summit County, Ohio</p>
+              <p className="font-semibold text-[var(--text)]">{company?.name ?? 'Your Company'}</p>
+              <p className="text-xs text-[var(--text-secondary)]">{[company?.city, company?.state].filter(Boolean).join(', ') || '—'}</p>
             </div>
           </div>
           <div className="space-y-2 text-sm">

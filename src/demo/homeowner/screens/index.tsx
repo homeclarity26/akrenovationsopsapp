@@ -372,7 +372,7 @@ export function CompletionScreen({
 
       <div style={s.completeFooter}>
         This was a demo. Sarah's project represents the experience every
-        AK Renovations client gets.
+        TradeOffice AI contractor gets.
       </div>
     </div>
   )

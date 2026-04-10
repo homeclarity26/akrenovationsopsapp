@@ -7,8 +7,10 @@ import {
 } from 'lucide-react'
 import { AIBar } from '@/components/ui/AIBar'
 import { APIUsageBar } from '@/components/ui/APIUsageBar'
+import { BrandLogo } from '@/components/ui/BrandLogo'
 import { ModeToggle } from '@/components/ui/ModeToggle'
 import { useAuth } from '@/context/AuthContext'
+import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -29,6 +31,7 @@ export function AdminLayout() {
   const [aiOpen, setAiOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const { user } = useAuth()
+  const { data: company } = useCompanyProfile()
   const isSuperAdmin = user?.role === 'super_admin'
 
   return (
@@ -36,8 +39,12 @@ export function AdminLayout() {
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-full w-60 bg-[var(--navy)] z-40">
         <div className="px-5 py-6 border-b border-white/10">
-          <span className="font-display text-white text-xl font-medium">AK Ops</span>
-          <p className="text-white/50 text-xs mt-0.5">AK Renovations</p>
+          <BrandLogo
+            variant="company"
+            companyName={company?.name}
+            logoUrl={company?.logo_url}
+            size="lg"
+          />
           <div className="mt-3">
             <ModeToggle />
           </div>

@@ -12,6 +12,7 @@ import type { EditableItem } from '@/components/ui/EditableDeliverable'
 import type { SubScope, SubScopeStatus } from '@/data/mock'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 
 const statusMap: Record<SubScopeStatus, string> = {
   draft: 'draft',
@@ -24,6 +25,7 @@ const statusMap: Record<SubScopeStatus, string> = {
 export function ScopeDetailPage() {
   const { id: projectId, subId: scopeId } = useParams<{ id: string; subId: string }>()
   const navigate = useNavigate()
+  const { data: company } = useCompanyProfile()
 
   const { data: scopeData, isLoading: scopeLoading, error: scopeError, refetch: scopeRefetch } = useQuery({
     queryKey: ['sub_scope', scopeId],
@@ -291,7 +293,7 @@ export function ScopeDetailPage() {
         </div>
         <div className="mt-2 space-y-3 text-sm">
           <MaterialsBlock label="Furnished by Subcontractor" items={sections.materials.furnished_by_sub} />
-          <MaterialsBlock label="Furnished by AK Renovations" items={sections.materials.furnished_by_akr} />
+          <MaterialsBlock label={`Furnished by ${company?.name ?? 'Contractor'}`} items={sections.materials.furnished_by_akr} />
           {sections.materials.client_selections.length > 0 && (
             <MaterialsBlock label="Client Selections" items={sections.materials.client_selections} />
           )}

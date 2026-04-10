@@ -39,6 +39,7 @@ export function ForgotPasswordPage() {
           <Link to="/login" className="inline-flex items-center gap-1 text-sm text-[var(--text-secondary)] hover:text-[var(--text)] mb-4">
             <ArrowLeft size={14} /> Back to login
           </Link>
+          <p className="text-xs font-medium text-[var(--rust)] mb-1">TradeOffice AI</p>
           <h1 className="font-display text-2xl text-[var(--navy)]">Forgot password</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">Enter your email and we'll send a reset link.</p>
         </div>

@@ -123,7 +123,7 @@ function StepCreateAccount({
           className="text-2xl font-semibold text-[var(--text)] mb-1"
           style={{ fontFamily: 'var(--font-display)' }}
         >
-          Welcome to AK Renovations
+          Welcome
         </h2>
         <p className="text-sm text-[var(--text-secondary)]">
           Let's get your account set up so you can follow along with your project.
@@ -607,13 +607,13 @@ export function ClientOnboardingWizard() {
               className="w-7 h-7 rounded-lg flex items-center justify-center"
               style={{ background: 'var(--rust)' }}
             >
-              <span className="text-white font-bold text-[10px] tracking-wide">AK</span>
+              <span className="text-white font-bold text-[10px] tracking-wide">T</span>
             </div>
             <span
               className="text-white/70 text-xs font-medium tracking-wide uppercase"
               style={{ letterSpacing: '0.12em' }}
             >
-              AK Renovations
+              TradeOffice AI
             </span>
           </div>
           <p className="text-white/50 text-xs">Client Portal Setup</p>

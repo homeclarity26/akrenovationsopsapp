@@ -31,10 +31,10 @@ export function PublicGallery() {
         <div className="max-w-5xl mx-auto px-4 py-6 flex items-center justify-between">
           <div>
             <p className="font-display text-2xl text-[var(--navy)]">Project Reel</p>
-            <p className="text-xs text-[var(--text-tertiary)] mt-0.5">By AK Renovations</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-0.5">Powered by TradeOffice AI</p>
           </div>
           <div className="w-12 h-12 rounded-2xl bg-[var(--rust)] flex items-center justify-center">
-            <span className="text-white font-bold">AK</span>
+            <span className="text-white font-bold">T</span>
           </div>
         </div>
       </div>
@@ -59,7 +59,7 @@ export function PublicGallery() {
 
         <div className="mt-12 text-center text-sm text-[var(--text-secondary)]">
           <p>Thank you for trusting us with your home.</p>
-          <p className="font-display text-base text-[var(--navy)] mt-2">Adam Kilgore — AK Renovations</p>
+          <p className="font-display text-base text-[var(--navy)] mt-2">Powered by TradeOffice AI</p>
         </div>
       </div>
     </div>

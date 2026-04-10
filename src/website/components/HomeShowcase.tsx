@@ -115,7 +115,7 @@ function Mockup({ type }: { type: 'proposal' | 'portal' | 'update' | 'reel' }) {
   if (type === 'proposal') {
     return (
       <div style={mock.wrap}>
-        <div style={mock.brand}>AK RENOVATIONS</div>
+        <div style={mock.brand}>YOUR COMPANY</div>
         <div style={mock.title}>Kitchen Remodel</div>
         <div style={mock.sub}>Sarah Mitchell · Stow OH</div>
         <div style={mock.priceCard}>
@@ -186,7 +186,7 @@ function Mockup({ type }: { type: 'proposal' | 'portal' | 'update' | 'reel' }) {
             />
           ))}
         </div>
-        <div style={mock.signature}>— Adam, AK Renovations</div>
+        <div style={mock.signature}>— Your Company</div>
       </div>
     )
   }

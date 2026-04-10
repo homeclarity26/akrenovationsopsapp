@@ -11,8 +11,8 @@ const D = EMPLOYEE_DEMO_DATA
 export function WelcomeScreen() {
   return (
     <div style={s.welcomeWrap}>
-      <div style={s.welcomeLogo}>AK</div>
-      <div style={s.welcomeTitle}>Welcome to AK Renovations</div>
+      <div style={s.welcomeLogo}>T</div>
+      <div style={s.welcomeTitle}>Welcome to TradeOffice AI</div>
       <div style={s.welcomeSub}>
         A 5-minute look at how we run our jobs. No login. Tap through at your
         own pace.

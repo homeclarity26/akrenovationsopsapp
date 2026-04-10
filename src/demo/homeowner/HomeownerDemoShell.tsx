@@ -55,7 +55,7 @@ function ScreenForStep({
           suggestedPrompt={step.suggested_prompt || ''}
           sceneDescription={step.scene_description || ''}
           fallbackResponse={HOMEOWNER_AI_FALLBACK}
-          speakerLabel="AK Renovations"
+          speakerLabel="Your Contractor"
           onComplete={onAdvance}
         />
       )

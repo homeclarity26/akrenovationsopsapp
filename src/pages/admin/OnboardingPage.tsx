@@ -1310,7 +1310,7 @@ export function OnboardingPage() {
         subtitle={
           activeType
             ? undefined
-            : 'Add a client, employee, or subcontractor to AK Ops'
+            : 'Add a client, employee, or subcontractor'
         }
       />
 

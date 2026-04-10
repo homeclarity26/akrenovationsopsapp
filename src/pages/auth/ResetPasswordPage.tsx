@@ -41,6 +41,7 @@ export function ResetPasswordPage() {
     <div className="min-h-svh flex flex-col items-center justify-center px-5" style={{ background: 'var(--bg)' }}>
       <div className="w-full max-w-sm space-y-6">
         <div>
+          <p className="text-xs font-medium text-[var(--rust)] mb-1">TradeOffice AI</p>
           <h1 className="font-display text-2xl text-[var(--navy)]">Reset password</h1>
           <p className="text-sm text-[var(--text-secondary)] mt-1">Enter your new password below.</p>
         </div>
