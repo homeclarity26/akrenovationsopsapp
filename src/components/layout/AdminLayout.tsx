@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet, useNavigate } from 'react-router-dom'
+import { NavLink, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, Users, FolderOpen, DollarSign,
   Calendar, Sparkles, Settings, Menu, X, FileText,
@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { AIBar } from '@/components/ui/AIBar'
 import { APIUsageBar } from '@/components/ui/APIUsageBar'
+import { ModeToggle } from '@/components/ui/ModeToggle'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -26,8 +27,6 @@ const NAV = [
 export function AdminLayout() {
   const [aiOpen, setAiOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [fieldMode, setFieldMode] = useState(false)
-  const navigate = useNavigate()
 
   return (
     <div className="flex flex-col min-h-svh bg-[var(--bg)]">
@@ -36,6 +35,9 @@ export function AdminLayout() {
         <div className="px-5 py-6 border-b border-white/10">
           <span className="font-display text-white text-xl font-medium">AK Ops</span>
           <p className="text-white/50 text-xs mt-0.5">AK Renovations</p>
+          <div className="mt-3">
+            <ModeToggle />
+          </div>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
           {NAV.map(({ to, label, icon: Icon, exact }) => (
@@ -90,20 +92,7 @@ export function AdminLayout() {
 
       {/* Mobile top bar — slim, white, just icons */}
       <header className="lg:hidden fixed top-0 left-0 right-0 h-11 bg-[var(--bg)] border-b border-[var(--border-light)] flex items-center justify-between px-3 z-40 gap-1">
-        <button
-          onClick={() => {
-            setFieldMode(f => !f)
-            if (!fieldMode) navigate('/admin/field')
-          }}
-          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold border transition-colors ${
-            fieldMode
-              ? 'border-[var(--rust)] text-[var(--rust)] bg-[var(--rust-subtle)]'
-              : 'border-[var(--border)] text-[var(--text-secondary)]'
-          }`}
-        >
-          <div className={`w-2 h-2 rounded-full flex-shrink-0 ${fieldMode ? 'bg-[var(--rust)]' : 'border border-[var(--text-tertiary)]'}`} />
-          Field mode
-        </button>
+        <ModeToggle />
         <div className="flex items-center gap-1">
         <APIUsageBar className="mr-1" />
         <button

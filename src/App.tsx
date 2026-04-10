@@ -3,6 +3,7 @@ import * as Sentry from '@sentry/react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
+import { ModeProvider } from '@/context/ModeContext'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 
 // Layouts (kept eager — they wrap every page and are always needed)
@@ -285,19 +286,21 @@ export default function App() {
     <QueryClientProvider client={qc}>
       <AuthProvider>
         <BrowserRouter>
-          <Sentry.ErrorBoundary
-            fallback={({ error: _error }) => (
-              <div style={{ padding: '2rem', textAlign: 'center' }}>
-                <h2>Something went wrong</h2>
-                <p>Our team has been notified. Please refresh the page.</p>
-                <button onClick={() => window.location.reload()}>
-                  Refresh Page
-                </button>
-              </div>
-            )}
-          >
-            <AppRoutes />
-          </Sentry.ErrorBoundary>
+          <ModeProvider>
+            <Sentry.ErrorBoundary
+              fallback={({ error: _error }) => (
+                <div style={{ padding: '2rem', textAlign: 'center' }}>
+                  <h2>Something went wrong</h2>
+                  <p>Our team has been notified. Please refresh the page.</p>
+                  <button onClick={() => window.location.reload()}>
+                    Refresh Page
+                  </button>
+                </div>
+              )}
+            >
+              <AppRoutes />
+            </Sentry.ErrorBoundary>
+          </ModeProvider>
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>
