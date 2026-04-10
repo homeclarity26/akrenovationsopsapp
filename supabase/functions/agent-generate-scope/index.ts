@@ -1,5 +1,6 @@
 // H5: agent-generate-scope — generates scope of work for a subcontractor trade
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
@@ -215,6 +216,12 @@ function flattenToPlainText(scope: Record<string, unknown>): string {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
+
+  // JWT auth check
+  const auth = await verifyAuth(req)
+  if (!auth) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  }
 
   const rl = await checkRateLimit(req, 'agent-generate-scope')
   if (!rl.allowed) return rateLimitResponse(rl)

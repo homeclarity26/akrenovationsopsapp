@@ -88,12 +88,32 @@ export function ClientSelections() {
     )
   }
 
-  const submitSelection = (id: string) => {
+  const submitSelection = async (id: string) => {
+    // Optimistic local update
     setSelections(prev => prev.map(s =>
       s.id === id ? { ...s, status: 'selected' as const, selected_product: choiceInput.product, selected_color: choiceInput.color, product_url: choiceInput.url } : s
     ))
     setSelected(null)
     setChoiceInput({ product: '', color: '', url: '' })
+
+    const { error } = await supabase
+      .from('client_selections')
+      .update({
+        status: 'selected',
+        selected_product: choiceInput.product,
+        selected_color: choiceInput.color,
+        product_url: choiceInput.url,
+      })
+      .eq('id', id)
+
+    if (error) {
+      console.error('Failed to save selection:', error)
+      // Revert optimistic update
+      setLocalOverrides({})
+      refetch()
+    } else {
+      refetch()
+    }
   }
 
   if (viewing) {

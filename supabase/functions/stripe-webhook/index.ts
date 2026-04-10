@@ -1,5 +1,6 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import Stripe from 'https://esm.sh/stripe@13?target=deno';
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts';
 import { getCorsHeaders } from '../_shared/cors.ts'
 
@@ -53,11 +54,17 @@ serve(async (req: Request) => {
   );
 
   try {
-    // Parse event (signature verification requires the Stripe library)
-    // When Stripe is fully activated, replace this with proper signature verification
-    // using: import Stripe from 'https://esm.sh/stripe@13?target=deno'
-    // then: const event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret)
-    const event = JSON.parse(body);
+    const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
+    let event: Stripe.Event;
+    try {
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+    } catch (verifyErr) {
+      console.error('stripe-webhook: signature verification failed:', verifyErr);
+      return new Response(JSON.stringify({ error: 'Invalid signature' }), {
+        status: 400,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
 
     // Log the event
     await supabase.from('stripe_webhook_events').insert({
@@ -71,22 +78,23 @@ serve(async (req: Request) => {
       console.log('stripe-webhook event received:', event.type, event.id);
     });
 
+    const eventObject = event.data.object as Record<string, unknown>;
+
     // Route to handlers based on event type
     switch (event.type) {
       case 'payment_intent.succeeded':
         // TODO: Mark invoice as paid, send receipt
-        // Find invoice by payment_intent metadata, update status to 'paid'
-        console.log('Payment succeeded:', event.data.object.id);
+        console.log('Payment succeeded:', eventObject.id);
         break;
 
       case 'payment_intent.payment_failed':
         // TODO: Notify admin of failed payment
-        console.log('Payment failed:', event.data.object.id);
+        console.log('Payment failed:', eventObject.id);
         break;
 
       case 'invoice.paid':
         // TODO: Update invoice status in AK Ops
-        console.log('Invoice paid:', event.data.object.id);
+        console.log('Invoice paid:', eventObject.id);
         break;
 
       default:
