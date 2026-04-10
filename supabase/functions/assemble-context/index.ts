@@ -9,6 +9,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile } from '../_shared/companyProfile.ts'
 import { z } from 'npm:zod@3'
 
 const InputSchema = z.object({
@@ -141,6 +142,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
+    const company = await getCompanyProfile(supabase, 'system')
 
     // 1. CHECK PERMISSIONS
     if (input.capability_required) {
@@ -258,6 +260,7 @@ serve(async (req) => {
       recentHistory: recentHistory ?? [],
       entityData,
       query: input.query,
+      company,
     })
 
     const result: AssembledContext = {
@@ -292,6 +295,7 @@ interface PromptContext {
   recentHistory: { output_summary: string; admin_action: string | null; edit_distance: number | null; rejection_reason: string | null }[]
   entityData: { type: string; data: object } | null
   query?: string
+  company: { name: string; location: string }
 }
 
 function buildSystemPrompt(ctx: PromptContext): string {
@@ -325,7 +329,7 @@ function buildSystemPrompt(ctx: PromptContext): string {
 
   const sections = [businessContextBlock, entityBlock, memoryBlock, insightsBlock, historyBlock].filter(Boolean)
 
-  return `You are the AI operating system for AK Renovations, a high-end residential renovation contractor in Summit County, Ohio.
+  return `You are the AI operating system for ${ctx.company.name}, a high-end residential renovation contractor in ${ctx.company.location}.
 
 CURRENT USER
 Role: ${ctx.role}
@@ -339,9 +343,9 @@ ${ctx.capabilities.join(', ')}
 CRITICAL RULES
 - Never expose data outside this user's role scope
 - Never send any client-facing communication without admin approval
-- Match AK Renovations brand voice: professional, confident, approachable, never corporate
+- Match ${ctx.company.name} brand voice: professional, confident, approachable, never corporate
 - Use specific details — never generic placeholder language
 - All financial numbers use monospace formatting
-- You are operating as the business's AI — you represent AK Renovations
+- You are operating as the business's AI — you represent ${ctx.company.name}
 `.trim()
 }

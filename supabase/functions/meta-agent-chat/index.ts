@@ -7,6 +7,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 
 const InputSchema = z.object({
@@ -106,7 +108,7 @@ ADMIN SCREENS:
 /admin/onboard — Onboarding Wizard. Add new clients, employees, or subcontractors in a guided flow.
 /admin/settings — Settings hub.
 /admin/settings/memory — Memory Inspector. View what the AI has learned (business context, operational memory, agent history, learning insights).
-/admin/settings/context — Business Context Editor. Edit the foundational knowledge the AI uses about AK Renovations.
+/admin/settings/context — Business Context Editor. Edit the foundational knowledge the AI uses about the company.
 /admin/settings/agents — Agent Management. See all 40+ agents, enable/disable them, view last run outputs.
 /admin/settings/approvals — Pending Approvals Queue. Approve or reject high-risk AI actions before they execute.
 /admin/settings/templates — Template Library. Manage all checklist, scope, proposal, estimate, punch list templates.
@@ -151,7 +153,7 @@ Onboarding Client: /admin/onboard → Contact info → Link/create project → P
 // Context assembly — calls assemble-context, falls back to direct DB build
 // ---------------------------------------------------------------------------
 
-async function assembleMetaContext(supabase: ReturnType<typeof createClient>, userId: string): Promise<string> {
+async function assembleMetaContext(supabase: ReturnType<typeof createClient>, userId: string, company: { name: string; owner_name: string; location: string }): Promise<string> {
   try {
     const res = await fetch(`${supabaseUrl()}/functions/v1/assemble-context`, {
       method: 'POST',
@@ -165,12 +167,12 @@ async function assembleMetaContext(supabase: ReturnType<typeof createClient>, us
         include_sections: ['business_context', 'operational_memory', 'agent_history', 'learning_insights'],
       }),
     })
-    if (!res.ok) return buildMetaSystemPrompt(supabase, null)
+    if (!res.ok) return buildMetaSystemPrompt(supabase, null, company)
     const ctx = await res.json()
-    if (ctx.denied) return buildMetaSystemPrompt(supabase, null)
-    return buildMetaSystemPrompt(supabase, ctx.system_prompt)
+    if (ctx.denied) return buildMetaSystemPrompt(supabase, null, company)
+    return buildMetaSystemPrompt(supabase, ctx.system_prompt, company)
   } catch {
-    return buildMetaSystemPrompt(supabase, null)
+    return buildMetaSystemPrompt(supabase, null, company)
   }
 }
 
@@ -178,7 +180,7 @@ async function assembleMetaContext(supabase: ReturnType<typeof createClient>, us
 // buildMetaSystemPrompt — the heart of the meta agent
 // ---------------------------------------------------------------------------
 
-async function buildMetaSystemPrompt(supabase: ReturnType<typeof createClient>, basePrompt: string | null): Promise<string> {
+async function buildMetaSystemPrompt(supabase: ReturnType<typeof createClient>, basePrompt: string | null, company: { name: string; owner_name: string; location: string }): Promise<string> {
 
   // Fetch all live data in parallel
   const [
@@ -376,7 +378,7 @@ Active agent directives: ${directives?.length ?? 0}
 
   const metaInstructions = `
 META AGENT IDENTITY
-You are Adam's primary AI chief of staff for AK Renovations. You have complete knowledge of:
+You are ${company.owner_name}'s primary AI chief of staff for ${company.name}. You have complete knowledge of:
 - The entire app: every screen, every agent, every workflow (see APP KNOWLEDGE above)
 - His business in real time: every project, lead, invoice, employee, financial metric (see LIVE DATA above)
 - How he works: his preferences, patterns, and decisions learned over time (see ADAM'S PROFILE above)
@@ -417,7 +419,7 @@ VOICE:
 - When a proactive item is urgent, put it first. When nothing is urgent, skip it entirely.
 `
 
-  const foundation = basePrompt ?? 'You are the AI chief of staff for AK Renovations, a high-end residential remodeling contractor in Summit County, Ohio.'
+  const foundation = basePrompt ?? `You are the AI chief of staff for ${company.name}, a high-end residential remodeling contractor in ${company.location}.`
 
   return [
     foundation,
@@ -451,6 +453,7 @@ serve(async (req) => {
     const { message, session_id, user_id } = parsedInput.data
 
     const supabase = createClient(supabaseUrl(), serviceKey())
+    const company = await getCompanyProfile(supabase, 'system')
 
     // Get recent conversation history for this session (last 20 messages)
     const { data: history } = await supabase
@@ -467,7 +470,7 @@ serve(async (req) => {
     ]
 
     // Get rich system context
-    const systemPrompt = await assembleMetaContext(supabase, user_id)
+    const systemPrompt = await assembleMetaContext(supabase, user_id, company)
 
     // Call Claude
     const anthropicRes = await fetch('https://api.anthropic.com/v1/messages', {
@@ -478,7 +481,7 @@ serve(async (req) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: AI_CONFIG.PRIMARY_MODEL,
         max_tokens: 2048,
         system: systemPrompt,
         messages,
@@ -496,7 +499,7 @@ serve(async (req) => {
     const costUsd = (inputTok / 1_000_000) * 3.00 + (outputTok / 1_000_000) * 15.00 // sonnet pricing
     supabase.from('api_usage_log').insert({
       service: 'anthropic',
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       agent_name: 'meta-agent-chat',
       input_tokens: inputTok,
       output_tokens: outputTok,
