@@ -23,11 +23,12 @@ export function LoginPage() {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
 
-  // If already authenticated, bounce to the right place
+  // If already authenticated, bounce to the right place.
+  // Admins go through RootRedirect which checks onboarding status.
   useEffect(() => {
     if (loading) return
     if (!user) return
-    if (user.role === 'admin') navigate('/admin', { replace: true })
+    if (user.role === 'admin') navigate('/', { replace: true })
     else if (user.role === 'employee') navigate('/employee', { replace: true })
     else navigate('/client/progress', { replace: true })
   }, [user, loading, navigate])

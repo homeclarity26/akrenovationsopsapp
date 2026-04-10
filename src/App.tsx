@@ -1,9 +1,10 @@
-import { lazy, Suspense } from 'react'
+import { lazy, Suspense, useState, useEffect } from 'react'
 import * as Sentry from '@sentry/react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { supabase } from '@/lib/supabase'
 
 // Layouts (kept eager — they wrap every page and are always needed)
 import { AdminLayout } from '@/components/layout/AdminLayout'
@@ -69,6 +70,7 @@ const BusinessContextPage = lazy(() => import('./pages/admin/settings/BusinessCo
 // Phase O
 const HealthPage = lazy(() => import('./pages/admin/settings/HealthPage').then(m => ({ default: m.HealthPage })))
 const OnboardingPage = lazy(() => import('./pages/admin/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
+const CompanyOnboardingWizard = lazy(() => import('./pages/onboarding/CompanyOnboardingWizard').then(m => ({ default: m.CompanyOnboardingWizard })))
 
 // Employee pages
 const EmployeeHome = lazy(() => import('./pages/employee/EmployeeHome').then(m => ({ default: m.EmployeeHome })))
@@ -158,9 +160,47 @@ function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'clie
 
 function RootRedirect() {
   const { user, loading } = useAuth()
-  if (loading) return <AuthLoadingScreen />
+  const [checking, setChecking] = useState(true)
+  const [needsOnboarding, setNeedsOnboarding] = useState(false)
+
+  useEffect(() => {
+    if (loading || !user || user.role !== 'admin') {
+      setChecking(false)
+      return
+    }
+    // Check if company onboarding is complete
+    async function check() {
+      try {
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('company_id')
+          .eq('id', user!.id)
+          .maybeSingle()
+        if (!profile?.company_id) {
+          setNeedsOnboarding(true)
+          setChecking(false)
+          return
+        }
+        const { data: company } = await supabase
+          .from('companies')
+          .select('onboarding_complete')
+          .eq('id', profile.company_id)
+          .maybeSingle()
+        if (!company || company.onboarding_complete === false) {
+          setNeedsOnboarding(true)
+        }
+      } catch {
+        // On error, skip onboarding check and let them through
+      }
+      setChecking(false)
+    }
+    check()
+  }, [user, loading])
+
+  if (loading || checking) return <AuthLoadingScreen />
   if (!user) return <Navigate to="/login" replace />
   if (user.role === 'super_admin') return <Navigate to="/platform" replace />
+  if (user.role === 'admin' && needsOnboarding) return <Navigate to="/onboard/company" replace />
   if (user.role === 'admin') return <Navigate to="/admin" replace />
   if (user.role === 'employee') return <Navigate to="/employee" replace />
   return <Navigate to="/client/progress" replace />
@@ -174,6 +214,9 @@ function AppRoutes() {
         <Route path="/login" element={<LoginPage />} />
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
+
+        {/* Company onboarding wizard (standalone, no layout chrome) */}
+        <Route path="/onboard/company" element={<ProtectedRoute role="admin"><CompanyOnboardingWizard /></ProtectedRoute>} />
 
         {/* Admin */}
         <Route path="/admin" element={<ProtectedRoute role="admin"><AdminLayout /></ProtectedRoute>}>
