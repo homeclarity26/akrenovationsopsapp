@@ -188,53 +188,68 @@ JSON format:
       )
     }
 
-    // Insert estimate into DB if we have the data
-    const estimateRecord = {
-      lead_id: lead_id ?? null,
-      project_type,
-      walkthrough_data: walkthrough_answers,
-      material_list: (estimate.line_items as unknown[])?.filter((li: Record<string, unknown>) => li.category !== 'Labor' && li.category !== 'Contingency') ?? [],
-      labor_estimate: (estimate.line_items as unknown[])?.filter((li: Record<string, unknown>) => li.category === 'Labor') ?? [],
-      total_estimated_cost: estimate.total_estimated_cost ?? 0,
-      total_proposed_price: estimate.total_proposed_price ?? 0,
-      margin_percent: estimate.margin_percent ?? 38,
-      status: 'draft',
-    }
+    // Insert estimate into DB — non-blocking. A DB failure must never prevent
+    // the estimate JSON from reaching the frontend. We always return line items.
+    let savedEstimateId: string | null = null
+    let savedProposalId: string | null = null
+    let dbSaveError: string | null = null
 
-    const { data: savedEstimate } = await supabase
-      .from('estimates')
-      .insert(estimateRecord)
-      .select('id')
-      .single()
+    try {
+      const estimateRecord = {
+        lead_id: lead_id ?? null,
+        project_type,
+        walkthrough_data: walkthrough_answers,
+        material_list: (estimate.line_items as unknown[])?.filter((li: Record<string, unknown>) => li.category !== 'Labor' && li.category !== 'Contingency') ?? [],
+        labor_estimate: (estimate.line_items as unknown[])?.filter((li: Record<string, unknown>) => li.category === 'Labor') ?? [],
+        total_estimated_cost: estimate.total_estimated_cost ?? 0,
+        total_proposed_price: estimate.total_proposed_price ?? 0,
+        margin_percent: estimate.margin_percent ?? 38,
+        status: 'draft',
+      }
 
-    // Create a draft proposal linked to the estimate
-    let savedProposal = null
-    if (savedEstimate) {
-      const sections = buildProposalSections(estimate)
-      const { data: proposal } = await supabase
-        .from('proposals')
-        .insert({
-          estimate_id: savedEstimate.id,
-          lead_id: lead_id ?? null,
-          title: `${capitalize(project_type)} Remodel Proposal`,
-          client_name: client_name ?? 'Client',
-          project_type,
-          overview_body: estimate.summary ?? '',
-          sections,
-          total_price: estimate.total_proposed_price ?? 0,
-          payment_schedule: estimate.payment_schedule ?? [],
-          status: 'draft',
-        })
+      const { data: savedEstimate, error: estError } = await supabase
+        .from('estimates')
+        .insert(estimateRecord)
         .select('id')
         .single()
-      savedProposal = proposal
+
+      if (estError) {
+        dbSaveError = estError.message
+      } else if (savedEstimate) {
+        savedEstimateId = savedEstimate.id
+
+        // Create a draft proposal linked to the estimate
+        const sections = buildProposalSections(estimate)
+        const { data: proposal } = await supabase
+          .from('proposals')
+          .insert({
+            estimate_id: savedEstimate.id,
+            lead_id: lead_id ?? null,
+            title: `${capitalize(project_type)} Remodel Proposal`,
+            client_name: client_name ?? 'Client',
+            project_type,
+            overview_body: estimate.summary ?? '',
+            sections,
+            total_price: estimate.total_proposed_price ?? 0,
+            payment_schedule: estimate.payment_schedule ?? [],
+            status: 'draft',
+          })
+          .select('id')
+          .single()
+        savedProposalId = proposal?.id ?? null
+      }
+    } catch (dbErr) {
+      // Log but do not throw — the estimate data is what matters
+      dbSaveError = String(dbErr)
+      console.error('generate-estimate DB save error (non-fatal):', dbErr)
     }
 
     return new Response(
       JSON.stringify({
         success: true,
-        estimate_id: savedEstimate?.id ?? null,
-        proposal_id: savedProposal?.id ?? null,
+        estimate_id: savedEstimateId,
+        proposal_id: savedProposalId,
+        db_save_error: dbSaveError, // visible in dev tools if save failed; ignored by frontend
         ...estimate,
       }),
       { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },

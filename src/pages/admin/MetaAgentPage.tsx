@@ -83,18 +83,19 @@ export function MetaAgentPage() {
 
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY as string
 
       const res = await fetch(`${supabaseUrl}/functions/v1/meta-agent-chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'Authorization': `Bearer ${supabaseKey}`,
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify({
           message: messageText,
           session_id: sessionId,
-          user_id: 'admin-1', // TODO: get from auth context
+          user_id: session?.user?.id ?? 'unknown',
         }),
       })
 

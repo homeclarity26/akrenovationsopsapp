@@ -134,11 +134,13 @@ export function InvoicesPage() {
     )
     // Try PDF gen (non-blocking)
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-    const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-    fetch(`${supabaseUrl}/functions/v1/generate-pdf`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseKey}` },
-      body: JSON.stringify({ type: 'invoice', id: invId }),
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const token = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY as string
+      fetch(`${supabaseUrl}/functions/v1/generate-pdf`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ type: 'invoice', id: invId }),
+      }).catch(() => {})
     }).catch(() => {})
     // DB update
     await supabase.from('invoices').update({ status: 'sent', sent_at: now }).eq('id', invId)
@@ -309,11 +311,12 @@ export function InvoicesPage() {
                     onClick={async e => {
                       e.stopPropagation()
                       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-                      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+                      const { data: { session } } = await supabase.auth.getSession()
+                      const token = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY as string
                       try {
                         const res = await fetch(`${supabaseUrl}/functions/v1/generate-pdf`, {
                           method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${supabaseKey}` },
+                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                           body: JSON.stringify({ type: 'invoice', id: invId }),
                         })
                         if (res.ok) {
