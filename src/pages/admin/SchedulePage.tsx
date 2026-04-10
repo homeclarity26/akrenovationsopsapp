@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
-import { MapPin, CalendarDays, Grid3x3, Sparkles, ChevronLeft, ChevronRight } from 'lucide-react'
+import { MapPin, CalendarDays, Grid3x3, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
@@ -43,6 +43,8 @@ function groupByDate(events: Record<string, unknown>[]): { date: string; items: 
 
 export function SchedulePage() {
   const [view, setView] = useState<'calendar' | 'crew'>('calendar')
+  const [optimizing, setOptimizing] = useState(false)
+  const [optimizeResult, setOptimizeResult] = useState<string | null>(null)
 
   const { data: scheduleEvents = [], isLoading, error, refetch } = useQuery({
     queryKey: ['schedule_events'],
@@ -172,11 +174,47 @@ export function SchedulePage() {
                 <ChevronRight size={14} />
               </button>
             </div>
-            <Button size="sm" variant="primary">
-              <Sparkles size={13} />
-              Optimize this week
+            <Button
+              size="sm"
+              variant="primary"
+              disabled={optimizing}
+              onClick={async () => {
+                setOptimizing(true)
+                setOptimizeResult(null)
+                try {
+                  const weekStart = WEEK_DAYS[0].date
+                  const { data, error } = await supabase.functions.invoke('agent-schedule-optimizer', {
+                    body: { week_start: weekStart },
+                  })
+                  if (error) throw error
+                  setOptimizeResult(data?.suggestion ?? 'No suggestions returned.')
+                } catch (err) {
+                  setOptimizeResult('Error: ' + (err instanceof Error ? err.message : String(err)))
+                } finally {
+                  setOptimizing(false)
+                }
+              }}
+            >
+              <Sparkles size={13} className={optimizing ? 'animate-spin' : ''} />
+              {optimizing ? 'Optimizing…' : 'Optimize this week'}
             </Button>
           </div>
+
+          {/* AI Optimization Result */}
+          {optimizeResult && (
+            <Card>
+              <div className="flex items-start justify-between gap-2 mb-2">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                  <Sparkles size={11} className="inline mr-1" />
+                  AI Schedule Suggestions
+                </p>
+                <button onClick={() => setOptimizeResult(null)} className="p-0.5 text-[var(--text-tertiary)] hover:text-[var(--text)]">
+                  <X size={14} />
+                </button>
+              </div>
+              <div className="text-sm text-[var(--text-secondary)] leading-relaxed whitespace-pre-wrap">{optimizeResult}</div>
+            </Card>
+          )}
 
           {/* Grid: rows = employees, columns = days */}
           <Card padding="none">

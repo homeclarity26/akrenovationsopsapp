@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Eye, Send, ChevronRight, Image as ImageIcon } from 'lucide-react'
+import { Plus, Eye, Send, ChevronRight, Image as ImageIcon, X } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
@@ -11,9 +11,13 @@ import { supabase } from '@/lib/supabase'
 
 type ProposalRecord = Record<string, unknown>
 
+const PROJECT_TYPES = ['Kitchen Remodel', 'Bathroom Remodel', 'Basement Finish', 'Addition', 'Whole-Home Renovation', 'Exterior', 'Other']
+
 export function ProposalsPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [localProposals, setLocalProposals] = useState<ProposalRecord[]>([])
+  const [showNewForm, setShowNewForm] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const { data: fetchedProposals = [], isLoading, error, refetch } = useQuery({
     queryKey: ['proposals'],
@@ -219,12 +223,89 @@ export function ProposalsPage() {
         title="Proposals"
         subtitle={`${proposals.length} proposals`}
         action={
-          <Button size="sm">
+          <Button size="sm" onClick={() => setShowNewForm(true)}>
             <Plus size={15} />
             New Proposal
           </Button>
         }
       />
+
+      {/* New Proposal Modal */}
+      {showNewForm && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowNewForm(false)}>
+          <div
+            className="w-full max-w-lg bg-white rounded-t-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-lg text-[var(--navy)]">New Proposal</h2>
+              <button onClick={() => setShowNewForm(false)} className="p-1 text-[var(--text-tertiary)]"><X size={18} /></button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                const fd = new FormData(e.currentTarget)
+                const title = (fd.get('title') as string).trim()
+                const clientName = (fd.get('client_name') as string).trim()
+                const projectType = fd.get('project_type') as string
+                const totalPrice = parseFloat(fd.get('total_price') as string) || 0
+                if (!title || !clientName) return
+                setSaving(true)
+                const { data, error: insertErr } = await supabase.from('proposals').insert({
+                  title,
+                  client_name: clientName,
+                  client_address: (fd.get('client_address') as string).trim() || null,
+                  project_type: projectType,
+                  total_price: totalPrice,
+                  status: 'draft',
+                  sections: [],
+                  overview_body: (fd.get('overview') as string).trim() || null,
+                }).select().single()
+                setSaving(false)
+                if (insertErr) {
+                  alert('Error creating proposal: ' + insertErr.message)
+                  return
+                }
+                setShowNewForm(false)
+                refetch()
+                if (data) setSelected(data.id)
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Proposal Title *</label>
+                <input name="title" required placeholder="e.g. Kitchen Renovation — Smith Residence" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Client Name *</label>
+                <input name="client_name" required placeholder="John Smith" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Client Address</label>
+                <input name="client_address" placeholder="123 Main St, City, OH" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Project Type</label>
+                <select name="project_type" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20">
+                  {PROJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Total Price ($)</label>
+                <input name="total_price" type="number" step="0.01" min="0" placeholder="25000" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Overview</label>
+                <textarea name="overview" rows={3} placeholder="Brief project description..." className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button type="button" variant="secondary" fullWidth onClick={() => setShowNewForm(false)}>Cancel</Button>
+                <Button type="submit" fullWidth disabled={saving}>{saving ? 'Creating…' : 'Create Proposal'}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {isLoading ? (
         <div className="py-8 text-center">

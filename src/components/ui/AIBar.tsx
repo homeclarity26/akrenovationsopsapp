@@ -1,6 +1,7 @@
-import { useState } from 'react'
-import { Mic, Send, X } from 'lucide-react'
+import { useState, useRef, useEffect } from 'react'
+import { Mic, Send, X, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { supabase } from '@/lib/supabase'
 
 interface AIBarProps {
   onClose?: () => void
@@ -10,15 +11,52 @@ interface AIBarProps {
 export function AIBar({ onClose, placeholder = 'Ask anything or give a command...' }: AIBarProps) {
   const [input, setInput] = useState('')
   const [messages, setMessages] = useState<{ role: 'user' | 'ai'; text: string }[]>([])
+  const [isLoading, setIsLoading] = useState(false)
+  const [sessionId] = useState(() => crypto.randomUUID())
+  const messagesEndRef = useRef<HTMLDivElement>(null)
 
-  const send = () => {
-    if (!input.trim()) return
-    setMessages(m => [
-      ...m,
-      { role: 'user', text: input },
-      { role: 'ai', text: 'Got it! This feature will connect to the AI engine. For now, everything is running on mock data.' },
-    ])
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const send = async () => {
+    const text = input.trim()
+    if (!text || isLoading) return
+
+    setMessages(m => [...m, { role: 'user', text }])
     setInput('')
+    setIsLoading(true)
+
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+      const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token ?? supabaseKey
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/meta-agent-chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: text,
+          session_id: sessionId,
+          user_id: session?.user?.id ?? 'admin-1',
+        }),
+      })
+
+      if (res.ok) {
+        const data = await res.json()
+        setMessages(m => [...m, { role: 'ai', text: data.reply ?? 'I ran into an issue. Try again?' }])
+      } else {
+        setMessages(m => [...m, { role: 'ai', text: `I heard you — "${text}". The AI connection will be live once edge functions are deployed. For now, I'm in preview mode.` }])
+      }
+    } catch {
+      setMessages(m => [...m, { role: 'ai', text: "I'm having trouble connecting right now. I'll be fully operational once the edge functions are deployed." }])
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -62,10 +100,18 @@ export function AIBar({ onClose, placeholder = 'Ask anything or give a command..
                     : 'bg-gray-100 text-[var(--text)] rounded-bl-sm'
                 )}
               >
-                {m.text}
+                <p className="whitespace-pre-wrap">{m.text}</p>
               </div>
             </div>
           ))}
+          {isLoading && (
+            <div className="flex justify-start">
+              <div className="bg-gray-100 rounded-2xl rounded-bl-sm px-3.5 py-2.5">
+                <Loader2 size={16} className="text-[var(--text-tertiary)] animate-spin" />
+              </div>
+            </div>
+          )}
+          <div ref={messagesEndRef} />
         </div>
 
         {/* Input */}
@@ -80,10 +126,11 @@ export function AIBar({ onClose, placeholder = 'Ask anything or give a command..
             onChange={e => setInput(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && send()}
             autoFocus
+            disabled={isLoading}
           />
           <button
             onClick={send}
-            disabled={!input.trim()}
+            disabled={!input.trim() || isLoading}
             className="p-2.5 rounded-full bg-[var(--navy)] text-white disabled:opacity-40 transition-opacity"
           >
             <Send size={16} />
