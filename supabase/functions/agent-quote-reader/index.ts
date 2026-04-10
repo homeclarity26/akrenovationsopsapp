@@ -2,6 +2,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
@@ -37,7 +39,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -57,7 +59,7 @@ async function callClaudeVision(systemPrompt: string, imageUrl: string, userMess
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [
@@ -92,6 +94,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
+    const company = await getCompanyProfile(supabase, 'system');
 
     const rawBody = await req.json().catch(() => ({}))
     const parsedInput = InputSchema.safeParse(rawBody)
@@ -105,7 +108,7 @@ serve(async (req) => {
 
     await callAssembleContext('agent-quote-reader', 'extract subcontractor quote data from uploaded document')
 
-    const systemPrompt = `You are an AI document reader for AK Renovations, a residential remodeling contractor.
+    const systemPrompt = `${buildSystemPrompt(company, 'document reader')}
 Extract quote/bid data from this document and return ONLY a valid JSON object:
 {
   "company_name": "subcontractor or supplier company name",

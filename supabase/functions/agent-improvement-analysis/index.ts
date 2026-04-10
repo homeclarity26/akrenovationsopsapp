@@ -8,6 +8,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 
 const supabaseUrl = () => Deno.env.get('SUPABASE_URL') ?? ''
 const serviceKey  = () => Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -26,6 +28,7 @@ serve(async (req) => {
 
   try {
     const supabase = createClient(supabaseUrl(), serviceKey())
+    const company = await getCompanyProfile(supabase, 'system');
     const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString()
 
     // Pull usage data
@@ -67,13 +70,13 @@ serve(async (req) => {
       body: JSON.stringify({ user_id: 'system', user_role: 'admin', agent_name: 'agent-improvement-analysis', query: 'identify app improvements' }),
     })
     const ctx = contextRes.ok ? await contextRes.json() : {}
-    const basePrompt = ctx.system_prompt ?? 'You are analyzing AK Ops, a renovation contractor management app.'
+    const basePrompt = ctx.system_prompt ?? buildSystemPrompt(company, 'business analyst')
 
     const analysisRes = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': Deno.env.get('ANTHROPIC_API_KEY') ?? '', 'anthropic-version': '2023-06-01' },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: AI_CONFIG.PRIMARY_MODEL,
         max_tokens: 2000,
         system: basePrompt + `\n\nYou are the improvement analysis engine for AK Ops. Identify the top 3 improvements that would have the highest impact on Adam's daily workflow.
 

@@ -1,11 +1,12 @@
 // Phase I — generate-payroll-register
 // Generates a full payroll register PDF/CSV for a pay period and syncs to Google Drive
-// at: AK Renovations — Operations/Payroll/{year}/Payroll Register — {dates}.pdf
+// at: {Company} — Operations/Payroll/{year}/Payroll Register — {dates}.pdf
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile } from '../_shared/companyProfile.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 
@@ -144,7 +145,7 @@ async function syncToDrive(filename: string, content: string, contentType: strin
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${serviceKey}` },
       body: JSON.stringify({
-        folder_path: 'AK Renovations — Operations/Payroll',
+        folder_path: `${companyName} — Operations/Payroll`,
         filename,
         content,
         content_type: contentType,
@@ -190,6 +191,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
+    const company = await getCompanyProfile(supabase, 'system');
+    const companyName = company.name;
 
     const { data: period, error: pErr } = await supabase
       .from('pay_periods')

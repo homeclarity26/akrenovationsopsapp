@@ -4,6 +4,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -32,7 +34,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -66,10 +68,12 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
+    const company = await getCompanyProfile(supabase, 'system')
+
     const basePrompt = await callAssembleContext('agent-lead-aging', 'draft follow-up messages for aging leads')
     const systemPrompt =
       (basePrompt ??
-        'You are an AI sales assistant for AK Renovations, a high-end residential remodeling contractor in Summit County, Ohio. Adam Kilgore is the owner.') +
+        buildSystemPrompt(company, 'sales assistant')) +
       `
 
 LEAD FOLLOW-UP TASK

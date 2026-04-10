@@ -6,6 +6,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
@@ -92,6 +94,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
+    const company = await getCompanyProfile(supabase, 'system')
 
     // Fetch trade and quotes
     const { data: trade, error: tradeError } = await supabase
@@ -149,7 +152,7 @@ Respond ONLY with valid JSON:
 
     const systemPrompt = baseSystemPrompt
       ? `${baseSystemPrompt}\n\n${quoteComparisonRules}`
-      : `You are a construction bid analysis specialist for AK Renovations in Summit County, Ohio.\n${quoteComparisonRules}`
+      : `You are a construction bid analysis specialist for ${company.name} in ${company.location}.\n${quoteComparisonRules}`
 
     const anthropicResponse = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -159,7 +162,7 @@ Respond ONLY with valid JSON:
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-sonnet-4-20250514',
+        model: AI_CONFIG.PRIMARY_MODEL,
         max_tokens: 1024,
         system: systemPrompt,
         messages: [{ role: 'user', content: `Compare the quotes for ${trade.name} and recommend the best value.` }],

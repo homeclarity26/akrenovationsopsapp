@@ -14,6 +14,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
@@ -159,6 +160,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
+    const company = await getCompanyProfile(supabase, 'system');
+
     const body = await req.json().catch(() => ({}))
     const parsed = InputSchema.safeParse(body)
     if (!parsed.success) {
@@ -192,7 +195,7 @@ serve(async (req) => {
     const audioBase64 = arrayBufferToBase64(audioBuffer)
 
     // 3. Single-call Gemini: transcribe + extract action items
-    const systemInstructions = `You are an AI assistant for AK Renovations, a high-end residential renovation contractor in Summit County, Ohio.
+    const systemInstructions = `${buildSystemPrompt(company, 'assistant')}
 
 A field worker (like Jeff) or Adam just recorded a voice note. Your job:
 1. Transcribe the audio accurately.

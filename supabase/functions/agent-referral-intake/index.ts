@@ -3,6 +3,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
@@ -43,7 +45,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -70,6 +72,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
+    const company = await getCompanyProfile(supabase, 'system');
 
     const rawBody = await req.json().catch(() => ({}))
     const parsed = InputSchema.safeParse(rawBody)
@@ -94,17 +97,10 @@ serve(async (req) => {
 
     const basePrompt = await callAssembleContext('agent-referral-intake', 'draft referral thank-you and outreach')
     const systemPrompt = (basePrompt ??
-      'You are an AI assistant for AK Renovations, a high-end residential remodeling contractor in Summit County, Ohio.')
+      buildSystemPrompt(company, 'referral coordinator'))
       + `\n\nREFERRAL INTAKE\nDraft warm thank-you to referrer and outreach to referred lead. Sound like Adam, not a corporation. No em dashes.`
 
-    const _t0 = Date.now()
 
-    const { text: thankYou, usage: _u } = await callClaude(systemPrompt, `Draft a warm, personal thank-you text to ${referring_client_name} for referring ${referred_name} to AK Renovations. Under 3 sentences.`)
-
-    logAiUsage({ function_name: 'agent-referral-intake', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })
-    const _t0 = Date.now()
-    const { text: outreach, usage: _u } = await callClaude(systemPrompt, `Draft an initial outreach text to ${referred_name} who was referred by ${referring_client_name}. Mention the referral, introduce AK Renovations, ask about their ${project_type} project. Under 4 sentences.`)
-    logAiUsage({ function_name: 'agent-referral-intake', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })
 
     await supabase.from('ai_actions').insert([
       {

@@ -7,6 +7,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, type CompanyProfile } from '../_shared/companyProfile.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 
@@ -33,12 +34,12 @@ const serviceKey  = () => Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
 
 // ── HTML Templates ────────────────────────────────────────────────────────────
 
-function brandedHeader(docTitle: string, docNumber: string, date: string): string {
+function brandedHeader(docTitle: string, docNumber: string, date: string, company: CompanyProfile): string {
   return `
     <div class="header">
       <div class="header-left">
-        <div class="wordmark">AK Renovations</div>
-        <div class="tagline">Summit County's Trusted Renovation Contractor</div>
+        <div class="wordmark">${company.name}</div>
+        <div class="tagline">${company.location}'s Trusted ${company.industry} Contractor</div>
       </div>
       <div class="header-right">
         <div class="doc-title">${docTitle}</div>
@@ -142,7 +143,7 @@ async function fetchDocumentData(supabase: ReturnType<typeof createClient>, type
 
 // ── HTML template builders ────────────────────────────────────────────────────
 
-function buildInvoiceHtml(doc: Record<string, unknown>, options: GeneratePdfInput['options']): string {
+function buildInvoiceHtml(doc: Record<string, unknown>, options: GeneratePdfInput['options'], company: CompanyProfile): string {
   const proj = doc.projects as Record<string, unknown> | null
   const lineItems = (doc.line_items as { label?: string; description?: string; amount: number }[]) ?? []
   const invoiceDate = doc.created_at ? new Date(doc.created_at as string).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
@@ -153,7 +154,7 @@ function buildInvoiceHtml(doc: Record<string, unknown>, options: GeneratePdfInpu
 <head><meta charset="UTF-8"><style>${BASE_STYLES}</style></head>
 <body>
   ${options?.watermark === 'PAID' ? '<div class="watermark">PAID</div>' : options?.watermark ? `<div class="watermark">${options.watermark}</div>` : ''}
-  ${brandedHeader('INVOICE', doc.invoice_number as string ?? '', invoiceDate)}
+  ${brandedHeader('INVOICE', doc.invoice_number as string ?? '', invoiceDate, company)}
 
   <div class="bill-grid">
     <div class="bill-box">
@@ -162,7 +163,7 @@ function buildInvoiceHtml(doc: Record<string, unknown>, options: GeneratePdfInpu
     </div>
     <div class="bill-box">
       <h3>From</h3>
-      <p><strong>AK Renovations</strong><br>Summit County, Ohio<br>(330) 555-0100<br>adam@akrenovationsohio.com</p>
+      <p><strong>${company.name}</strong><br>${company.location}</p>
     </div>
   </div>
 
@@ -191,17 +192,17 @@ function buildInvoiceHtml(doc: Record<string, unknown>, options: GeneratePdfInpu
   </table>
 
   <h2>Payment Instructions</h2>
-  <p>Pay online via the secure payment link included in your email, or by check made payable to <strong>AK Renovations</strong>.</p>
+  <p>Pay online via the secure payment link included in your email, or by check made payable to <strong>${company.name}</strong>.</p>
   <p>Questions? Call or text us at (330) 555-0100 or email adam@akrenovationsohio.com.</p>
 
-  <p style="margin-top:24px; font-style:italic; color:#6B7280;">Thank you for choosing AK Renovations.</p>
+  <p style="margin-top:24px; font-style:italic; color:#6B7280;">Thank you for choosing ${company.name}.</p>
 
   ${brandedFooter(doc.invoice_number as string ?? '')}
 </body>
 </html>`
 }
 
-function buildProposalHtml(doc: Record<string, unknown>, options: GeneratePdfInput['options']): string {
+function buildProposalHtml(doc: Record<string, unknown>, options: GeneratePdfInput['options'], company: CompanyProfile): string {
   const sections = (doc.sections as { title: string; bullets: string[] }[]) ?? []
   const date = doc.created_at ? new Date(doc.created_at as string).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
   const proposalNum = `PROP-${(doc.id as string ?? '').slice(0, 8).toUpperCase()}`
@@ -211,7 +212,7 @@ function buildProposalHtml(doc: Record<string, unknown>, options: GeneratePdfInp
 <head><meta charset="UTF-8"><style>${BASE_STYLES}</style></head>
 <body>
   ${options?.watermark ? `<div class="watermark">${options.watermark}</div>` : ''}
-  ${brandedHeader('PROPOSAL', proposalNum, date)}
+  ${brandedHeader('PROPOSAL', proposalNum, date, company)}
 
   <div class="cover-block">
     <h1>${doc.title as string ?? 'Project Proposal'}</h1>
@@ -238,8 +239,8 @@ function buildProposalHtml(doc: Record<string, unknown>, options: GeneratePdfInp
 
   ${doc.duration ? `<h2>Timeline</h2><p>Estimated project duration: <strong>${doc.duration}</strong></p>` : ''}
 
-  <h2>About AK Renovations</h2>
-  <p>AK Renovations is Summit County's trusted high-end remodeling contractor. Licensed, insured, and backed by a 12-month workmanship warranty on all work performed.</p>
+  <h2>About ${company.name}</h2>
+  <p>${company.name} is ${company.location}'s trusted ${company.industry} contractor. Licensed, insured, and backed by a 12-month workmanship warranty on all work performed.</p>
 
   <div class="signature-block">
     <p style="margin-bottom:16px;">By signing below, you agree to the scope and pricing above. A full contract will follow.</p>
@@ -260,7 +261,7 @@ function buildProposalHtml(doc: Record<string, unknown>, options: GeneratePdfInp
 </html>`
 }
 
-function buildContractHtml(doc: Record<string, unknown>, options: GeneratePdfInput['options']): string {
+function buildContractHtml(doc: Record<string, unknown>, options: GeneratePdfInput['options'], company: CompanyProfile): string {
   const proj = doc.projects as Record<string, unknown> | null
   const date = doc.created_at ? new Date(doc.created_at as string).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
   const contractNum = `CTR-${(doc.id as string ?? '').slice(0, 8).toUpperCase()}`
@@ -270,7 +271,7 @@ function buildContractHtml(doc: Record<string, unknown>, options: GeneratePdfInp
 <html>
 <head><meta charset="UTF-8"><style>${BASE_STYLES}</style></head>
 <body>
-  ${brandedHeader('CONTRACT', contractNum, date)}
+  ${brandedHeader('CONTRACT', contractNum, date, company)}
 
   <div class="cover-block">
     <h1>${doc.title as string ?? 'Construction Contract'}</h1>
@@ -283,7 +284,7 @@ function buildContractHtml(doc: Record<string, unknown>, options: GeneratePdfInp
     </div>
     <div class="bill-box">
       <h3>Contractor</h3>
-      <p><strong>AK Renovations</strong><br>Adam Kilgore, Owner<br>Summit County, Ohio<br>License: OH-RC-2019-4847</p>
+      <p><strong>${company.name}</strong><br>${company.owner_name}, Owner<br>${company.location}</p>
     </div>
   </div>
 
@@ -304,7 +305,7 @@ function buildContractHtml(doc: Record<string, unknown>, options: GeneratePdfInp
   </table>
 
   <h2>Warranty</h2>
-  <p>AK Renovations warrants all workmanship for 12 months from the date of substantial completion. This warranty covers defects in workmanship only and does not cover normal wear and tear, client-caused damage, or manufacturer defects in materials.</p>
+  <p>${company.name} warrants all workmanship for 12 months from the date of substantial completion. This warranty covers defects in workmanship only and does not cover normal wear and tear, client-caused damage, or manufacturer defects in materials.</p>
 
   <h2>Change Orders</h2>
   <p>Any changes to the scope of work must be agreed upon in writing via a signed change order before work begins. Change orders may affect the contract price and timeline.</p>
@@ -330,9 +331,9 @@ function buildContractHtml(doc: Record<string, unknown>, options: GeneratePdfInp
     </div>
     <div class="sig-line">
       <div class="sig-field">
-        <div class="label">AK Renovations</div>
+        <div class="label">${company.name}</div>
         <div class="line"></div>
-        <div class="name">Adam Kilgore, Owner &nbsp;·&nbsp; Date: ____________</div>
+        <div class="name">${company.owner_name}, Owner &nbsp;·&nbsp; Date: ____________</div>
       </div>
     </div>
   </div>` : ''}
@@ -342,7 +343,7 @@ function buildContractHtml(doc: Record<string, unknown>, options: GeneratePdfInp
 </html>`
 }
 
-function buildChangeOrderHtml(doc: Record<string, unknown>, options: GeneratePdfInput['options']): string {
+function buildChangeOrderHtml(doc: Record<string, unknown>, options: GeneratePdfInput['options'], company: CompanyProfile): string {
   const proj = doc.projects as Record<string, unknown> | null
   const date = doc.created_at ? new Date(doc.created_at as string).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
   const coNum = `CO-${(doc.id as string ?? '').slice(0, 8).toUpperCase()}`
@@ -351,7 +352,7 @@ function buildChangeOrderHtml(doc: Record<string, unknown>, options: GeneratePdf
 <html>
 <head><meta charset="UTF-8"><style>${BASE_STYLES}</style></head>
 <body>
-  ${brandedHeader('CHANGE ORDER', coNum, date)}
+  ${brandedHeader('CHANGE ORDER', coNum, date, company)}
 
   <div class="cover-block">
     <h1>${doc.title as string ?? 'Change Order'}</h1>
@@ -381,9 +382,9 @@ function buildChangeOrderHtml(doc: Record<string, unknown>, options: GeneratePdf
         <div class="name">Date: ____________</div>
       </div>
       <div class="sig-field">
-        <div class="label">AK Renovations</div>
+        <div class="label">${company.name}</div>
         <div class="line"></div>
-        <div class="name">Adam Kilgore, Owner</div>
+        <div class="name">${company.owner_name}, Owner</div>
       </div>
     </div>
   </div>` : ''}
@@ -393,7 +394,7 @@ function buildChangeOrderHtml(doc: Record<string, unknown>, options: GeneratePdf
 </html>`
 }
 
-function buildDailyLogHtml(doc: Record<string, unknown>): string {
+function buildDailyLogHtml(doc: Record<string, unknown>, company: CompanyProfile): string {
   const proj = doc.projects as Record<string, unknown> | null
   const date = doc.log_date ? new Date(doc.log_date as string).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : ''
   const logNum = `LOG-${date.replace(/[, ]/g, '-')}`
@@ -402,7 +403,7 @@ function buildDailyLogHtml(doc: Record<string, unknown>): string {
 <html>
 <head><meta charset="UTF-8"><style>${BASE_STYLES}</style></head>
 <body>
-  ${brandedHeader('DAILY LOG', logNum, date)}
+  ${brandedHeader('DAILY LOG', logNum, date, company)}
 
   <div class="cover-block">
     <h1>${proj?.title ?? 'Project'} — ${date}</h1>
@@ -447,6 +448,7 @@ serve(async (req) => {
     const { document_type, document_id, options = {} } = parsedInput.data
 
     const supabase = createClient(supabaseUrl(), serviceKey())
+    const company = await getCompanyProfile(supabase, 'system');
 
     // Fetch document data
     const doc = await fetchDocumentData(supabase, document_type, document_id)
@@ -459,11 +461,11 @@ serve(async (req) => {
     // Build HTML
     let html = ''
     switch (document_type) {
-      case 'invoice':      html = buildInvoiceHtml(doc as Record<string, unknown>, options); break
-      case 'proposal':     html = buildProposalHtml(doc as Record<string, unknown>, options); break
-      case 'contract':     html = buildContractHtml(doc as Record<string, unknown>, options); break
-      case 'change_order': html = buildChangeOrderHtml(doc as Record<string, unknown>, options); break
-      case 'daily_log':    html = buildDailyLogHtml(doc as Record<string, unknown>); break
+      case 'invoice':      html = buildInvoiceHtml(doc as Record<string, unknown>, options, company); break
+      case 'proposal':     html = buildProposalHtml(doc as Record<string, unknown>, options, company); break
+      case 'contract':     html = buildContractHtml(doc as Record<string, unknown>, options, company); break
+      case 'change_order': html = buildChangeOrderHtml(doc as Record<string, unknown>, options, company); break
+      case 'daily_log':    html = buildDailyLogHtml(doc as Record<string, unknown>, company); break
       default:
         html = `<html><body><h1>${document_type}</h1><pre>${JSON.stringify(doc, null, 2)}</pre></body></html>`
     }

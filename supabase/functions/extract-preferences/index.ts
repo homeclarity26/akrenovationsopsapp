@@ -7,6 +7,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
@@ -67,6 +69,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
+    const company = await getCompanyProfile(supabase, 'system')
 
     // Load existing preference keys to avoid re-extracting known things
     const { data: existingPrefs } = await supabase
@@ -77,7 +80,7 @@ serve(async (req) => {
     const existingKeys = new Set((existingPrefs ?? []).map(p => `${p.preference_type}/${p.key}`))
 
     // Call Claude Haiku for fast extraction
-    const extractionPrompt = `You are analyzing a conversation between Adam Kilgore (AK Renovations owner) and his AI chief of staff.
+    const extractionPrompt = `You are analyzing a conversation between ${company.owner_name} (${company.name} owner) and his AI chief of staff.
 
 Extract ONLY non-obvious, durable information worth remembering for future conversations. Skip pleasantries, skip things any business would do.
 
@@ -107,7 +110,7 @@ Rules:
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-20250514',
+        model: AI_CONFIG.FAST_MODEL,
         max_tokens: 600,
         system: 'You extract structured preference and fact data from conversations. Always return valid JSON.',
         messages: [{ role: 'user', content: extractionPrompt }],

@@ -2,6 +2,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
@@ -37,7 +39,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -79,6 +81,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
+    const company = await getCompanyProfile(supabase, 'system');
 
     const body = await req.json().catch(() => ({}))
     const parsed = InputSchema.safeParse(body)
@@ -92,7 +95,7 @@ serve(async (req) => {
 
     await callAssembleContext('agent-sub-invoice-matcher', 'match sub invoice to contracted amount and flag variances')
 
-    const systemPrompt = `You are an AI accounts payable assistant for AK Renovations.
+    const systemPrompt = buildSystemPrompt(company, 'accounting assistant') + `
 Write a clear, concise variance alert for Adam Kilgore about a subcontractor invoice that does not match the contracted amount.
 Include: sub company name, contracted amount, invoiced amount, variance amount and percentage, and a recommendation.
 No em dashes. 2-3 sentences.`

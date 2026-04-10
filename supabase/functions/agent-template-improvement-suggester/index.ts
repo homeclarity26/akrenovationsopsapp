@@ -9,6 +9,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 
 const supabaseUrl = () => Deno.env.get('SUPABASE_URL') ?? ''
 const serviceKey  = () => Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -29,6 +31,7 @@ async function analyzeDivergences(
   templateIdField: string,
   templateTable: string,
   templateNameField: string,
+  company: Awaited<ReturnType<typeof getCompanyProfile>>,
 ) {
   const twelveWeeksAgo = new Date(Date.now() - 12 * 7 * 24 * 60 * 60 * 1000).toISOString()
 
@@ -73,7 +76,7 @@ async function analyzeDivergences(
       body: JSON.stringify({ context_type: 'general' }),
     })
     const contextData = contextRes.ok ? await contextRes.json() : {}
-    const systemPrompt = contextData.system_prompt ?? 'You are the AI assistant for AK Renovations.'
+    const systemPrompt = contextData.system_prompt ?? buildSystemPrompt(company, 'process improvement specialist')
 
     const aiResp = await fetch('https://api.anthropic.com/v1/messages', {
       method: 'POST',
@@ -83,7 +86,7 @@ async function analyzeDivergences(
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: AI_CONFIG.FAST_MODEL,
         max_tokens: 2048,
         system: systemPrompt,
         messages: [{
@@ -206,10 +209,12 @@ serve(async (req) => {
   try {
     const supabase = createClient(supabaseUrl(), serviceKey())
 
+    const company = await getCompanyProfile(supabase, 'system');
+
     const analyses = [
-      analyzeDivergences(supabase, 'checklist', 'checklist_instances', 'template_id', 'checklist_templates', 'name'),
-      analyzeDivergences(supabase, 'scope', 'sub_scopes', 'scope_template_id', 'scope_templates', 'name'),
-      analyzeDivergences(supabase, 'proposal', 'proposals', 'proposal_template_id', 'proposal_templates', 'name'),
+      analyzeDivergences(supabase, 'checklist', 'checklist_instances', 'template_id', 'checklist_templates', 'name', company),
+      analyzeDivergences(supabase, 'scope', 'sub_scopes', 'scope_template_id', 'scope_templates', 'name', company),
+      analyzeDivergences(supabase, 'proposal', 'proposals', 'proposal_template_id', 'proposal_templates', 'name', company),
     ]
 
     await Promise.allSettled(analyses)

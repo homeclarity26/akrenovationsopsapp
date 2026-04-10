@@ -9,6 +9,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
@@ -101,7 +102,7 @@ serve(async (req) => {
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-20250514',  // Use Haiku — this runs on every DB change
+        model: AI_CONFIG.FAST_MODEL,  // Use Haiku — this runs on every DB change
         max_tokens: 150,
         system: 'Convert this business event into a concise, plain-English memory entry. Maximum 2 sentences. Be specific with names, amounts, and dates. No filler words.',
         messages: [{

@@ -3,6 +3,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
@@ -46,7 +48,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -230,6 +232,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
+    const company = await getCompanyProfile(supabase, 'system');
 
     const rawBody = await req.json().catch(() => ({}))
     const parsedInput = InputSchema.safeParse(rawBody)
@@ -268,7 +271,7 @@ serve(async (req) => {
     const relevantSelections = (selections ?? []).filter((s) => isRelevantToTrade(s, trade))
 
     const systemPrompt =
-      (basePrompt ?? 'You are an AI contracts assistant for AK Renovations, a high-end residential remodeling contractor in Summit County, Ohio.') +
+      (basePrompt ?? buildSystemPrompt(company, 'contracts assistant')) +
       `
 
 You are generating a professional Scope of Work document for a residential renovation subcontractor in Ohio.
@@ -297,7 +300,7 @@ Return a complete ScopeDocument JSON object with this exact shape:
     "subcontractor": string,
     "contract_amount": number,
     "date_prepared": string,
-    "prepared_by": "AK Renovations — Adam Kilgore"
+    "prepared_by": "${company.name} — ${company.owner_name}"
   },
   "scope_summary": string,
   "inclusions": string[],

@@ -6,6 +6,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
@@ -44,6 +46,7 @@ serve(async (req) => {
     const { deliverableType, currentItems, projectContext } = parsedInput.data
 
     const supabase = createClient(supabaseUrl(), serviceKey())
+    const company = await getCompanyProfile(supabase, 'system')
 
     // Get business context for the system prompt
     const contextRes = await fetch(`${supabaseUrl()}/functions/v1/assemble-context`, {
@@ -56,7 +59,7 @@ serve(async (req) => {
     })
 
     const contextData = contextRes.ok ? await contextRes.json() : {}
-    const systemPrompt = contextData.system_prompt ?? 'You are the AI assistant for AK Renovations, a high-end residential remodeling contractor.'
+    const systemPrompt = contextData.system_prompt ?? `You are the AI assistant for ${company.name}, a high-end residential remodeling contractor.`
 
     const deliverableLabels: Record<string, string> = {
       checklist: 'project checklist',
@@ -70,7 +73,7 @@ serve(async (req) => {
 
     const deliverableLabel = deliverableLabels[deliverableType] ?? deliverableType
 
-    const userMessage = `You are helping edit a ${deliverableLabel} for an AK Renovations project.
+    const userMessage = `You are helping edit a ${deliverableLabel} for a ${company.name} project.
 
 Project details:
 ${JSON.stringify(projectContext, null, 2)}
@@ -102,7 +105,7 @@ Only suggest genuinely useful items. No filler.`
         'anthropic-version': '2023-06-01',
       },
       body: JSON.stringify({
-        model: 'claude-haiku-4-5-20251001',
+        model: AI_CONFIG.FAST_MODEL,
         max_tokens: 1024,
         system: systemPrompt,
         messages: [{ role: 'user', content: userMessage }],

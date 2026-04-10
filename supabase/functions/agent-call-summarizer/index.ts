@@ -7,6 +7,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
@@ -148,6 +149,8 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
 
+    const company = await getCompanyProfile(supabase, 'system');
+
     const body = await req.json().catch(() => ({}))
     const parsed = InputSchema.safeParse(body)
     if (!parsed.success) {
@@ -173,7 +176,7 @@ serve(async (req) => {
     const recordingBase64 = arrayBufferToBase64(recordingBuffer)
 
     // Single Gemini call — transcribe AND analyze
-    const systemInstructions = `You are an AI business assistant for AK Renovations, a high-end residential renovation contractor in Summit County, Ohio. The owner is Adam Kilgore.
+    const systemInstructions = `${buildSystemPrompt(company, 'business assistant')}
 
 Your job: listen to a phone call between Adam (or one of his team) and a client or prospective client, transcribe it, then analyze it and extract decisions, action items, topics, and sentiment.
 
