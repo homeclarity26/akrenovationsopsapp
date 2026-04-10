@@ -62,7 +62,7 @@ serve(async (req: Request) => {
       console.error('stripe-webhook: signature verification failed:', verifyErr);
       return new Response(JSON.stringify({ error: 'Invalid signature' }), {
         status: 400,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       });
     }
 
