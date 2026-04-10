@@ -19,9 +19,6 @@ const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage').th
 // Platform admin layout (eager — wraps all /platform pages)
 import { PlatformLayout } from '@/components/layout/PlatformLayout'
 
-// Error handling
-import { ErrorBoundary } from '@/components/ErrorBoundary'
-
 // Admin pages
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })))
 const CRMPage = lazy(() => import('./pages/admin/CRMPage').then(m => ({ default: m.CRMPage })))
@@ -291,7 +288,7 @@ export default function App() {
         <BrowserRouter>
           <ModeProvider>
             <Sentry.ErrorBoundary
-              fallback={({ error }) => (
+              fallback={({ error: _error }) => (
                 <div style={{ padding: '2rem', textAlign: 'center' }}>
                   <h2>Something went wrong</h2>
                   <p>Our team has been notified. Please refresh the page.</p>
