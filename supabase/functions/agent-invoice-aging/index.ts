@@ -1,11 +1,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -25,7 +22,7 @@ async function callAssembleContext(agentName: string, query: string): Promise<st
   } catch { return null }
 }
 
-async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<string> {
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -42,11 +39,11 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
   })
   if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   const rl = await checkRateLimit(req, 'agent-invoice-aging')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -109,13 +106,17 @@ Keep it under 5 sentences. No em dashes.`
         riskLevel = 'high'
       }
 
-      const messageDraft = await callClaude(
+      const _t0 = Date.now()
+
+      const { text: messageDraft, usage: _u } = await callClaude(
         systemPrompt,
         `Client: ${project.client_name}
 Project: ${project.title}
 Invoice: ${invoice.invoice_number}
 Invoice Title: ${invoice.title}
-Amount Due: $${invoice.balance_due.toLocaleString()}
+Amount Due: $${invoice.balance_due.toLocaleString()
+
+      logAiUsage({ function_name: 'agent-invoice-aging', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })}
 Due Date: ${invoice.due_date}
 Days Overdue: ${daysOverdue}
 Tone: ${tone}
@@ -149,13 +150,13 @@ Draft the collection message.`,
 
     return new Response(
       JSON.stringify({ success: true, actions_created: actionsCreated.length, invoices: actionsCreated }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     console.error('agent-invoice-aging error:', err)
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

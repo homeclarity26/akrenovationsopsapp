@@ -1,11 +1,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -25,7 +22,7 @@ async function callAssembleContext(agentName: string, query: string): Promise<st
   } catch { return null }
 }
 
-async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<string> {
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -42,7 +39,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
   })
   if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 async function writeOutput(
@@ -69,7 +66,7 @@ interface WeatherForecastItem {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   const rl = await checkRateLimit(req, 'agent-weather-schedule')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -93,7 +90,7 @@ No em dashes. 2-3 sentences per project alert.`
     if (!weatherApiKey) {
       return new Response(JSON.stringify({ error: 'OPENWEATHERMAP_API_KEY not configured' }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
@@ -180,9 +177,13 @@ No em dashes. 2-3 sentences per project alert.`
 
       if (flaggedDates.length === 0) continue
 
-      const alertText = await callClaude(
+      const _t0 = Date.now()
+
+      const { text: alertText, usage: _u } = await callClaude(
         systemPrompt,
         `Project: ${project.title} (${project.client_name})
+
+      logAiUsage({ function_name: 'agent-weather-schedule', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })
 Scheduled Work Days Being Flagged: ${flaggedDates.join(', ')}
 Weather Issues: ${weatherIssues.join('; ')}
 
@@ -213,13 +214,13 @@ Write the weather alert.`,
 
     return new Response(
       JSON.stringify({ success: true, projects_checked: projects?.length ?? 0, alerts_generated: alerts.length }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     console.error('agent-weather-schedule error:', err)
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

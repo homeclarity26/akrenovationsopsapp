@@ -3,6 +3,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   referred_name: z.string(),
@@ -12,11 +14,6 @@ const InputSchema = z.object({
   referrer_lead_id: z.string().uuid('referrer_lead_id must be a valid UUID').optional(),
   referring_client_name: z.string().optional(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -36,7 +33,7 @@ async function callAssembleContext(agentName: string, query: string): Promise<st
   } catch { return null }
 }
 
-async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 1024): Promise<string> {
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 1024): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -53,11 +50,11 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
   })
   if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   const rl = await checkRateLimit(req, 'agent-referral-intake')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -72,7 +69,7 @@ serve(async (req) => {
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { referred_name, referred_phone, referred_email, project_type, referrer_lead_id, referring_client_name } = parsed.data
@@ -93,8 +90,14 @@ serve(async (req) => {
       'You are an AI assistant for AK Renovations, a high-end residential remodeling contractor in Summit County, Ohio.')
       + `\n\nREFERRAL INTAKE\nDraft warm thank-you to referrer and outreach to referred lead. Sound like Adam, not a corporation. No em dashes.`
 
-    const thankYou = await callClaude(systemPrompt, `Draft a warm, personal thank-you text to ${referring_client_name} for referring ${referred_name} to AK Renovations. Under 3 sentences.`)
-    const outreach = await callClaude(systemPrompt, `Draft an initial outreach text to ${referred_name} who was referred by ${referring_client_name}. Mention the referral, introduce AK Renovations, ask about their ${project_type} project. Under 4 sentences.`)
+    const _t0 = Date.now()
+
+    const { text: thankYou, usage: _u } = await callClaude(systemPrompt, `Draft a warm, personal thank-you text to ${referring_client_name} for referring ${referred_name} to AK Renovations. Under 3 sentences.`)
+
+    logAiUsage({ function_name: 'agent-referral-intake', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })
+    const _t0 = Date.now()
+    const { text: outreach, usage: _u } = await callClaude(systemPrompt, `Draft an initial outreach text to ${referred_name} who was referred by ${referring_client_name}. Mention the referral, introduce AK Renovations, ask about their ${project_type} project. Under 4 sentences.`)
+    logAiUsage({ function_name: 'agent-referral-intake', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })
 
     await supabase.from('ai_actions').insert([
       {
@@ -115,8 +118,8 @@ serve(async (req) => {
       },
     ])
 
-    return new Response(JSON.stringify({ lead_id: lead?.id, thankYou, outreach }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ lead_id: lead?.id, thankYou, outreach }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   }
 })

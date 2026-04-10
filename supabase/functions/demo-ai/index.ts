@@ -10,6 +10,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   system: z.string(),
@@ -17,13 +19,6 @@ const InputSchema = z.object({
   model: z.string().optional(),
   max_tokens: z.number().optional(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers':
-    'authorization, x-client-info, apikey, content-type',
-  'Access-Control-Allow-Methods': 'POST, OPTIONS',
-}
 
 interface DemoAIRequest {
   system: string
@@ -39,7 +34,7 @@ const FALLBACK = {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: getCorsHeaders(req) })
   }
 
   const rl = await checkRateLimit(req, 'demo-ai')
@@ -48,7 +43,7 @@ serve(async (req) => {
   if (req.method !== 'POST') {
     return new Response(JSON.stringify({ error: 'method not allowed' }), {
       status: 405,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 
@@ -57,7 +52,7 @@ serve(async (req) => {
   if (!parsedInput.success) {
     return new Response(
       JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-      { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   }
   const body = parsedInput.data
@@ -71,7 +66,7 @@ serve(async (req) => {
   if (!apiKey) {
     return new Response(JSON.stringify(FALLBACK), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 
@@ -101,7 +96,7 @@ serve(async (req) => {
       console.error('claude error:', res.status, errText)
       return new Response(JSON.stringify(FALLBACK), {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
@@ -115,14 +110,14 @@ serve(async (req) => {
       JSON.stringify({ text: text || FALLBACK.text }),
       {
         status: 200,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       },
     )
   } catch (e) {
     console.error('demo-ai exception:', e)
     return new Response(JSON.stringify(FALLBACK), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

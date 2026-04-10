@@ -1,6 +1,7 @@
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts';
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 // Stripe webhook handler
 // This function receives webhook events from Stripe and routes them to the
@@ -16,14 +17,10 @@ import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts';
 //
 // STATUS: STUB — ready to activate when Stripe is configured.
 
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type, stripe-signature',
-};
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders });
+    return new Response('ok', { headers: getCorsHeaders(req) });
   }
 
   const rateLimitResult = await checkRateLimit(req, 'stripe-webhook');
@@ -38,7 +35,7 @@ serve(async (req: Request) => {
     console.log('stripe-webhook: Stripe not configured. Add STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET to proceed.');
     return new Response(JSON.stringify({ received: true, status: 'not_configured' }), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     });
   }
 
@@ -98,14 +95,14 @@ serve(async (req: Request) => {
 
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     });
 
   } catch (err) {
     console.error('stripe-webhook error:', err);
     return new Response(
       JSON.stringify({ error: 'Webhook processing failed' }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     );
   }
 });

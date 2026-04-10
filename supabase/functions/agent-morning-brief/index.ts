@@ -1,11 +1,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -25,7 +22,7 @@ async function callAssembleContext(agentName: string, query: string): Promise<st
   } catch { return null }
 }
 
-async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<string> {
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -42,7 +39,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
   })
   if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 async function writeOutput(
@@ -61,7 +58,7 @@ async function writeOutput(
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   const rl = await checkRateLimit(req, 'agent-morning-brief')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -224,7 +221,11 @@ Tone: direct, no fluff, like a trusted chief of staff. No em dashes.`
 - Manual entries pending approval: ${(pendingManual ?? []).length}
 - Billable hours this week: ${billableHoursThisWeek.toFixed(1)}h vs last week ${billableHoursLastWeek.toFixed(1)}h${payrollSummary}${phaseKSummary}`
 
-    const brief = await callClaude(systemPrompt, `Generate the morning brief from this data: ${briefData}`, 1500)
+    const _t0 = Date.now()
+
+    const { text: brief, usage: _u } = await callClaude(systemPrompt, `Generate the morning brief from this data: ${briefData}`, 1500)
+
+    logAiUsage({ function_name: 'agent-morning-brief', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })
 
     await writeOutput(
       supabase,
@@ -242,13 +243,13 @@ Tone: direct, no fluff, like a trusted chief of staff. No em dashes.`
     )
 
     return new Response(JSON.stringify({ success: true, brief }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   } catch (err) {
     console.error('agent-morning-brief error:', err)
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

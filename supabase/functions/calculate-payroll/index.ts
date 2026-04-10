@@ -7,15 +7,11 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const InputSchema = z.object({
   pay_period_id: z.string().uuid('pay_period_id must be a valid UUID'),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 // Tax constants — stored here as a single source of truth so they can be updated annually.
 const SS_WAGE_BASE_2026 = 168600 // estimate; update annually
@@ -401,7 +397,7 @@ function round2(n: number): number {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   const rl = await checkRateLimit(req, 'calculate-payroll')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -415,7 +411,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { pay_period_id } = parsedInput.data
@@ -485,12 +481,12 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, pay_period_id, records_count: records.length }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (e) {
     return new Response(JSON.stringify({ error: (e as Error).message }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

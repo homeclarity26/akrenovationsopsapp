@@ -7,6 +7,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const InputSchema = z.object({
   document_type: z.enum(['proposal', 'invoice', 'contract', 'change_order', 'daily_log', 'punch_list', 'pl_report', 'bonus_summary', 'quote_comparison']),
@@ -16,11 +17,6 @@ const InputSchema = z.object({
     watermark: z.string().optional(),
   }).optional(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 interface GeneratePdfInput {
   document_type: 'proposal' | 'invoice' | 'contract' | 'change_order' | 'daily_log' | 'punch_list' | 'pl_report' | 'bonus_summary' | 'quote_comparison'
@@ -427,7 +423,7 @@ function buildDailyLogHtml(doc: Record<string, unknown>): string {
 // ── Main serve function ───────────────────────────────────────────────────────
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   const rl = await checkRateLimit(req, 'generate-pdf')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -438,7 +434,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { document_type, document_id, options = {} } = parsedInput.data
@@ -449,7 +445,7 @@ serve(async (req) => {
     const doc = await fetchDocumentData(supabase, document_type, document_id)
     if (!doc) {
       return new Response(JSON.stringify({ error: 'Document not found' }), {
-        status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+        status: 404, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }
       })
     }
 
@@ -539,12 +535,12 @@ serve(async (req) => {
         html_length: html.length,
         file_name: fileName,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   } catch (err) {
     console.error('generate-pdf error:', err)
     return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }
     })
   }
 })

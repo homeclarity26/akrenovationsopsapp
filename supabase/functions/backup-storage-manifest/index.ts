@@ -10,11 +10,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const LIST_PAGE_SIZE = 1000
 
@@ -228,7 +224,7 @@ async function listBucketFiles(
 // ── Main serve ───────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   const rl = await checkRateLimit(req, 'backup-storage-manifest')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -259,7 +255,7 @@ serve(async (req) => {
   if (logErr) {
     console.error('Failed to create backup_logs row:', logErr)
     return new Response(JSON.stringify({ error: 'Failed to create backup log', details: logErr }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 
@@ -329,7 +325,7 @@ serve(async (req) => {
         reason: 'Drive upload skipped — secrets not configured',
         total_files: totalFiles,
         total_bytes: totalBytes,
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
     }
 
     // Upload to Drive (in the Weekly subfolder)
@@ -356,7 +352,7 @@ serve(async (req) => {
       file_size_bytes: upload.file_size_bytes,
       drive_url: upload.drive_url,
       duration_seconds: durationSeconds,
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err)
     console.error('backup-storage-manifest error:', err)
@@ -383,7 +379,7 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

@@ -6,15 +6,12 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   improvement_spec_id: z.string().uuid('improvement_spec_id must be a valid UUID'),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 const supabaseUrl = () => Deno.env.get('SUPABASE_URL') ?? ''
 const serviceKey  = () => Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -50,7 +47,7 @@ async function callClaude(system: string, user: string, maxTokens = 2000): Promi
     throw new Error(`Claude API error ${res.status}: ${await res.text()}`)
   }
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 // ─── GitHub helper ─────────────────────────────────────────────────────────
@@ -107,7 +104,7 @@ function tryParseJson<T>(text: string): T | null {
 
 // ─── Main handler ──────────────────────────────────────────────────────────
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   const rl = await checkRateLimit(req, 'meta-agent-open-pr')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -120,7 +117,7 @@ serve(async (req) => {
   if (missing.length) {
     return new Response(
       JSON.stringify({ error: 'Missing required env vars', missing }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 
@@ -130,7 +127,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { improvement_spec_id } = parsedInput.data
@@ -170,13 +167,15 @@ serve(async (req) => {
     if (specErr || !spec) {
       return new Response(
         JSON.stringify({ error: 'improvement_spec not found', details: specErr?.message }),
-        { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { status: 404, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
     // ─── Step 1: classify change category ──────────────────────────────
     const classifySystem = `${baseSystemPrompt}\n\nClassify this improvement as one of: 'data_insert' (adds new rows to config tables like checklist_template_items, compliance_items, labor_benchmarks, material_specs), 'data_update' (updates existing rows in config tables), 'copy_change' (only changes text in demo data files), or 'claude_code' (requires actual code changes, schema changes, new files, or logic changes). Return only the classification string.`
-    const classifyRaw = await callClaude(classifySystem, JSON.stringify(spec), 50)
+    const _t = Date.now()
+    const { text: classifyRaw, usage: _u } = await callClaude(classifySystem, JSON.stringify(spec), 50)
+    logAiUsage({ function_name: 'meta-agent-open-pr', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t, status: 'success' })
     const category = (classifyRaw.trim().toLowerCase().match(/(data_insert|data_update|copy_change|claude_code)/)?.[1] ?? 'claude_code') as
       | 'data_insert' | 'data_update' | 'copy_change' | 'claude_code'
 
@@ -191,17 +190,19 @@ serve(async (req) => {
 
       return new Response(
         JSON.stringify({ needs_claude_code: true, change_category: category }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
     // ─── Step 2: generate the actual changes ───────────────────────────
     const genSystem = `${baseSystemPrompt}\n\nYou are generating code changes for an AK Ops improvement. Generate the minimal, precise changes needed. For data_insert/data_update: generate SQL INSERT/UPDATE statements AND the equivalent migration file content. For copy_change: generate the exact file content changes. Format as JSON: { files: [{ path, description, new_content }], sql_migrations: string[] }`
-    const genRaw = await callClaude(
+    const _t2 = Date.now()
+    const { text: genRaw, usage: _u2 } = await callClaude(
       genSystem,
       `Improvement spec: ${JSON.stringify(spec)}\nCategory: ${category}`,
       4000,
     )
+    logAiUsage({ function_name: 'meta-agent-open-pr', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u2.input_tokens, output_tokens: _u2.output_tokens, duration_ms: Date.now() - _t2, status: 'success' })
     const changes = tryParseJson<GeneratedChanges>(genRaw) ?? { files: [], sql_migrations: [] }
     if (!changes.files?.length && !changes.sql_migrations?.length) {
       throw new Error('Claude returned no files or migrations to apply')
@@ -270,11 +271,13 @@ serve(async (req) => {
 
     // ─── Step 5: generate PR body ──────────────────────────────────────
     const prBodySystem = `${baseSystemPrompt}\n\nWrite a clear, concise GitHub pull request description for a contractor (not a developer). Explain what problem this solves, what changed as bullet points, and how to verify. Under 200 words.`
-    const prBody = await callClaude(
+    const _t3 = Date.now()
+    const { text: prBody, usage: _u3 } = await callClaude(
       prBodySystem,
       `Improvement spec: ${JSON.stringify(spec)}\nFiles changed: ${JSON.stringify(committedFiles)}`,
       800,
     )
+    logAiUsage({ function_name: 'meta-agent-open-pr', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u3.input_tokens, output_tokens: _u3.output_tokens, duration_ms: Date.now() - _t3, status: 'success' })
 
     // ─── Step 6: open PR ───────────────────────────────────────────────
     const prTitle = `[Auto] ${spec.title ?? 'Improvement'}`
@@ -315,7 +318,7 @@ serve(async (req) => {
         needs_claude_code: false,
         change_category: category,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   } catch (err) {
     console.error('meta-agent-open-pr error:', err)
@@ -340,7 +343,7 @@ serve(async (req) => {
     }
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

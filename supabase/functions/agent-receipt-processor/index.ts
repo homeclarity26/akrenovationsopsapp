@@ -2,17 +2,14 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   file_id: z.string().uuid('file_id must be a valid UUID'),
   project_id: z.string().uuid('project_id must be a valid UUID').optional(),
   entered_by: z.string().uuid('entered_by must be a valid UUID').optional(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -32,7 +29,7 @@ async function callAssembleContext(agentName: string, query: string): Promise<st
   } catch { return null }
 }
 
-async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<string> {
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -49,7 +46,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
   })
   if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 async function writeOutput(
@@ -67,7 +64,7 @@ async function writeOutput(
   })
 }
 
-async function callClaudeVision(systemPrompt: string, imageUrl: string, userMessage: string, maxTokens = 1024): Promise<string> {
+async function callClaudeVision(systemPrompt: string, imageUrl: string, userMessage: string, maxTokens = 1024): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -92,11 +89,11 @@ async function callClaudeVision(systemPrompt: string, imageUrl: string, userMess
   })
   if (!res.ok) throw new Error(`Claude vision error: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   const rl = await checkRateLimit(req, 'agent-receipt-processor')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -111,7 +108,7 @@ serve(async (req) => {
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { file_id, project_id, entered_by } = parsed.data
@@ -145,12 +142,14 @@ If you cannot read a field clearly, use null. Return ONLY the JSON object.`
     if (!targetProjectId) throw new Error('project_id required — either pass it in or associate the file with a project')
 
     // Call Claude vision to extract receipt data
-    const extractionResult = await callClaudeVision(
+    const _tv = Date.now()
+    const { text: extractionResult, usage: _uv } = await callClaudeVision(
       systemPrompt,
       file.file_url,
       'Extract all receipt data from this image and return as JSON.',
       800,
     )
+    logAiUsage({ function_name: 'agent-receipt-processor', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _uv.input_tokens, output_tokens: _uv.output_tokens, duration_ms: Date.now() - _tv, status: 'success' })
 
     let receiptData: Record<string, unknown> = {}
     try {
@@ -200,13 +199,13 @@ If you cannot read a field clearly, use null. Return ONLY the JSON object.`
 
     return new Response(
       JSON.stringify({ success: true, expense_id: expense.id, extracted_data: receiptData }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     console.error('agent-receipt-processor error:', err)
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

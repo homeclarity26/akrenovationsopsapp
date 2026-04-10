@@ -9,6 +9,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   entity_type: z.enum(['project', 'client', 'lead', 'subcontractor', 'employee', 'vendor']),
@@ -18,11 +20,6 @@ const InputSchema = z.object({
   new_value: z.string().optional(),
   metadata: z.record(z.unknown()).optional(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 interface MemoryUpdateEvent {
   entity_type: 'project' | 'client' | 'lead' | 'subcontractor' | 'employee' | 'vendor'
@@ -53,7 +50,7 @@ const TABLE_MAP: Record<string, string> = {
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: getCorsHeaders(req) })
   }
 
   const rl = await checkRateLimit(req, 'update-operational-memory')
@@ -65,7 +62,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const event: MemoryUpdateEvent = parsedInput.data
@@ -156,13 +153,13 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, memory: memoryContent }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   } catch (err) {
     console.error('update-operational-memory error:', err)
     return new Response(
       JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })
