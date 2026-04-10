@@ -51,7 +51,7 @@ serve(async (req) => {
   // JWT auth check
   const auth = await verifyAuth(req)
   if (!auth) {
-    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   }
 
   const rl = await checkRateLimit(req, 'agent-daily-log')

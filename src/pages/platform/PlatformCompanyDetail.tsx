@@ -1,6 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, Building2, Users, FolderOpen } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { Card, MetricCard } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -36,7 +36,7 @@ export function PlatformCompanyDetail() {
     enabled: !!id,
   })
 
-  const { data: projectCount = 0 } = useQuery({
+  const { data: _projectCount = 0 } = useQuery({
     queryKey: ['platform-company-projects', id],
     queryFn: async () => {
       // Projects are linked to companies via the profiles of the admin who created them.

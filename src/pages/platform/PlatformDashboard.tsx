@@ -1,6 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { Building2, Users, FolderOpen, Sparkles } from 'lucide-react'
+import { Building2, Users } from 'lucide-react'
 import { MetricCard } from '@/components/ui/Card'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
