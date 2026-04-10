@@ -18,17 +18,15 @@
 // Output: { embedding: number[], provider: 'gemini' | 'openai' }
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { verifyAuth } from '../_shared/auth.ts'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   text: z.string(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 const TARGET_DIMS = 1536
 
@@ -102,7 +100,13 @@ async function embedWithOpenAI(text: string, apiKey: string): Promise<number[]> 
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: getCorsHeaders(req) })
+  }
+
+  // JWT auth check
+  const auth = await verifyAuth(req)
+  if (!auth) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 
   const rl = await checkRateLimit(req, 'generate-embedding')
@@ -114,7 +118,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { text } = parsedInput.data
@@ -139,13 +143,13 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ embedding, provider }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   } catch (err) {
     console.error('generate-embedding error:', err)
     return new Response(
       JSON.stringify({ error: String(err instanceof Error ? err.message : err) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })

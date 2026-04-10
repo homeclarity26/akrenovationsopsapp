@@ -3,11 +3,14 @@
 // NOW calls assemble-context first, then appends trade/quote data.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCompanyProfile } from '../_shared/companyProfile.ts'
 import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   trade_id: z.string().uuid('trade_id must be a valid UUID'),
@@ -15,11 +18,6 @@ const InputSchema = z.object({
   user_id: z.string().uuid('user_id must be a valid UUID').optional(),
   user_role: z.enum(['admin', 'employee', 'client']).optional(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 interface RequestBody {
   trade_id: string
@@ -69,7 +67,13 @@ async function callAssembleContext(
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: getCorsHeaders(req) })
+  }
+
+  // JWT auth check
+  const auth = await verifyAuth(req)
+  if (!auth) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
   }
 
   const rl = await checkRateLimit(req, 'compare-budget-quotes')
@@ -81,7 +85,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { trade_id, project_id, user_id, user_role = 'admin' } = parsedInput.data
@@ -112,7 +116,7 @@ serve(async (req) => {
     if (!quotes || quotes.length === 0) {
       return new Response(
         JSON.stringify({ analysis: 'No quotes to compare for this trade.', recommended_quote_id: '', reasoning: 'No active quotes found.' }),
-        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
       )
     }
 
@@ -190,13 +194,13 @@ Respond ONLY with valid JSON:
 
     return new Response(
       JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   } catch (err) {
     console.error('compare-budget-quotes error:', err)
     return new Response(
       JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })

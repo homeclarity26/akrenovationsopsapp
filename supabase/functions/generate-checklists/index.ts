@@ -7,20 +7,17 @@
 //   - After standard SOP items, optionally ask AI for project-specific additions
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const InputSchema = z.object({
   trigger_event: z.string(),
   entity_id: z.string(),
   entity_type: z.enum(['project', 'lead', 'employee', 'subcontractor', 'general']),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -58,7 +55,13 @@ interface GenerateRequest {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
+
+  // JWT auth check
+  const auth = await verifyAuth(req)
+  if (!auth) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  }
 
   const rl = await checkRateLimit(req, 'generate-checklists')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -68,7 +71,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { trigger_event, entity_id, entity_type } = parsedInput.data
@@ -77,7 +80,7 @@ serve(async (req) => {
         JSON.stringify({ error: 'trigger_event, entity_id, entity_type required' }),
         {
           status: 400,
-          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+          headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
         },
       )
     }
@@ -103,7 +106,7 @@ serve(async (req) => {
     if (tplErr) {
       return new Response(JSON.stringify({ error: 'failed to load templates', detail: tplErr }), {
         status: 500,
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
@@ -202,12 +205,12 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ ok: true, instances_created: instancesCreated.length, ids: instancesCreated }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

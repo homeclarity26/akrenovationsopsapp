@@ -4,15 +4,13 @@
 // Writes to improvement_specs table.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
 import { AI_CONFIG } from '../_shared/aiConfig.ts'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 const supabaseUrl = () => Deno.env.get('SUPABASE_URL') ?? ''
 const serviceKey  = () => Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -197,7 +195,13 @@ Return ONLY valid JSON:
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
+
+  // JWT auth check
+  const auth = await verifyAuth(req)
+  if (!auth) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  }
 
   const rl = await checkRateLimit(req, 'agent-template-improvement-suggester')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -216,14 +220,14 @@ serve(async (req) => {
     await Promise.allSettled(analyses)
 
     return new Response(JSON.stringify({ ok: true, message: 'Template improvement analysis complete' }), {
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
 
   } catch (err) {
     console.error('[agent-template-improvement-suggester]', err)
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })
