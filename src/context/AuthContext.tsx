@@ -23,6 +23,7 @@ export interface AppUser {
   role: Role
   full_name: string
   avatar_url: string | null
+  company_id: string | null
 }
 
 interface AuthContextValue {
@@ -41,7 +42,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 async function fetchProfile(userId: string, fallbackEmail?: string): Promise<AppUser | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, role, full_name, email, avatar_url')
+    .select('id, role, full_name, email, avatar_url, company_id')
     .eq('id', userId)
     .maybeSingle()
 
@@ -57,6 +58,7 @@ async function fetchProfile(userId: string, fallbackEmail?: string): Promise<App
       role: (data.role as Role) ?? 'client',
       full_name: data.full_name ?? (fallbackEmail?.split('@')[0] ?? 'User'),
       avatar_url: data.avatar_url,
+      company_id: data.company_id ?? null,
     }
   }
 
@@ -68,6 +70,7 @@ async function fetchProfile(userId: string, fallbackEmail?: string): Promise<App
     role: 'client',
     full_name: fallbackEmail?.split('@')[0] ?? 'User',
     avatar_url: null,
+    company_id: null,
   }
 }
 

@@ -3,11 +3,12 @@ import { NavLink, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, Users, FolderOpen, DollarSign,
   Calendar, Sparkles, Settings, Menu, X, FileText,
-  Receipt, ClipboardList, HardHat, Shield, Wallet
+  Receipt, ClipboardList, HardHat, Shield, Wallet, ArrowLeft
 } from 'lucide-react'
 import { AIBar } from '@/components/ui/AIBar'
 import { APIUsageBar } from '@/components/ui/APIUsageBar'
 import { ModeToggle } from '@/components/ui/ModeToggle'
+import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -27,6 +28,8 @@ const NAV = [
 export function AdminLayout() {
   const [aiOpen, setAiOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
+  const { user } = useAuth()
+  const isSuperAdmin = user?.role === 'super_admin'
 
   return (
     <div className="flex flex-col min-h-svh bg-[var(--bg)]">
@@ -40,6 +43,15 @@ export function AdminLayout() {
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
+          {isSuperAdmin && (
+            <NavLink
+              to="/platform"
+              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-white/60 hover:text-white hover:bg-white/10 transition-colors mb-2 border-b border-white/10 pb-3"
+            >
+              <ArrowLeft size={18} />
+              Back to Platform
+            </NavLink>
+          )}
           {NAV.map(({ to, label, icon: Icon, exact }) => (
             <NavLink
               key={to}
@@ -114,7 +126,7 @@ export function AdminLayout() {
       {menuOpen && (
         <div className="lg:hidden fixed inset-0 z-50" onClick={() => setMenuOpen(false)}>
           <div className="absolute right-2 top-12 w-52 bg-[var(--navy)] rounded-2xl p-2 shadow-2xl" onClick={e => e.stopPropagation()}>
-            {[...NAV, { to: '/admin/ai', label: 'AI Command', icon: Sparkles, exact: false }, { to: '/admin/settings', label: 'Settings', icon: Settings, exact: false }].map(({ to, label, icon: Icon, exact }) => (
+            {[...(isSuperAdmin ? [{ to: '/platform', label: 'Back to Platform', icon: ArrowLeft, exact: false }] : []), ...NAV, { to: '/admin/ai', label: 'AI Command', icon: Sparkles, exact: false }, { to: '/admin/settings', label: 'Settings', icon: Settings, exact: false }].map(({ to, label, icon: Icon, exact }) => (
               <NavLink
                 key={to}
                 to={to}
