@@ -1,6 +1,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 
 const JsonInputSchema = z.object({
@@ -44,7 +46,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -76,6 +78,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
+    const company = await getCompanyProfile(supabase, 'system');
 
     // Support both Twilio webhook format and direct JSON
     let fromPhone = ''
@@ -161,7 +164,7 @@ serve(async (req) => {
     })
 
     const systemPrompt =
-      (basePrompt ?? 'You are an AI assistant for AK Renovations, texting on behalf of Adam Kilgore.') +
+      (basePrompt ?? buildSystemPrompt(company, 'communications assistant')) +
       `
 
 SMS RESPONSE TASK

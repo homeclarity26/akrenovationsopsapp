@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/react'
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
@@ -245,7 +246,19 @@ export default function App() {
     <QueryClientProvider client={qc}>
       <AuthProvider>
         <BrowserRouter>
-          <AppRoutes />
+          <Sentry.ErrorBoundary
+            fallback={({ error }) => (
+              <div style={{ padding: '2rem', textAlign: 'center' }}>
+                <h2>Something went wrong</h2>
+                <p>Our team has been notified. Please refresh the page.</p>
+                <button onClick={() => window.location.reload()}>
+                  Refresh Page
+                </button>
+              </div>
+            )}
+          >
+            <AppRoutes />
+          </Sentry.ErrorBoundary>
         </BrowserRouter>
       </AuthProvider>
     </QueryClientProvider>

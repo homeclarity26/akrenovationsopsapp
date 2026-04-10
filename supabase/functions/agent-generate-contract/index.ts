@@ -2,6 +2,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 
 const InputSchema = z.object({
@@ -50,7 +52,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -163,8 +165,10 @@ serve(async (req) => {
     if (!template) throw new Error('No current subcontractor_agreement template found')
 
     // Generate payment schedule using Claude
+    const company = await getCompanyProfile(supabase, 'system')
+
     const pmtSystem =
-      (basePrompt ?? 'You are AK Renovations contracts assistant.') +
+      (basePrompt ?? buildSystemPrompt(company, 'contracts assistant')) +
       `
 
 Generate a fair and practical payment schedule for this subcontractor agreement.

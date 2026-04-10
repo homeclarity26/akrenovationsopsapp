@@ -1,6 +1,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 
 const InputSchema = z.object({
@@ -39,7 +41,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -75,6 +77,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
+    const company = await getCompanyProfile(supabase, 'system');
 
     const body = await req.json().catch(() => ({}))
     const parsed = InputSchema.safeParse(body)
@@ -88,7 +91,7 @@ serve(async (req) => {
 
     const basePrompt = await callAssembleContext('agent-punch-list', 'compile punch list items from project data')
     const systemPrompt =
-      (basePrompt ?? 'You are an AI project manager for AK Renovations, a high-end residential remodeling contractor.') +
+      (basePrompt ?? buildSystemPrompt(company, 'project manager')) +
       `
 
 PUNCH LIST COMPILATION TASK

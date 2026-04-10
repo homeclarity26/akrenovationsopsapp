@@ -1,6 +1,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
+import { getCompanyProfile, buildSystemPrompt } from '../_shared/companyProfile.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 
 const InputSchema = z.object({
@@ -41,7 +43,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [{ role: 'user', content: userMessage }],
@@ -76,7 +78,7 @@ async function callClaudeVision(systemPrompt: string, imageUrl: string, userMess
       'anthropic-version': '2023-06-01',
     },
     body: JSON.stringify({
-      model: 'claude-sonnet-4-20250514',
+      model: AI_CONFIG.PRIMARY_MODEL,
       max_tokens: maxTokens,
       system: systemPrompt,
       messages: [
@@ -105,6 +107,7 @@ serve(async (req) => {
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
     )
+    const company = await getCompanyProfile(supabase, 'system');
 
     const body = await req.json().catch(() => ({}))
     const parsed = InputSchema.safeParse(body)
@@ -118,7 +121,7 @@ serve(async (req) => {
 
     await callAssembleContext('agent-receipt-processor', 'extract receipt data and create expense record')
 
-    const systemPrompt = `You are an AI receipt processor for AK Renovations, a remodeling contractor.
+    const systemPrompt = `${buildSystemPrompt(company, 'receipt processor')}
 Extract data from this receipt image and return ONLY a valid JSON object with these fields:
 {
   "vendor": "store/supplier name",
