@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { AIBar } from '@/components/ui/AIBar'
 import { Badge } from '@/components/ui/Badge'
+import { ModeToggle } from '@/components/ui/ModeToggle'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -21,8 +22,9 @@ export function EmployeeLayout() {
 
   return (
     <div className="flex flex-col min-h-svh bg-[var(--bg)]">
-      {/* Top bar — slim, just AI button */}
-      <header className="fixed top-0 left-0 right-0 h-11 bg-[var(--bg)] border-b border-[var(--border-light)] flex items-center justify-end px-3 z-40">
+      {/* Top bar — slim, mode toggle for admins + AI button */}
+      <header className="fixed top-0 left-0 right-0 h-11 bg-[var(--bg)] border-b border-[var(--border-light)] flex items-center justify-between px-3 z-40">
+        <ModeToggle />
         <button
           onClick={() => setAiOpen(true)}
           className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-white transition-colors"
