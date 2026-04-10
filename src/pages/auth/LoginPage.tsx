@@ -5,6 +5,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { Input } from '@/components/ui/Input'
+import { PasswordInput } from '@/components/ui/PasswordInput'
 import { ArrowRight, Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 import { createAppSession } from '@/lib/session'
 import { auditLoginFailed } from '@/lib/audit'
@@ -221,9 +222,8 @@ export function LoginPage() {
             autoComplete="email"
             required
           />
-          <Input
+          <PasswordInput
             label="Password"
-            type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"

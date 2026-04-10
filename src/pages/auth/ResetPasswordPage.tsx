@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
-import { Input } from '@/components/ui/Input'
+import { PasswordInput } from '@/components/ui/PasswordInput'
 import { Loader2, AlertCircle, CheckCircle2 } from 'lucide-react'
 
 export function ResetPasswordPage() {
@@ -52,9 +52,8 @@ export function ResetPasswordPage() {
           </div>
         ) : (
           <form onSubmit={handleSubmit} className="space-y-4">
-            <Input
+            <PasswordInput
               label="New password"
-              type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
               placeholder="••••••••"
@@ -62,9 +61,8 @@ export function ResetPasswordPage() {
               hint="At least 6 characters."
               required
             />
-            <Input
+            <PasswordInput
               label="Confirm password"
-              type="password"
               value={confirm}
               onChange={e => setConfirm(e.target.value)}
               placeholder="••••••••"
