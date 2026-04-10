@@ -4,6 +4,7 @@ import { ChevronRight, User, Brain, Zap, AlertTriangle, Layers, Wrench, BookOpen
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { AddEmployeeModal } from '@/components/ui/AddEmployeeModal'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 
 const INTEGRATIONS = [
@@ -21,6 +22,7 @@ const EMPLOYEES = [
 export function SettingsPage() {
   const navigate = useNavigate()
   const { data: company } = useCompanyProfile()
+  const [showAddEmployee, setShowAddEmployee] = useState(false)
   const [notifications, setNotifications] = useState({
     new_lead: true,
     invoice_paid: true,
@@ -263,11 +265,11 @@ export function SettingsPage() {
             </div>
           ))}
           <button
-            onClick={() => navigate('/admin/onboard')}
+            onClick={() => setShowAddEmployee(true)}
             className="flex items-center gap-2 p-4 w-full text-left text-[var(--navy)] text-sm font-medium border-t border-[var(--border-light)]"
           >
             <UserPlus size={16} />
-            Onboard New Person
+            Add Employee
           </button>
         </Card>
       </div>
@@ -297,6 +299,12 @@ export function SettingsPage() {
       </div>
 
       <div className="h-4" />
+      {showAddEmployee && (
+        <AddEmployeeModal
+          onClose={() => setShowAddEmployee(false)}
+          onSuccess={() => setShowAddEmployee(false)}
+        />
+      )}
     </div>
   )
 }
