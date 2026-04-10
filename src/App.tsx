@@ -7,18 +7,16 @@ import { ModeProvider } from '@/context/ModeContext'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { supabase } from '@/lib/supabase'
 
-// Layouts (kept eager — they wrap every page and are always needed)
-import { AdminLayout } from '@/components/layout/AdminLayout'
-import { EmployeeLayout } from '@/components/layout/EmployeeLayout'
-import { ClientLayout } from '@/components/layout/ClientLayout'
+// Layouts — lazy-loaded so only the layout for the user's role is fetched
+const AdminLayout = lazy(() => import('./components/layout/AdminLayout').then(m => ({ default: m.AdminLayout })))
+const EmployeeLayout = lazy(() => import('./components/layout/EmployeeLayout').then(m => ({ default: m.EmployeeLayout })))
+const ClientLayout = lazy(() => import('./components/layout/ClientLayout').then(m => ({ default: m.ClientLayout })))
+const PlatformLayout = lazy(() => import('./components/layout/PlatformLayout').then(m => ({ default: m.PlatformLayout })))
 
 // Auth
 const LoginPage = lazy(() => import('./pages/auth/LoginPage').then(m => ({ default: m.LoginPage })))
 const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })))
 const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })))
-
-// Platform admin layout (eager — wraps all /platform pages)
-import { PlatformLayout } from '@/components/layout/PlatformLayout'
 
 // Admin pages
 const AdminDashboard = lazy(() => import('./pages/admin/AdminDashboard').then(m => ({ default: m.AdminDashboard })))
@@ -170,15 +168,12 @@ function RootRedirect() {
       setChecking(false)
       return
     }
-    // Check if company onboarding is complete
+    // Check if company onboarding is complete.
+    // The AuthContext already fetched the profile (including company_id),
+    // so we skip the redundant profile query and go straight to companies.
     async function check() {
       try {
-        const { data: profile } = await supabase
-          .from('profiles')
-          .select('company_id')
-          .eq('id', user!.id)
-          .maybeSingle()
-        if (!profile?.company_id) {
+        if (!user!.company_id) {
           setNeedsOnboarding(true)
           setChecking(false)
           return
@@ -186,7 +181,7 @@ function RootRedirect() {
         const { data: company } = await supabase
           .from('companies')
           .select('onboarding_complete')
-          .eq('id', profile.company_id)
+          .eq('id', user!.company_id)
           .maybeSingle()
         if (!company || company.onboarding_complete === false) {
           setNeedsOnboarding(true)

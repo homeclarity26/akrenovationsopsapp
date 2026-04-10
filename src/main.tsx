@@ -1,24 +1,19 @@
-import * as Sentry from '@sentry/react'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App'
 
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  environment: import.meta.env.MODE,
-  sendDefaultPii: false,
-  integrations: [
-    Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration({
-      maskAllText: true,
-      blockAllMedia: true,
-    }),
-  ],
-  tracesSampleRate: 0.2,
-  replaysSessionSampleRate: 0.0,
-  replaysOnErrorSampleRate: 1.0,
-})
+// Inject preconnect hint for Supabase so DNS+TLS starts before any fetch
+const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string | undefined
+if (supabaseUrl) {
+  const link = document.createElement('link')
+  link.rel = 'preconnect'
+  link.href = supabaseUrl
+  document.head.appendChild(link)
+}
+
+// Initialize Sentry asynchronously so it never blocks first paint
+import('./lib/sentry')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
