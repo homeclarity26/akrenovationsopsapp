@@ -13,7 +13,7 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
 
     steps:
       - name: Checkout repo
@@ -27,73 +27,39 @@ jobs:
       - name: Deploy all edge functions
         env:
           SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-          SUPABASE_PROJECT_ID: mebzqfeeiciayxdetteb
         run: |
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-bonus-qualification
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-calibrate-templates
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-call-summarizer
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-cash-flow
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-change-order-drafter
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-compliance-monitor
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-conversation-transcriber
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-daily-log
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-document-classifier
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-generate-contract
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-generate-reel
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-generate-scope
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-improvement-analysis
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-inspection-analyzer
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-invoice-aging
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-invoice-generator
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-lead-aging
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-lead-intake
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-morning-brief
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-photo-tagger
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-portfolio-curator
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-punch-list
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-quote-reader
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-receipt-processor
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-referral-intake
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-review-request
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-risk-monitor
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-schedule-optimizer
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-sms-responder
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-social-content
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-sub-insurance-alert
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-sub-invoice-matcher
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-template-improvement-suggester
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-tool-request
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-voice-transcriber
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-warranty-intake
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-warranty-tracker
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-weather-schedule
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-weekly-client-update
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt agent-weekly-financials
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt assemble-context
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt backup-daily
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt backup-storage-manifest
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt budget-ai-action
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt calculate-payroll
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt compare-budget-quotes
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt demo-ai
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt extract-preferences
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt generate-checklists
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt generate-embedding
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt generate-estimate
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt generate-improvement-spec
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt generate-payroll-register
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt generate-pdf
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt get-usage-stats
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt github-webhook
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt meta-agent-chat
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt meta-agent-open-pr
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt meta-agent-orchestration
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt process-budget-document
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt stripe-webhook
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt suggest-deliverable-items
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt sync-to-drive
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt sync-to-gusto
-          supabase functions deploy --project-ref $SUPABASE_PROJECT_ID --no-verify-jwt update-operational-memory
+          # Deploy each function in its own subshell to avoid Deno graph conflicts
+          PROJECT_REF="mebzqfeeiciayxdetteb"
+          FAILED=()
 
-      - name: Deployment summary
-        run: echo "✅ All $( ls supabase/functions | grep -v _shared | wc -l ) edge functions deployed to project $SUPABASE_PROJECT_ID"
+          deploy_fn() {
+            local fn=$1
+            echo "→ Deploying $fn..."
+            if supabase functions deploy "$fn" \
+              --project-ref "$PROJECT_REF" \
+              --no-verify-jwt 2>&1; then
+              echo "✅ $fn"
+            else
+              echo "❌ $fn failed"
+              FAILED+=("$fn")
+            fi
+          }
+
+          # Get all function names dynamically from the repo
+          for fn_dir in supabase/functions/*/; do
+            fn=$(basename "$fn_dir")
+            # Skip the _shared helpers directory
+            if [[ "$fn" == _* ]]; then
+              continue
+            fi
+            deploy_fn "$fn"
+          done
+
+          echo ""
+          echo "━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━"
+          if [ ${#FAILED[@]} -eq 0 ]; then
+            echo "✅ All functions deployed successfully"
+          else
+            echo "❌ Failed functions: ${FAILED[*]}"
+            exit 1
+          fi
