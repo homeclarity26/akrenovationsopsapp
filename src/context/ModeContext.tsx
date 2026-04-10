@@ -32,7 +32,7 @@ export function ModeProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
 
-  const canToggle = user?.role === 'admin'
+  const canToggle = user?.role === 'admin' || user?.role === 'super_admin'
 
   const [currentMode, setCurrentMode] = useState<AppMode>(() => {
     if (!canToggle) return 'admin'
