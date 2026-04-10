@@ -38,7 +38,7 @@ export const EMPLOYEE_DEMO_SCRIPT: DemoStep[] = [
   {
     step: 1,
     screen: 'welcome',
-    title: 'Working at AK Renovations',
+    title: 'Working with TradeOffice AI',
     explanation:
       "This is a 5-minute look at how we run our jobs. Tap Next or press Space to move through it at your own pace.",
     highlight: null,

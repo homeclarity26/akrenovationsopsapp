@@ -4,6 +4,7 @@ import {
   LayoutDashboard, Building2, Users, Menu, X, LogOut,
 } from 'lucide-react'
 import { useAuth } from '@/context/AuthContext'
+import { BrandLogo } from '@/components/ui/BrandLogo'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -21,8 +22,8 @@ export function PlatformLayout() {
       {/* Desktop sidebar */}
       <aside className="hidden lg:flex flex-col fixed left-0 top-0 h-full w-60 bg-[var(--navy)] z-40">
         <div className="px-5 py-6 border-b border-white/10">
-          <span className="font-display text-white text-xl font-medium">Platform</span>
-          <p className="text-white/50 text-xs mt-0.5">Super Admin</p>
+          <BrandLogo variant="platform" size="lg" />
+          <p className="text-white/50 text-xs mt-1.5">Platform Admin</p>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
           {NAV.map(({ to, label, icon: Icon, exact }) => (
@@ -57,7 +58,7 @@ export function PlatformLayout() {
 
       {/* Mobile top bar */}
       <header className="lg:hidden fixed top-0 left-0 right-0 h-11 bg-[var(--bg)] border-b border-[var(--border-light)] flex items-center justify-between px-3 z-40">
-        <span className="font-display text-base text-[var(--navy)] font-medium">Platform</span>
+        <span className="font-display text-base text-[var(--navy)] font-medium">TradeOffice AI</span>
         <button
           onClick={() => setMenuOpen(v => !v)}
           className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-white transition-colors"

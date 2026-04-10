@@ -184,7 +184,7 @@ function StageMockup({
     case 'lead':
       return (
         <div style={m.wrap}>
-          <div style={m.smsHeader}>AK Renovations</div>
+          <div style={m.smsHeader}>Your Company</div>
           <div style={m.smsBubble}>
             Hi Sarah, this is Adam — got your kitchen inquiry. I can swing by
             Thursday at 4pm or Friday morning, whichever works. Looking
@@ -211,7 +211,7 @@ function StageMockup({
     case 'proposal':
       return (
         <div style={m.wrap}>
-          <div style={m.brand}>AK RENOVATIONS</div>
+          <div style={m.brand}>YOUR COMPANY</div>
           <div style={m.title}>Kitchen Remodel</div>
           <div style={m.priceCard}>
             <div style={m.priceLabel}>CONTRACT</div>

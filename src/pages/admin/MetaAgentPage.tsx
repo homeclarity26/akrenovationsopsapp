@@ -174,7 +174,7 @@ export function MetaAgentPage() {
               <Sparkles size={13} className="text-white" />
             </div>
             <div className="max-w-[85%] bg-[var(--white)] border border-[var(--border-light)] rounded-2xl rounded-tl-sm px-4 py-3">
-              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5">from AK Ops</p>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5">from TradeOffice AI</p>
               <p className="text-sm leading-relaxed text-[var(--text)]">Hey Adam. Ask me anything about the business, your projects, or your team. I can pull data, draft messages, run reports, and flag what needs your attention.</p>
             </div>
           </div>
@@ -192,7 +192,7 @@ export function MetaAgentPage() {
                 : 'bg-[var(--white)] border border-[var(--border-light)] text-[var(--text)] rounded-tl-sm'
             }`}>
               {msg.isProactive && (
-                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5">from AK Ops</p>
+                <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1.5">from TradeOffice AI</p>
               )}
               <p className="text-sm leading-relaxed whitespace-pre-wrap">{msg.content}</p>
               <p className={`text-[10px] mt-1.5 ${msg.role === 'user' ? 'text-white/50' : 'text-[var(--text-tertiary)]'}`}>

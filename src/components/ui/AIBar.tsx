@@ -33,7 +33,7 @@ export function AIBar({ onClose, placeholder = 'Ask anything or give a command..
             <div className="w-7 h-7 rounded-full bg-[var(--navy)] flex items-center justify-center">
               <span className="text-white text-[10px] font-bold">AI</span>
             </div>
-            <span className="font-semibold text-[var(--navy)] text-sm">AK Ops AI</span>
+            <span className="font-semibold text-[var(--navy)] text-sm">TradeOffice AI</span>
           </div>
           <button onClick={onClose} className="p-1 rounded-lg hover:bg-gray-100 transition-colors">
             <X size={18} className="text-[var(--text-secondary)]" />

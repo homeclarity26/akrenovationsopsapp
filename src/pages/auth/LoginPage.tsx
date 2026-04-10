@@ -113,20 +113,20 @@ export function LoginPage() {
               className="w-8 h-8 rounded-lg flex items-center justify-center"
               style={{ background: 'var(--rust)' }}
             >
-              <span className="text-white font-bold text-xs tracking-wide">AK</span>
+              <span className="text-white font-bold text-xs tracking-wide">T</span>
             </div>
             <span
               className="text-white/70 text-sm font-medium tracking-wide uppercase"
               style={{ fontFamily: 'var(--font-body)', letterSpacing: '0.12em' }}
             >
-              AK Renovations
+              TradeOffice AI
             </span>
           </div>
           <p
             className="text-white/40 text-sm mb-2"
             style={{ fontFamily: 'var(--font-body)' }}
           >
-            Operations Platform
+            The AI-powered operations platform for remodeling contractors
           </p>
           <h1
             className="text-white leading-none"
@@ -137,7 +137,8 @@ export function LoginPage() {
               letterSpacing: '-0.02em',
             }}
           >
-            AK Ops
+            Trade<span style={{ fontWeight: 500 }}>Office</span>{' '}
+            <span style={{ opacity: 0.7, fontWeight: 300 }}>AI</span>
           </h1>
         </div>
       </div>

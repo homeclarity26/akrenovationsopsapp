@@ -7,6 +7,7 @@ import {
 import { AIBar } from '@/components/ui/AIBar'
 import { Badge } from '@/components/ui/Badge'
 import { ModeToggle } from '@/components/ui/ModeToggle'
+import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -19,12 +20,18 @@ const NAV = [
 
 export function EmployeeLayout() {
   const [aiOpen, setAiOpen] = useState(false)
+  const { data: company } = useCompanyProfile()
 
   return (
     <div className="flex flex-col min-h-svh bg-[var(--bg)]">
       {/* Top bar — slim, mode toggle for admins + AI button */}
       <header className="fixed top-0 left-0 right-0 h-11 bg-[var(--bg)] border-b border-[var(--border-light)] flex items-center justify-between px-3 z-40">
-        <ModeToggle />
+        <div className="flex items-center gap-2">
+          <ModeToggle />
+          {company?.name && (
+            <span className="text-xs font-medium text-[var(--text-secondary)] truncate max-w-[140px]">{company.name}</span>
+          )}
+        </div>
         <button
           onClick={() => setAiOpen(true)}
           className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-white transition-colors"

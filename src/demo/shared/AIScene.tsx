@@ -12,7 +12,7 @@ export interface AISceneProps {
   suggestedPrompt: string
   sceneDescription: string
   fallbackResponse: string
-  speakerLabel?: string // e.g. "AK Ops AI"
+  speakerLabel?: string // e.g. "TradeOffice AI"
   onComplete: () => void
   continueLabel?: string
 }
@@ -28,7 +28,7 @@ export function AIScene({
   suggestedPrompt,
   sceneDescription,
   fallbackResponse,
-  speakerLabel = 'AK Ops AI',
+  speakerLabel = 'TradeOffice AI',
   onComplete,
   continueLabel = 'Continue walkthrough',
 }: AISceneProps) {

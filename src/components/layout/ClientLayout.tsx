@@ -3,6 +3,7 @@ import {
   BarChart2, Image, DollarSign,
   MessageCircle, FileText, ShoppingBag, Calendar, ClipboardList, Heart
 } from 'lucide-react'
+import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 import { cn } from '@/lib/utils'
 
 const NAV = [
@@ -18,13 +19,15 @@ const NAV = [
 ]
 
 export function ClientLayout() {
+  const { data: company } = useCompanyProfile()
+
   return (
     <div className="flex flex-col min-h-svh bg-[var(--bg)]">
       {/* Top bar */}
       <header className="fixed top-0 left-0 right-0 bg-[var(--navy)] z-40">
         <div className="flex items-center justify-between px-4 py-3">
           <div>
-            <span className="font-display text-white text-base">AK Renovations</span>
+            <span className="font-display text-white text-base">{company?.name ?? 'Your Contractor'}</span>
             <p className="text-white/60 text-xs">Your Project Portal</p>
           </div>
         </div>

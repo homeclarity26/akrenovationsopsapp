@@ -328,7 +328,7 @@ function StepCompanyInfo({
         label="Company Name"
         value={form.companyName}
         onChange={(e) => onChange('companyName', e.target.value)}
-        placeholder="AK Renovations LLC"
+        placeholder="Acme Renovations LLC"
         error={errors.companyName}
         required
       />

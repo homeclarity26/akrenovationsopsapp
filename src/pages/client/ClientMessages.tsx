@@ -102,7 +102,7 @@ export function ClientMessages() {
     <div className="flex flex-col h-[calc(100svh-8rem)] max-w-lg mx-auto">
       <div className="px-4 py-3 border-b border-[var(--border-light)]">
         <h1 className="font-display text-xl text-[var(--navy)]">Messages</h1>
-        <p className="text-xs text-[var(--text-secondary)]">AK Renovations Team</p>
+        <p className="text-xs text-[var(--text-secondary)]">Your Contractor</p>
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
@@ -113,7 +113,7 @@ export function ClientMessages() {
           <div key={m.id} className={`flex ${isMine(m) ? 'justify-end' : 'justify-start'}`}>
             {!isMine(m) && (
               <div className="w-8 h-8 rounded-full bg-[var(--navy)] flex items-center justify-center text-white text-xs font-semibold mr-2 flex-shrink-0 self-end">
-                AK
+                C
               </div>
             )}
             <div className="max-w-[78%]">
@@ -136,7 +136,7 @@ export function ClientMessages() {
       <div className="px-4 py-3 border-t border-[var(--border-light)] flex gap-2">
         <input
           className="flex-1 px-3.5 py-2.5 rounded-full border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:border-[var(--navy)]"
-          placeholder="Message AK Renovations..."
+          placeholder="Send a message..."
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && send()}

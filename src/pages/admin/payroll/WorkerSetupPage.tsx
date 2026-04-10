@@ -456,7 +456,7 @@ export function NewWorkerPage() {
         </div>
 
         <div className="text-[11px] text-[var(--text-secondary)] bg-[var(--cream-light)] rounded-lg px-3 py-2">
-          New workers must also be added to Gusto for tax filing and direct deposit. AK Ops can sync this automatically once Gusto integration is configured.
+          New workers must also be added to Gusto for tax filing and direct deposit. TradeOffice AI can sync this automatically once Gusto integration is configured.
         </div>
       </Card>
     </div>

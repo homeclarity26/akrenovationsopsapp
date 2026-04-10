@@ -99,7 +99,7 @@ Project context:
 
 Answer Sarah's question warmly and specifically. Give her a real timeline she can plan around. Sound like a knowledgeable contractor's assistant — helpful, specific, reassuring. Max 3-4 sentences.`,
     scene_description:
-      "That's what communication looks like when your contractor uses AK Ops. Specific answers, any time, without playing phone tag.",
+      "That's what communication looks like when your contractor uses TradeOffice AI. Specific answers, any time, without playing phone tag.",
   },
   {
     step: 8,

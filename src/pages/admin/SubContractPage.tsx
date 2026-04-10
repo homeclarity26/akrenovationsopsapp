@@ -10,6 +10,7 @@ import { Button } from '@/components/ui/Button'
 import type { SubContract, SubContractStatus } from '@/data/mock'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 
 const statusMap: Record<SubContractStatus, string> = {
   draft: 'draft',
@@ -23,6 +24,7 @@ const statusMap: Record<SubContractStatus, string> = {
 export function SubContractPage() {
   const { id: projectId, subId: scopeId } = useParams<{ id: string; subId: string }>()
   const navigate = useNavigate()
+  const { data: company } = useCompanyProfile()
 
   const { data: scope, isLoading: scopeLoading, error: scopeError, refetch: scopeRefetch } = useQuery({
     queryKey: ['sub_scope', scopeId],
@@ -260,9 +262,9 @@ export function SubContractPage() {
         <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
           <div>
             <div className="text-[10px] uppercase text-[var(--text-tertiary)] tracking-wider">Contractor</div>
-            <div>AK Renovations LLC</div>
-            <div className="text-[var(--text-secondary)]">Adam Kilgore, Owner</div>
-            <div className="text-[var(--text-secondary)]">Summit County, Ohio</div>
+            <div>{company?.name ?? 'Your Company'}</div>
+            <div className="text-[var(--text-secondary)]">{company?.owner_name ? `${company.owner_name}, Owner` : '—'}</div>
+            <div className="text-[var(--text-secondary)]">{[company?.city, company?.state].filter(Boolean).join(', ') || '—'}</div>
           </div>
           <div>
             <div className="text-[10px] uppercase text-[var(--text-tertiary)] tracking-wider">Subcontractor</div>
@@ -314,7 +316,7 @@ export function SubContractPage() {
           <li>- Commercial General Liability: minimum <span className="font-mono">${contract.required_gl_amount.toLocaleString()}</span> per occurrence</li>
           <li>- Workers Compensation: {contract.required_wc ? 'required per Ohio law' : 'waived'}</li>
           <li>- Automobile Liability: minimum <span className="font-mono">$1,000,000</span> combined single limit</li>
-          {contract.additional_insured && <li>- AK Renovations LLC named as Additional Insured on all policies</li>}
+          {contract.additional_insured && <li>- {company?.name ?? 'Contractor'} named as Additional Insured on all policies</li>}
         </ul>
       </Card>
 
