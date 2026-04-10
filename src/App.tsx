@@ -15,6 +15,9 @@ const LoginPage = lazy(() => import('./pages/auth/LoginPage').then(m => ({ defau
 const ForgotPasswordPage = lazy(() => import('./pages/auth/ForgotPasswordPage').then(m => ({ default: m.ForgotPasswordPage })))
 const ResetPasswordPage = lazy(() => import('./pages/auth/ResetPasswordPage').then(m => ({ default: m.ResetPasswordPage })))
 
+// Platform admin layout (eager — wraps all /platform pages)
+import { PlatformLayout } from '@/components/layout/PlatformLayout'
+
 // Error handling
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 
@@ -98,6 +101,12 @@ const PublicGallery = lazy(() => import('./pages/public/PublicGallery').then(m =
 const EmployeeDemoShell = lazy(() => import('./demo/employee/EmployeeDemoShell'))
 const HomeownerDemoShell = lazy(() => import('./demo/homeowner/HomeownerDemoShell'))
 
+// Platform admin pages
+const PlatformDashboard = lazy(() => import('./pages/platform/PlatformDashboard').then(m => ({ default: m.PlatformDashboard })))
+const PlatformCompanies = lazy(() => import('./pages/platform/PlatformCompanies').then(m => ({ default: m.PlatformCompanies })))
+const PlatformCompanyDetail = lazy(() => import('./pages/platform/PlatformCompanyDetail').then(m => ({ default: m.PlatformCompanyDetail })))
+const PlatformUsers = lazy(() => import('./pages/platform/PlatformUsers').then(m => ({ default: m.PlatformUsers })))
+
 const qc = new QueryClient({
   defaultOptions: {
     queries: {
@@ -126,13 +135,18 @@ function AuthLoadingScreen() {
   )
 }
 
-function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'client'; children: React.ReactNode }) {
+function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'client' | 'super_admin'; children: React.ReactNode }) {
   const { user, loading } = useAuth()
   // Wait for the initial Supabase session check to complete before deciding
   // where to send the user. Without this, a page refresh redirects to /login
   // before the session restores.
   if (loading) return <AuthLoadingScreen />
   if (!user) return <Navigate to="/login" replace />
+  // Super-admins can only access /platform routes
+  if (user.role === 'super_admin') {
+    if (role === 'super_admin') return <>{children}</>
+    return <Navigate to="/platform" replace />
+  }
   // Admins can access all routes (field mode lets admins use employee screens)
   if (user.role === 'admin') return <>{children}</>
   if (user.role !== role) {
@@ -146,6 +160,7 @@ function RootRedirect() {
   const { user, loading } = useAuth()
   if (loading) return <AuthLoadingScreen />
   if (!user) return <Navigate to="/login" replace />
+  if (user.role === 'super_admin') return <Navigate to="/platform" replace />
   if (user.role === 'admin') return <Navigate to="/admin" replace />
   if (user.role === 'employee') return <Navigate to="/employee" replace />
   return <Navigate to="/client/progress" replace />
@@ -244,6 +259,14 @@ function AppRoutes() {
           <Route path="docs" element={<ClientDocs />} />
           {/* Phase K — client sub-route */}
           <Route path="referral" element={<ClientReferral />} />
+        </Route>
+
+        {/* Platform Admin (super_admin) */}
+        <Route path="/platform" element={<ProtectedRoute role="super_admin"><PlatformLayout /></ProtectedRoute>}>
+          <Route index element={<PlatformDashboard />} />
+          <Route path="companies" element={<PlatformCompanies />} />
+          <Route path="companies/:id" element={<PlatformCompanyDetail />} />
+          <Route path="users" element={<PlatformUsers />} />
         </Route>
 
         {/* Phase K — public shareable gallery (no auth) */}
