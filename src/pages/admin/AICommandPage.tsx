@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { Sparkles, Check, X, Send, Mic, AlertCircle, Clock } from 'lucide-react'
@@ -32,6 +32,7 @@ export function AICommandPage() {
   const [input, setInput] = useState('')
   const [processing, setProcessing] = useState(false)
   const [lastResult, setLastResult] = useState<string | null>(null)
+  const sessionId = useRef(crypto.randomUUID()).current
 
   const pending = actions.filter(a => a.status === 'pending')
   const executed = actions.filter(a => a.status === 'executed')
@@ -44,25 +45,50 @@ export function AICommandPage() {
     setActions(prev => prev.map(a => a.id === id ? { ...a, status: 'rejected' as ActionStatus } : a))
   }
 
-  const sendCommand = () => {
-    if (!input.trim()) return
+  const sendCommand = async () => {
+    if (!input.trim() || processing) return
     setProcessing(true)
     const cmd = input
     setInput('')
-    setTimeout(() => {
+    setLastResult(null)
+
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY as string
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/meta-agent-chat`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: cmd,
+          session_id: sessionId,
+          user_id: session?.user?.id ?? 'unknown',
+        }),
+      })
+
+      const data = res.ok ? await res.json() : null
+      const reply = data?.reply ?? `I received your command but couldn\'t process it. Please try again.`
+
       setActions(prev => [{
         id: `ai-${Date.now()}`,
         request_text: cmd,
-        action_type: 'update_data',
+        action_type: 'chat',
         risk_level: 'low' as const,
         status: 'executed' as ActionStatus,
         created_at: new Date().toISOString(),
         requires_approval: false,
-        preview: `Completed: "${cmd}"`,
+        preview: reply,
       }, ...prev])
-      setLastResult(`Done — "${cmd}" executed successfully.`)
+      setLastResult(reply)
+    } catch {
+      setLastResult('Connection error — please try again.')
+    } finally {
       setProcessing(false)
-    }, 1500)
+    }
   }
 
   const RISK_CONFIG = {
