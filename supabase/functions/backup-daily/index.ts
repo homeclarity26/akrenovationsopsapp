@@ -10,11 +10,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const APP_VERSION = '1.0.0'
 const RETENTION_DAYS = 30
@@ -176,7 +172,7 @@ async function deleteDriveFile(fileId: string, accessToken: string): Promise<boo
 // ── Main serve ───────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   // JWT auth check
   const auth = await verifyAuth(req)
@@ -214,7 +210,7 @@ serve(async (req) => {
   if (logErr) {
     console.error('Failed to create backup_logs row:', logErr)
     return new Response(JSON.stringify({ error: 'Failed to create backup log', details: logErr }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 
@@ -277,7 +273,7 @@ serve(async (req) => {
         reason: 'Drive upload skipped — secrets not configured',
         records_exported: totalRecords,
         file_size_bytes: fileSizeBytes,
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
     }
 
     // Upload to Drive
@@ -323,7 +319,7 @@ serve(async (req) => {
       drive_url: upload.drive_url,
       duration_seconds: durationSeconds,
       old_backups_cleaned: deletedCount,
-    }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   } catch (err) {
     const errorMessage = err instanceof Error ? err.message : String(err)
     console.error('backup-daily error:', err)
@@ -351,7 +347,7 @@ serve(async (req) => {
     }
 
     return new Response(JSON.stringify({ error: errorMessage }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

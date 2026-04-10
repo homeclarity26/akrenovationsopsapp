@@ -4,15 +4,12 @@ import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   inspection_id: z.string().uuid('inspection_id must be a valid UUID'),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -32,7 +29,7 @@ async function callAssembleContext(agentName: string, query: string): Promise<st
   } catch { return null }
 }
 
-async function callClaudeVision(systemPrompt: string, userContent: any[], maxTokens = 1024): Promise<string> {
+async function callClaudeVision(systemPrompt: string, userContent: any[], maxTokens = 1024): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -53,7 +50,7 @@ async function callClaudeVision(systemPrompt: string, userContent: any[], maxTok
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   // JWT auth check
   const auth = await verifyAuth(req)
@@ -74,12 +71,12 @@ serve(async (req) => {
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { inspection_id } = parsed.data
     const { data: inspection } = await supabase.from('inspection_reports').select('*').eq('id', inspection_id).single()
-    if (!inspection) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: corsHeaders })
+    if (!inspection) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: getCorsHeaders(req) })
 
     const { data: project } = await supabase.from('projects').select('project_type, title').eq('id', inspection.project_id).single()
 
@@ -92,7 +89,8 @@ serve(async (req) => {
     const analyses = [] as any[]
     for (const area of areas) {
       try {
-        const result = await callClaudeVision(systemPrompt, [
+        const _tv = Date.now()
+        const { text: result, usage: _uv } = await callClaudeVision(systemPrompt, [
           { type: 'image', source: { type: 'url', url: area.photo_url } },
           { type: 'text', text: `Photo of: ${area.area_name}
 Inspector condition: ${area.condition}
@@ -102,15 +100,20 @@ Inspection stage: ${inspection.inspection_type}
 
 Identify issues, code concerns, quality problems. Return JSON: {issues_found: [], quality_rating: 1-5, code_concerns: [], recommendation}` },
         ])
+        logAiUsage({ function_name: 'agent-inspection-analyzer', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _uv.input_tokens, output_tokens: _uv.output_tokens, duration_ms: Date.now() - _tv, status: 'success' })
         analyses.push({ area: area.area_name, result })
       } catch (err) {
         analyses.push({ area: area.area_name, error: String(err) })
       }
     }
 
-    const summary = await callClaudeVision(systemPrompt, [
+    const _tv = Date.now()
+
+    const { text: summary, usage: _uv } = await callClaudeVision(systemPrompt, [
       { type: 'text', text: `Generate a professional inspection report summary for the ${inspection.inspection_type} inspection on ${project?.title}.
-Findings: ${JSON.stringify(analyses)}
+Findings: ${JSON.stringify(analyses)
+
+    logAiUsage({ function_name: 'agent-inspection-analyzer', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _uv.input_tokens, output_tokens: _uv.output_tokens, duration_ms: Date.now() - _tv, status: 'success' })}
 Write factually, like documentation for a client or insurance record.` },
     ], 2048)
 
@@ -121,8 +124,8 @@ Write factually, like documentation for a client or insurance record.` },
       ai_flags: flags,
     }).eq('id', inspection_id)
 
-    return new Response(JSON.stringify({ summary, analyses }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ summary, analyses }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   }
 })

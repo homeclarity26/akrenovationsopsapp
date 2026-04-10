@@ -6,6 +6,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   file_url: z.string().url('file_url must be a valid URL'),
@@ -15,11 +17,6 @@ const InputSchema = z.object({
   user_id: z.string().uuid('user_id must be a valid UUID').optional(),
   user_role: z.enum(['admin', 'employee', 'client']).optional(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 interface RequestBody {
   file_url: string
@@ -75,7 +72,7 @@ async function callAssembleContext(
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: getCorsHeaders(req) })
   }
 
   // JWT auth check
@@ -93,7 +90,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { file_url, project_id, trade_id, quote_id, user_id, user_role = 'admin' } = parsedInput.data
@@ -165,13 +162,13 @@ Respond ONLY with valid JSON matching the schema above. No explanation outside J
 
     return new Response(
       JSON.stringify(extracted),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   } catch (err) {
     console.error('process-budget-document error:', err)
     return new Response(
       JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })

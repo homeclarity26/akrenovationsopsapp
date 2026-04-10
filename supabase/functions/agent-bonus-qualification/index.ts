@@ -20,15 +20,12 @@ import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   project_id: z.string().uuid('project_id must be a valid UUID'),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -48,7 +45,7 @@ async function callAssembleContext(agentName: string, query: string): Promise<st
   } catch { return null }
 }
 
-async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<string> {
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -65,7 +62,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
   })
   if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 async function writeOutput(
@@ -94,7 +91,7 @@ const BONUS_AMOUNTS: Record<string, number> = {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   // JWT auth check
   const auth = await verifyAuth(req)
@@ -115,7 +112,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { project_id } = parsedInput.data
@@ -132,7 +129,7 @@ serve(async (req) => {
 
     if (!project.bonus_eligible) {
       return new Response(JSON.stringify({ success: true, message: 'Project not bonus eligible' }), {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
 
@@ -210,9 +207,13 @@ serve(async (req) => {
       (basePrompt ?? 'You are an AI assistant for AK Renovations.') +
       ' Write a concise bonus qualification summary for Adam. Include who qualifies, why or why not, and the total payout.'
 
-    const summaryText = await callClaude(
+    const _t0 = Date.now()
+
+    const { text: summaryText, usage: _u } = await callClaude(
       systemPrompt,
       `Project: ${project.title} (${project.client_name})
+
+    logAiUsage({ function_name: 'agent-bonus-qualification', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })
 Type: ${project.project_type}
 Schedule Target Met: ${scheduleHit} (completed ${project.actual_completion_date}, target ${project.target_completion_date})
 Margin Target Met: ${marginHit} (actual ${(actualMargin * 100).toFixed(1)}%, target ${((project.target_margin ?? 0.38) * 100).toFixed(1)}%)
@@ -256,13 +257,13 @@ Write the bonus qualification summary.`,
         employees_evaluated: bonusRecords.length,
         records_created: bonusRecords.length,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     console.error('agent-bonus-qualification error:', err)
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

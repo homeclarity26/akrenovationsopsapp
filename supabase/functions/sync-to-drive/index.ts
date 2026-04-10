@@ -13,6 +13,7 @@ import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const InputSchema = z.object({
   html_content: z.string().optional(),
@@ -22,11 +23,6 @@ const InputSchema = z.object({
   project_id: z.string().uuid('project_id must be a valid UUID').optional(),
   replace_existing: z.boolean().optional(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 interface SyncToDriveInput {
   html_content?: string    // HTML string to upload
@@ -157,7 +153,7 @@ async function ensureFolderPath(
 // ── Main serve ───────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   // JWT auth check
   const auth = await verifyAuth(req)
@@ -174,7 +170,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { html_content, file_name, document_type, document_id, project_id, replace_existing = true } = parsedInput.data
@@ -188,7 +184,7 @@ serve(async (req) => {
         success: false,
         skipped: true,
         reason: 'Google Drive not configured. Add GOOGLE_SERVICE_ACCOUNT_JSON and GOOGLE_DRIVE_ROOT_FOLDER_ID to Supabase secrets.'
-      }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+      }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
     }
 
     const supabase = createClient(supabaseUrl(), serviceKey())
@@ -256,12 +252,12 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify({ success: true, drive_url: driveUrl, file_id: uploadData.id }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   } catch (err) {
     console.error('sync-to-drive error:', err)
     return new Response(JSON.stringify({ error: String(err) }), {
-      status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }
     })
   }
 })

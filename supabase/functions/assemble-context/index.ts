@@ -11,6 +11,7 @@ import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
 
 const InputSchema = z.object({
   user_id: z.string(),
@@ -22,11 +23,6 @@ const InputSchema = z.object({
   query: z.string().optional(),
   include_sections: z.array(z.string()).optional(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -121,7 +117,7 @@ async function fetchEntityData(
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: corsHeaders })
+    return new Response('ok', { headers: getCorsHeaders(req) })
   }
 
   // JWT auth check
@@ -139,7 +135,7 @@ serve(async (req) => {
     if (!parsedInput.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsedInput.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const input: AssembleContextInput = parsedInput.data
@@ -165,7 +161,7 @@ serve(async (req) => {
             system_prompt: '',
             allowed_capabilities: [],
           } satisfies AssembledContext),
-          { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
         )
       }
     }
@@ -276,13 +272,13 @@ serve(async (req) => {
 
     return new Response(
       JSON.stringify(result),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   } catch (err) {
     console.error('assemble-context error:', err)
     return new Response(
       JSON.stringify({ error: String(err) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
     )
   }
 })

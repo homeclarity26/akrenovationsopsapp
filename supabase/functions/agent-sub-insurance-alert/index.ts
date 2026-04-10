@@ -2,11 +2,8 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -26,7 +23,7 @@ async function callAssembleContext(agentName: string, query: string): Promise<st
   } catch { return null }
 }
 
-async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<string> {
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -43,11 +40,11 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
   })
   if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   // JWT auth check
   const auth = await verifyAuth(req)
@@ -95,9 +92,13 @@ Length: 3-4 sentences. No em dashes.`
       const isExpired = daysUntilExpiry < 0
       const urgency = isExpired ? 'EXPIRED' : daysUntilExpiry <= 7 ? 'urgent (7 days)' : `${daysUntilExpiry} days`
 
-      const emailDraft = await callClaude(
+      const _t0 = Date.now()
+
+      const { text: emailDraft, usage: _u } = await callClaude(
         systemPrompt,
-        `Subcontractor: ${sub.company_name}${sub.contact_name ? ` (${sub.contact_name})` : ''}
+        `Subcontractor: ${sub.company_name}${sub.contact_name ? ` (${sub.contact_name})
+
+      logAiUsage({ function_name: 'agent-sub-insurance-alert', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })` : ''}
 Trade: ${sub.trade}
 Insurance expiry: ${expiryDate} (${urgency})
 
@@ -128,13 +129,13 @@ Draft the email requesting updated COI.`,
 
     return new Response(
       JSON.stringify({ success: true, alerts_created: actionsCreated.length, subs: actionsCreated }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     console.error('agent-sub-insurance-alert error:', err)
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

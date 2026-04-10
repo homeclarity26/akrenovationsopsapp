@@ -3,15 +3,12 @@ import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   project_id: z.string().uuid('project_id must be a valid UUID'),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -31,7 +28,7 @@ async function callAssembleContext(agentName: string, query: string): Promise<st
   } catch { return null }
 }
 
-async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<string> {
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -48,7 +45,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
   })
   if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 async function writeOutput(
@@ -67,7 +64,7 @@ async function writeOutput(
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   // JWT auth check
   const auth = await verifyAuth(req)
@@ -88,7 +85,7 @@ serve(async (req) => {
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { project_id } = parsed.data
@@ -177,7 +174,11 @@ ${(openTasks ?? []).map((t) => t.title).join('\n') || 'None'}
 
 Based on this data and the typical punch list for a ${project.project_type} renovation, generate the punch list items as a JSON array.`
 
-    const punchListResult = await callClaude(systemPrompt, compilationPrompt, 1200)
+    const _t0 = Date.now()
+
+    const { text: punchListResult, usage: _u } = await callClaude(systemPrompt, compilationPrompt, 1200)
+
+    logAiUsage({ function_name: 'agent-punch-list', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })
 
     let punchListItems: Array<{ description: string; location: string }> = []
     try {
@@ -255,13 +256,13 @@ Based on this data and the typical punch list for a ${project.project_type} reno
         items_added: insertedCount,
         items: newItems,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     console.error('agent-punch-list error:', err)
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500,
-      headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
 })

@@ -8,6 +8,8 @@ import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   recording_url: z.string().url('recording_url must be a valid URL'),
@@ -15,11 +17,6 @@ const InputSchema = z.object({
   lead_id: z.string().uuid('lead_id must be a valid UUID').optional(),
   project_id: z.string().uuid('project_id must be a valid UUID').optional(),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 // ── Context / utility ─────────────────────────────────────────────────────
 
@@ -134,7 +131,7 @@ interface CallAnalysis {
 // ── Handler ────────────────────────────────────────────────────────────────
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   // JWT auth check
   const auth = await verifyAuth(req)
@@ -156,7 +153,7 @@ serve(async (req) => {
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { recording_url, call_duration, lead_id, project_id } = parsed.data
@@ -222,7 +219,7 @@ If any list has no entries, return []. If any text field is unclear, return "". 
     if (!transcript) {
       return new Response(
         JSON.stringify({ warning: 'Empty transcript from Gemini', raw: raw.slice(0, 300) }),
-        { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 200, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
 
@@ -274,13 +271,13 @@ If any list has no entries, return []. If any text field is unclear, return "". 
         tasks_created: tasksCreated,
         sentiment: analysis.call_sentiment,
       }),
-      { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (err) {
     console.error('agent-call-summarizer error:', err)
     return new Response(
       JSON.stringify({ error: String(err instanceof Error ? err.message : err) }),
-      { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   }
 })

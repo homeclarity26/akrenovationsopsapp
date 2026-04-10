@@ -4,15 +4,12 @@ import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
+import { getCorsHeaders } from '../_shared/cors.ts'
+import { logAiUsage } from '../_shared/ai_usage.ts'
 
 const InputSchema = z.object({
   log_id: z.string().uuid('log_id must be a valid UUID'),
 })
-
-const corsHeaders = {
-  'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-}
 
 async function callAssembleContext(agentName: string, query: string): Promise<string | null> {
   try {
@@ -32,7 +29,7 @@ async function callAssembleContext(agentName: string, query: string): Promise<st
   } catch { return null }
 }
 
-async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<string> {
+async function callClaude(systemPrompt: string, userMessage: string, maxTokens = 2048): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -49,7 +46,7 @@ async function callClaude(systemPrompt: string, userMessage: string, maxTokens =
   })
   if (!res.ok) throw new Error(`Claude error: ${await res.text()}`)
   const data = await res.json()
-  return data.content?.[0]?.text ?? ''
+  return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
 }
 
 async function transcribeAudio(url: string): Promise<string> {
@@ -67,7 +64,7 @@ async function transcribeAudio(url: string): Promise<string> {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+  if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
 
   // JWT auth check
   const auth = await verifyAuth(req)
@@ -88,12 +85,12 @@ serve(async (req) => {
     if (!parsed.success) {
       return new Response(
         JSON.stringify({ error: 'Invalid input', details: parsed.error.flatten() }),
-        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
+        { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
     const { log_id } = parsed.data
     const { data: log } = await supabase.from('communication_log').select('*').eq('id', log_id).single()
-    if (!log) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: corsHeaders })
+    if (!log) return new Response(JSON.stringify({ error: 'Not found' }), { status: 404, headers: getCorsHeaders(req) })
 
     const transcript = log.recording_url ? await transcribeAudio(log.recording_url) : ''
 
@@ -102,12 +99,16 @@ serve(async (req) => {
       'You are an AI assistant for AK Renovations, a high-end residential remodeling contractor in Summit County, Ohio.')
       + `\n\nCONVERSATION ANALYZER\nExtract structured insights from logged client conversations.`
 
-    const insights = await callClaude(systemPrompt, `Conversation log for AK Renovations.
+    const _t0 = Date.now()
+
+    const { text: insights, usage: _u } = await callClaude(systemPrompt, `Conversation log for AK Renovations.
 Audio transcript: ${transcript}
 Manual notes: ${log.summary ?? ''}
 
 Extract:
 1. Key decisions made (array of strings)
+
+    logAiUsage({ function_name: 'agent-conversation-transcriber', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })
 2. Action items for Adam (array of {task, due_date_if_mentioned})
 3. Action items for client (array of strings)
 4. Scope changes or new requests
@@ -122,8 +123,8 @@ Return JSON.`)
       summary: insights,
     }).eq('id', log_id)
 
-    return new Response(JSON.stringify({ transcript, insights }), { headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ transcript, insights }), { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   } catch (err) {
-    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+    return new Response(JSON.stringify({ error: String(err) }), { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   }
 })
