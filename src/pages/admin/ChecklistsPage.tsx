@@ -106,21 +106,27 @@ export function ChecklistsPage() {
     return { done, total, pct }
   }
 
-  function markComplete(id: string) {
+  async function updateItemStatus(id: string, newStatus: ChecklistItemStatus) {
     setItems((prev) =>
-      prev.map((i) => (i.id === id ? { ...i, status: 'completed' } : i)),
+      prev.map((i) => (i.id === id ? { ...i, status: newStatus } : i)),
     )
     setActiveItem(null)
+    await supabase
+      .from('checklist_instance_items')
+      .update({ status: newStatus, updated_at: new Date().toISOString() })
+      .eq('id', id)
+  }
+
+  function markComplete(id: string) {
+    updateItemStatus(id, 'completed')
   }
 
   function markBlocked(id: string) {
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'blocked' } : i)))
-    setActiveItem(null)
+    updateItemStatus(id, 'blocked')
   }
 
   function markSkipped(id: string) {
-    setItems((prev) => prev.map((i) => (i.id === id ? { ...i, status: 'skipped' } : i)))
-    setActiveItem(null)
+    updateItemStatus(id, 'skipped')
   }
 
   if (instancesError) return (

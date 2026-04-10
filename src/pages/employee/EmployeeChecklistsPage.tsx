@@ -91,6 +91,8 @@ export function EmployeeChecklistsPage() {
 
   async function markBlocked(id: string) {
     setLocalOverrides(prev => ({ ...prev, [id]: 'blocked' }))
+    await supabase.from('checklist_instance_items').update({ status: 'blocked', updated_at: new Date().toISOString() }).eq('id', id)
+    queryClient.invalidateQueries({ queryKey: ['checklist-instance-items', user?.id] })
     setActiveItem(null)
   }
 

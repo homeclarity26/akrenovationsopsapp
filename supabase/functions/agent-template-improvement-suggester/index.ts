@@ -4,6 +4,7 @@
 // Writes to improvement_specs table.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 
@@ -195,6 +196,12 @@ Return ONLY valid JSON:
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
+
+  // JWT auth check
+  const auth = await verifyAuth(req)
+  if (!auth) {
+    return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } })
+  }
 
   const rl = await checkRateLimit(req, 'agent-template-improvement-suggester')
   if (!rl.allowed) return rateLimitResponse(rl)

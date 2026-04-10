@@ -9,6 +9,11 @@ import { ClientLayout } from '@/components/layout/ClientLayout'
 
 // Auth
 import { LoginPage } from '@/pages/auth/LoginPage'
+import { ForgotPasswordPage } from '@/pages/auth/ForgotPasswordPage'
+import { ResetPasswordPage } from '@/pages/auth/ResetPasswordPage'
+
+// Error handling
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 
 // Admin pages
 import { AdminDashboard } from '@/pages/admin/AdminDashboard'
@@ -91,7 +96,16 @@ import { PublicGallery } from '@/pages/public/PublicGallery'
 import EmployeeDemoShell from '@/demo/employee/EmployeeDemoShell'
 import HomeownerDemoShell from '@/demo/homeowner/HomeownerDemoShell'
 
-const qc = new QueryClient()
+const qc = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30_000,
+      gcTime: 5 * 60_000,
+      retry: 2,
+      refetchOnWindowFocus: false,
+    },
+  },
+})
 
 function AuthLoadingScreen() {
   return (
@@ -140,6 +154,8 @@ function AppRoutes() {
     <Routes>
       <Route path="/" element={<RootRedirect />} />
       <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
 
       {/* Admin */}
       <Route path="/admin" element={<ProtectedRoute role="admin"><AdminLayout /></ProtectedRoute>}>
@@ -242,12 +258,14 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <QueryClientProvider client={qc}>
-      <AuthProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </AuthProvider>
-    </QueryClientProvider>
+    <ErrorBoundary>
+      <QueryClientProvider client={qc}>
+        <AuthProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </AuthProvider>
+      </QueryClientProvider>
+    </ErrorBoundary>
   )
 }

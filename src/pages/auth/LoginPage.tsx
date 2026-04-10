@@ -282,8 +282,16 @@ export function LoginPage() {
           </button>
         </form>
 
+        {mode === 'signin' && (
+          <p className="text-center text-xs mt-4" style={{ color: 'var(--text-tertiary)' }}>
+            <a href="/forgot-password" className="underline" style={{ color: 'var(--rust)' }}>
+              Forgot password?
+            </a>
+          </p>
+        )}
+
         <p
-          className="text-center text-xs mt-6"
+          className="text-center text-xs mt-4"
           style={{ color: 'var(--text-tertiary)' }}
         >
           {mode === 'signin' ? (

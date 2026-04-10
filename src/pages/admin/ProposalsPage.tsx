@@ -79,18 +79,18 @@ export function ProposalsPage() {
               instanceTable="proposals"
               items={section.bullets.map((b: string, j: number): EditableItem => ({ id: String(j), title: b }))}
               onSave={async (editedItems) => {
+                const updatedSections = (viewing.sections as { title: string; bullets: string[] }[]).map((s, si) =>
+                  si === i ? { ...s, bullets: editedItems.map((ei) => ei.title) } : s,
+                )
                 setLocalProposals((prev) =>
                   prev.map((p) =>
-                    p.id === viewing.id
-                      ? {
-                          ...p,
-                          sections: (p.sections as { title: string; bullets: string[] }[]).map((s, si) =>
-                            si === i ? { ...s, bullets: editedItems.map((ei) => ei.title) } : s,
-                          ),
-                        }
-                      : p,
+                    p.id === viewing.id ? { ...p, sections: updatedSections } : p,
                   ),
                 )
+                await supabase
+                  .from('proposals')
+                  .update({ sections: updatedSections, updated_at: new Date().toISOString() })
+                  .eq('id', viewing.id as string)
               }}
               isEditable={true}
               showPromoteOption={true}
@@ -115,13 +115,16 @@ export function ProposalsPage() {
                   instanceTable="proposals"
                   items={milestoneItems}
                   onSave={async (editedItems) => {
+                    const updatedSchedule = editedItems.map((ei) => ({ label: ei.title, percent: ei.description ? Number(ei.description) : undefined }))
                     setLocalProposals((prev) =>
                       prev.map((p) =>
-                        p.id === viewing.id
-                          ? { ...p, payment_schedule: editedItems.map((ei) => ({ label: ei.title, percent: ei.description ? Number(ei.description) : undefined })) }
-                          : p
+                        p.id === viewing.id ? { ...p, payment_schedule: updatedSchedule } : p
                       )
                     )
+                    await supabase
+                      .from('proposals')
+                      .update({ payment_schedule: updatedSchedule, updated_at: new Date().toISOString() })
+                      .eq('id', viewing.id as string)
                   }}
                   isEditable={true}
                   showPromoteOption={true}
@@ -140,13 +143,16 @@ export function ProposalsPage() {
                 instanceTable="proposals"
                 items={[]}
                 onSave={async (editedItems) => {
+                  const updatedSchedule = editedItems.map((ei) => ({ label: ei.title, percent: ei.description ? Number(ei.description) : undefined }))
                   setLocalProposals((prev) =>
                     prev.map((p) =>
-                      p.id === viewing.id
-                        ? { ...p, payment_schedule: editedItems.map((ei) => ({ label: ei.title, percent: ei.description ? Number(ei.description) : undefined })) }
-                        : p
+                      p.id === viewing.id ? { ...p, payment_schedule: updatedSchedule } : p
                     )
                   )
+                  await supabase
+                    .from('proposals')
+                    .update({ payment_schedule: updatedSchedule, updated_at: new Date().toISOString() })
+                    .eq('id', viewing.id as string)
                 }}
                 isEditable={true}
                 showPromoteOption={true}
