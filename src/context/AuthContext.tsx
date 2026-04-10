@@ -15,7 +15,7 @@ import {
 import { supabase } from '@/lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 
-type Role = 'admin' | 'employee' | 'client'
+type Role = 'admin' | 'employee' | 'client' | 'super_admin'
 
 export interface AppUser {
   id: string
