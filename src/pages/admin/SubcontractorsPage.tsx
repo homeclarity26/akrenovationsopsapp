@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Phone, Star, AlertTriangle, Building2, Truck } from 'lucide-react'
+import { Plus, Phone, Star, AlertTriangle, Building2, Truck, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
@@ -22,8 +22,12 @@ function insuranceDaysLeft(expiry: string) {
   return days
 }
 
+const TRADES = ['electrical', 'concrete', 'plumbing', 'hvac', 'roofing', 'framing', 'painting', 'drywall', 'flooring', 'landscaping']
+
 export function SubcontractorsPage() {
   const [tab, setTab] = useState<'subs' | 'suppliers'>('subs')
+  const [showAddForm, setShowAddForm] = useState(false)
+  const [saving, setSaving] = useState(false)
 
   const { data: subs = [], isLoading: subsLoading, error: subsError, refetch: subsRefetch } = useQuery({
     queryKey: ['subcontractors'],
@@ -49,12 +53,108 @@ export function SubcontractorsPage() {
         title="Trade Partners"
         subtitle={`${subs.length} subs · ${suppliers.length} suppliers`}
         action={
-          <Button size="sm">
+          <Button size="sm" onClick={() => setShowAddForm(true)}>
             <Plus size={15} />
             {tab === 'subs' ? 'Add Sub' : 'Add Supplier'}
           </Button>
         }
       />
+
+      {/* Add Subcontractor Modal */}
+      {showAddForm && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowAddForm(false)}>
+          <div
+            className="w-full max-w-lg bg-white rounded-t-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between">
+              <h2 className="font-display text-lg text-[var(--navy)]">{tab === 'subs' ? 'Add Subcontractor' : 'Add Supplier'}</h2>
+              <button onClick={() => setShowAddForm(false)} className="p-1 text-[var(--text-tertiary)]"><X size={18} /></button>
+            </div>
+            <form
+              onSubmit={async (e) => {
+                e.preventDefault()
+                const fd = new FormData(e.currentTarget)
+                const companyName = (fd.get('company_name') as string).trim()
+                const trade = fd.get('trade') as string
+                if (!companyName || !trade) return
+                setSaving(true)
+                const { error: insertErr } = await supabase.from('subcontractors').insert({
+                  company_name: companyName,
+                  contact_name: (fd.get('contact_name') as string).trim() || null,
+                  phone: (fd.get('phone') as string).trim() || null,
+                  email: (fd.get('email') as string).trim() || null,
+                  trade,
+                  insurance_expiry: (fd.get('insurance_expiry') as string) || null,
+                  license_number: (fd.get('license_number') as string).trim() || null,
+                  rating: parseInt(fd.get('rating') as string) || 3,
+                  notes: (fd.get('notes') as string).trim() || null,
+                })
+                setSaving(false)
+                if (insertErr) {
+                  alert('Error adding subcontractor: ' + insertErr.message)
+                  return
+                }
+                setShowAddForm(false)
+                subsRefetch()
+              }}
+              className="space-y-3"
+            >
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Company Name *</label>
+                <input name="company_name" required placeholder="ABC Electric LLC" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Contact Name</label>
+                <input name="contact_name" placeholder="Mike Johnson" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Phone</label>
+                  <input name="phone" type="tel" placeholder="(555) 123-4567" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Email</label>
+                  <input name="email" type="email" placeholder="mike@abc.com" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Trade *</label>
+                  <select name="trade" required className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20">
+                    <option value="">Select trade…</option>
+                    {TRADES.map((t) => <option key={t} value={t} className="capitalize">{t.charAt(0).toUpperCase() + t.slice(1)}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Rating</label>
+                  <select name="rating" defaultValue="3" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20">
+                    {[1,2,3,4,5].map((r) => <option key={r} value={r}>{r} star{r > 1 ? 's' : ''}</option>)}
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Insurance Expiry</label>
+                  <input name="insurance_expiry" type="date" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">License #</label>
+                  <input name="license_number" placeholder="LIC-12345" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Notes</label>
+                <textarea name="notes" rows={2} placeholder="Any additional notes..." className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+              </div>
+              <div className="flex gap-2 pt-2">
+                <Button type="button" variant="secondary" fullWidth onClick={() => setShowAddForm(false)}>Cancel</Button>
+                <Button type="submit" fullWidth disabled={saving}>{saving ? 'Adding…' : tab === 'subs' ? 'Add Subcontractor' : 'Add Supplier'}</Button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-[var(--border-light)]">
