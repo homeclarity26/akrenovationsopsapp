@@ -37,6 +37,7 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
   'meta-agent-chat':                 { maxRequests: 100, windowSeconds: 3600 },
   'meta-agent-orchestration':        { maxRequests: 5,   windowSeconds: 86400 },
   'generate-improvement-spec':       { maxRequests: 10,  windowSeconds: 3600 },
+  'generate-estimate':               { maxRequests: 20,  windowSeconds: 3600 },
   'extract-preferences':             { maxRequests: 100, windowSeconds: 3600 },
 
   // ─── AI moderate ───
