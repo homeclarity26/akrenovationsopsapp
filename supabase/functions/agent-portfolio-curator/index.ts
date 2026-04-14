@@ -85,10 +85,10 @@ serve(async (req) => {
     const _t0 = Date.now()
 
     const { text: suggestions, usage: _u } = await callClaude(systemPrompt, `Review these recent photos and suggest 5-10 for the portfolio.
-Photos: ${JSON.stringify(recent)
-
-    logAiUsage({ function_name: 'agent-portfolio-curator', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })}
+Photos: ${JSON.stringify(recent)}
 Return: [{photo_id, reason, suggested_caption, portfolio_category}]`)
+
+    logAiUsage({ function_name: 'agent-portfolio-curator', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).catch(() => {})
 
     await supabase.from('ai_actions').insert({
       request_text: 'Weekly portfolio curation',

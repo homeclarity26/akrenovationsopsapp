@@ -114,11 +114,11 @@ Identify issues, code concerns, quality problems. Return JSON: {issues_found: []
 
     const { text: summary, usage: _uv } = await callClaudeVision(systemPrompt, [
       { type: 'text', text: `Generate a professional inspection report summary for the ${inspection.inspection_type} inspection on ${project?.title}.
-Findings: ${JSON.stringify(analyses)
-
-    logAiUsage({ function_name: 'agent-inspection-analyzer', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _uv.input_tokens, output_tokens: _uv.output_tokens, duration_ms: Date.now() - _tv, status: 'success' })}
+Findings: ${JSON.stringify(analyses)}
 Write factually, like documentation for a client or insurance record.` },
     ], 2048)
+
+    logAiUsage({ function_name: 'agent-inspection-analyzer', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _uv.input_tokens, output_tokens: _uv.output_tokens, duration_ms: Date.now() - _tv, status: 'success' }).catch(() => {})
 
     const flags = analyses.filter((a) => typeof a.result === 'string' && a.result.includes('issues_found'))
 

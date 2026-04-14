@@ -197,14 +197,15 @@ No em dashes. 2-3 sentences.`
         systemPrompt,
         `Sub company: ${bestMatchName}
 Project: ${project?.title ?? targetProjectId}
-Contracted amount: $${contractedAmount.toLocaleString()
-      logAiUsage({ function_name: 'agent-sub-invoice-matcher', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })}
+Contracted amount: $${contractedAmount.toLocaleString()}
 Invoice amount: $${invoiceAmount.toLocaleString()}
 Variance: $${Math.abs(variance).toLocaleString()} (${(variancePct * 100).toFixed(1)}%) ${variance > 0 ? 'over' : 'under'} contract
 
 Write the variance alert.`,
         250,
       )
+
+      logAiUsage({ function_name: 'agent-sub-invoice-matcher', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).catch(() => {})
 
       await writeOutput(
         supabase,

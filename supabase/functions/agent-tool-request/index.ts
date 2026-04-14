@@ -90,9 +90,7 @@ serve(async (req) => {
 
     const { text: classification, usage: _u } = await callClaude(systemPrompt, `Tool request:
 Tool: ${request.tool_name}
-Project: ${(request as any)
-
-    logAiUsage({ function_name: 'agent-tool-request', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).projects?.title ?? 'N/A'}
+Project: ${(request as any).projects?.title ?? 'N/A'}
 Needed by: ${request.needed_by}
 Notes: ${request.notes ?? 'none'}
 
@@ -104,6 +102,8 @@ Classify:
 5. 1-sentence message to Adam about this request
 
 Return JSON.`)
+
+    logAiUsage({ function_name: 'agent-tool-request', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).catch(() => {})
 
     await supabase.from('ai_actions').insert({
       request_text: `Tool request: ${request.tool_name}`,

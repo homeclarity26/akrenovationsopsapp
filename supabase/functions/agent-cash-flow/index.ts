@@ -176,11 +176,11 @@ Recommend action items if cash is tight. No em dashes.`
 
     const { text: reportText, usage: _u } = await callClaude(
       systemPrompt,
-      `Cash flow projection data: ${JSON.stringify(projectionData, null, 2)
-
-    logAiUsage({ function_name: 'agent-cash-flow', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })}\n\nWrite the cash flow report.`,
+      `Cash flow projection data: ${JSON.stringify(projectionData, null, 2)}\n\nWrite the cash flow report.`,
       800,
     )
+
+    logAiUsage({ function_name: 'agent-cash-flow', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).catch(() => {})
 
     await writeOutput(
       supabase,

@@ -92,9 +92,7 @@ serve(async (req) => {
     const _t0 = Date.now()
 
     const { text: suggestion, usage: _u } = await callClaude(systemPrompt, `Week starting: ${weekStart}
-Active projects: ${JSON.stringify(projects)
-
-    logAiUsage({ function_name: 'agent-schedule-optimizer', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })}
+Active projects: ${JSON.stringify(projects)}
 Employees: ${JSON.stringify(employees)}
 Existing schedule events: ${JSON.stringify(events)}
 
@@ -103,6 +101,8 @@ Steven strengths: finish carpentry, fixtures, tile.
 Adam: PM commitments and field days.
 
 Return JSON: [{employee_id, project_id, day, notes}]`)
+
+    logAiUsage({ function_name: 'agent-schedule-optimizer', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).catch(() => {})
 
     return new Response(JSON.stringify({ suggestion }), {
       headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
