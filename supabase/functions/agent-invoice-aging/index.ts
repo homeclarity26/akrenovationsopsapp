@@ -125,9 +125,7 @@ Keep it under 5 sentences. No em dashes.`
 Project: ${project.title}
 Invoice: ${invoice.invoice_number}
 Invoice Title: ${invoice.title}
-Amount Due: $${invoice.balance_due.toLocaleString()
-
-      logAiUsage({ function_name: 'agent-invoice-aging', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })}
+Amount Due: $${invoice.balance_due.toLocaleString()}
 Due Date: ${invoice.due_date}
 Days Overdue: ${daysOverdue}
 Tone: ${tone}
@@ -135,6 +133,8 @@ Tone: ${tone}
 Draft the collection message.`,
         350,
       )
+
+      logAiUsage({ function_name: 'agent-invoice-aging', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).catch(() => {})
 
       await supabase.from('ai_actions').insert({
         request_text: `Invoice ${invoice.invoice_number} collection — ${project.client_name}, $${invoice.balance_due.toLocaleString()}, ${daysOverdue} days overdue`,

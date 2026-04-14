@@ -104,9 +104,7 @@ serve(async (req) => {
     const _t0 = Date.now()
 
     const { text: selection, usage: _u } = await callClaude(systemPrompt, `Select the best photos for a client progress reel for ${project.title}.
-Photos: ${JSON.stringify(photos)
-
-    logAiUsage({ function_name: 'agent-generate-reel', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })}
+Photos: ${JSON.stringify(photos)}
 
 Rules:
 - 1-2 "before" demo/existing photos
@@ -115,6 +113,8 @@ Rules:
 - Avoid blurry or unflattering photos
 
 Return: [{photo_id, order, caption, phase_label}]`)
+
+    logAiUsage({ function_name: 'agent-generate-reel', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).catch(() => {})
 
     const galleryToken = uuidv4()
 

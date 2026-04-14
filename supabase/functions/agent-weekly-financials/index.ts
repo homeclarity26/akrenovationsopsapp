@@ -132,9 +132,7 @@ Format with clear sections. Use real dollar amounts. No em dashes. Be direct.`
 
     const { text: summaryText, usage: _u } = await callClaude(
       systemPrompt,
-      `Week ending: ${new Date()
-
-    logAiUsage({ function_name: 'agent-weekly-financials', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
+      `Week ending: ${new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })}
 
 Cash Collected This Week: $${totalCollected.toLocaleString()}
 New Invoices Sent: $${totalInvoiced.toLocaleString()} (${sentThisWeek?.length ?? 0} invoices)
@@ -145,6 +143,8 @@ Expenses by Category: ${JSON.stringify(expenseByCategory)}
 Write the weekly financial summary.`,
       600,
     )
+
+    logAiUsage({ function_name: 'agent-weekly-financials', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).catch(() => {})
 
     await writeOutput(
       supabase,

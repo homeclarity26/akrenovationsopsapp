@@ -103,14 +103,13 @@ serve(async (req) => {
       buildSystemPrompt(company, 'transcription specialist'))
       + `\n\nCONVERSATION ANALYZER\nExtract structured insights from logged client conversations.`
 
+    const _t0 = Date.now()
 
-Audio transcript: ${transcript}
+    const { text: insights, usage: _u } = await callClaude(systemPrompt, `Audio transcript: ${transcript}
 Manual notes: ${log.summary ?? ''}
 
 Extract:
 1. Key decisions made (array of strings)
-
-    logAiUsage({ function_name: 'agent-conversation-transcriber', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })
 2. Action items for Adam (array of {task, due_date_if_mentioned})
 3. Action items for client (array of strings)
 4. Scope changes or new requests
@@ -119,6 +118,8 @@ Extract:
 7. Follow-up that should be scheduled
 
 Return JSON.`)
+
+    logAiUsage({ function_name: 'agent-conversation-transcriber', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).catch(() => {})
 
     await supabase.from('communication_log').update({
       transcript,

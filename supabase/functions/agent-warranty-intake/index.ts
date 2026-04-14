@@ -96,9 +96,7 @@ Claim: ${claim.description}
 Project: ${project?.title}
 Project type: ${project?.project_type}
 Completion date: ${project?.actual_completion_date}
-Subcontractors: ${JSON.stringify(subs)
-
-    logAiUsage({ function_name: 'agent-warranty-intake', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' })}
+Subcontractors: ${JSON.stringify(subs)}
 
 Determine:
 1. Likely responsible trade/sub
@@ -109,6 +107,8 @@ Determine:
 6. If sub responsible, draft sub notification
 
 Return JSON.`)
+
+    logAiUsage({ function_name: 'agent-warranty-intake', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _u.input_tokens, output_tokens: _u.output_tokens, duration_ms: Date.now() - _t0, status: 'success' }).catch(() => {})
 
     await supabase.from('warranty_claims').update({
       resolution: analysis,
