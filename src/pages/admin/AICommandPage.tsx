@@ -70,8 +70,25 @@ export function AICommandPage() {
         }),
       })
 
-      const data = res.ok ? await res.json() : null
-      const reply = data?.reply ?? `I received your command but couldn\'t process it. Please try again.`
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok || !data.reply) {
+        const errorDetail = data.error ?? data.message ?? `HTTP ${res.status}`
+        console.error('[AICommand] Edge function error:', res.status, data)
+        const reply = `Error: ${errorDetail}`
+        setActions(prev => [{
+          id: `ai-${Date.now()}`,
+          request_text: cmd,
+          action_type: 'chat',
+          risk_level: 'low' as const,
+          status: 'executed' as ActionStatus,
+          created_at: new Date().toISOString(),
+          requires_approval: false,
+          preview: reply,
+        }, ...prev])
+        setLastResult(reply)
+        return
+      }
+      const reply = data.reply
 
       setActions(prev => [{
         id: `ai-${Date.now()}`,
@@ -84,8 +101,9 @@ export function AICommandPage() {
         preview: reply,
       }, ...prev])
       setLastResult(reply)
-    } catch {
-      setLastResult('Connection error — please try again.')
+    } catch (err) {
+      console.error('[AICommand] Network error:', err)
+      setLastResult(`Network error: ${err instanceof Error ? err.message : 'Unable to reach AI service'}`)
     } finally {
       setProcessing(false)
     }

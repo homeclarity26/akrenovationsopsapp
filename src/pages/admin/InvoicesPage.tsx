@@ -328,10 +328,11 @@ export function InvoicesPage() {
                           a.click()
                           URL.revokeObjectURL(url)
                         } else {
-                          alert('PDF generation not available yet.')
+                          const errData = await res.json().catch(() => ({}))
+                          alert(`PDF generation failed: ${errData.error ?? `HTTP ${res.status}`}`)
                         }
-                      } catch {
-                        alert('PDF generation not available yet.')
+                      } catch (err) {
+                        alert(`PDF generation error: ${err instanceof Error ? err.message : 'Network error'}`)
                       }
                     }}
                     className="flex items-center gap-1.5 text-xs text-[var(--navy)] font-semibold border border-[var(--navy)]/20 bg-[var(--cream-light)] px-3 py-2 rounded-xl min-h-[36px] hover:bg-[var(--cream)] transition-colors"
