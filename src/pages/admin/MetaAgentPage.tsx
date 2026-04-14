@@ -99,32 +99,35 @@ export function MetaAgentPage() {
         }),
       })
 
-      if (res.ok) {
-        const data = await res.json()
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.reply) {
         const assistantMsg: Message = {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: data.reply ?? 'I ran into an issue. Try again?',
+          content: data.reply,
           timestamp: new Date(),
         }
         setMessages(prev => [...prev, assistantMsg])
       } else {
-        const fallbackMsg: Message = {
+        const errorDetail = data.error ?? data.message ?? `HTTP ${res.status}`
+        console.error('[MetaAgent] Edge function error:', res.status, data)
+        const errorMsg: Message = {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: `I heard you — "${messageText}". The full AI connection will be live once the edge functions are deployed to Supabase. For now, I'm running in preview mode.`,
+          content: `Something went wrong (${errorDetail}). Check the browser console for details. If this persists, the AI service may need attention.`,
           timestamp: new Date(),
         }
-        setMessages(prev => [...prev, fallbackMsg])
+        setMessages(prev => [...prev, errorMsg])
       }
-    } catch {
-      const fallbackMsg: Message = {
+    } catch (err) {
+      console.error('[MetaAgent] Network error:', err)
+      const errorMsg: Message = {
         id: crypto.randomUUID(),
         role: 'assistant',
-        content: "I'm having trouble connecting right now. I'll be fully operational once the Supabase edge functions are deployed.",
+        content: `Network error: ${err instanceof Error ? err.message : 'Unable to reach the AI service. Check your connection and try again.'}`,
         timestamp: new Date(),
       }
-      setMessages(prev => [...prev, fallbackMsg])
+      setMessages(prev => [...prev, errorMsg])
     } finally {
       setIsLoading(false)
     }

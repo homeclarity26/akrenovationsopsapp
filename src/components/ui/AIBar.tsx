@@ -46,14 +46,17 @@ export function AIBar({ onClose, placeholder = 'Ask anything or give a command..
         }),
       })
 
-      if (res.ok) {
-        const data = await res.json()
-        setMessages(m => [...m, { role: 'ai', text: data.reply ?? 'I ran into an issue. Try again?' }])
+      const data = await res.json().catch(() => ({}))
+      if (res.ok && data.reply) {
+        setMessages(m => [...m, { role: 'ai', text: data.reply }])
       } else {
-        setMessages(m => [...m, { role: 'ai', text: `I heard you — "${text}". The AI connection will be live once edge functions are deployed. For now, I'm in preview mode.` }])
+        const errorDetail = data.error ?? data.message ?? `HTTP ${res.status}`
+        console.error('[AIBar] Edge function error:', res.status, data)
+        setMessages(m => [...m, { role: 'ai', text: `Error: ${errorDetail}` }])
       }
-    } catch {
-      setMessages(m => [...m, { role: 'ai', text: "I'm having trouble connecting right now. I'll be fully operational once the edge functions are deployed." }])
+    } catch (err) {
+      console.error('[AIBar] Network error:', err)
+      setMessages(m => [...m, { role: 'ai', text: `Network error: ${err instanceof Error ? err.message : 'Unable to reach the AI service.'}` }])
     } finally {
       setIsLoading(false)
     }
