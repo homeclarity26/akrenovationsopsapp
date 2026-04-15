@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Check, ArrowLeft, Trash2, Link2, X as XIcon, PackageMinus, CircleCheck } from 'lucide-react'
+import { Plus, Check, ArrowLeft, Trash2, Link2, X as XIcon, PackageMinus, CircleCheck, AlertTriangle } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { cn } from '@/lib/utils'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -120,6 +120,19 @@ export function ShoppingListPage() {
   const [localOverrides, setLocalOverrides] = useState<Record<string, string>>({})
   const [busyIds, setBusyIds] = useState<Record<string, boolean>>({})
 
+  // Inline banner for deduct errors/warnings. Auto-dismisses after 4s.
+  // Replaces window.alert for mobile-friendliness and consistency with the
+  // rest of the app (UX review flagged the alert pattern).
+  const [banner, setBanner] = useState<
+    { kind: 'error' | 'warning' | 'success'; text: string } | null
+  >(null)
+  const showBanner = (kind: 'error' | 'warning' | 'success', text: string) => {
+    setBanner({ kind, text })
+    setTimeout(() => {
+      setBanner((b) => (b && b.text === text ? null : b))
+    }, 4000)
+  }
+
   const items: ShoppingItem[] = rawItems.map(i => ({
     ...i,
     status: localOverrides[i.id] ?? i.status,
@@ -170,11 +183,11 @@ export function ShoppingListPage() {
         body: { shopping_list_item_id: id },
       })
       if (error) {
-        window.alert(`Could not deduct: ${error.message}`)
+        showBanner('error', `Could not deduct: ${error.message}`)
         return
       }
       if (data?.warning) {
-        window.alert(`Deducted with a warning: ${data.warning}`)
+        showBanner('warning', `Deducted with a warning: ${data.warning}`)
       }
       queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
     } finally {
@@ -291,6 +304,37 @@ export function ShoppingListPage() {
   return (
     <>
       <div className="p-4 pt-4 max-w-lg mx-auto pb-24">
+
+        {/* Inline banner — replaces window.alert for deduct feedback */}
+        {banner && (
+          <div
+            className={cn(
+              'mb-3 rounded-xl border px-3 py-2.5 flex items-start gap-2',
+              banner.kind === 'error' && 'border-[var(--danger)]/40 bg-[var(--danger)]/5',
+              banner.kind === 'warning' && 'border-[var(--warning)]/40 bg-[var(--warning-bg)]',
+              banner.kind === 'success' && 'border-[var(--success)]/40 bg-[var(--success-bg)]',
+            )}
+            role="status"
+          >
+            <AlertTriangle
+              size={14}
+              className={cn(
+                'flex-shrink-0 mt-0.5',
+                banner.kind === 'error' && 'text-[var(--danger)]',
+                banner.kind === 'warning' && 'text-[var(--warning)]',
+                banner.kind === 'success' && 'text-[var(--success)]',
+              )}
+            />
+            <p className="text-xs text-[var(--text-secondary)] flex-1">{banner.text}</p>
+            <button
+              onClick={() => setBanner(null)}
+              className="opacity-70 hover:opacity-100"
+              aria-label="Dismiss"
+            >
+              <XIcon size={12} />
+            </button>
+          </div>
+        )}
 
         {/* Page header */}
         <div className="flex items-center justify-between mb-5">

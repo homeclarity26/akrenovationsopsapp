@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Package, Search, Minus, Plus, ChevronDown, ChevronRight,
@@ -78,7 +78,12 @@ interface PendingCount {
   touched: boolean  // true once the user interacted (even if value matches baseline)
 }
 
-const LS_LOCATION_KEY = 'ak_stocktake_location'
+// Prefix the localStorage key with the current user's id so that when one
+// employee signs out and another signs in on the same device (shared tablet
+// scenario), they don't inherit the previous user's picked location.
+// Previously this was a bare 'ak_stocktake_location' key — cross-account
+// collision risk.
+const lsKey = (userId: string) => 'ak_stocktake_location:' + userId
 
 // Sort order for location types — shop first, then trucks, trailers, jobsite,
 // other — matches the physical flow Adam described.
@@ -148,13 +153,21 @@ export function EmployeeStocktakePage() {
   useInventoryRealtime()
 
   // ── Location selection ─────────────────────────────────────────────────────
-  const [locationId, setLocationId] = useState<string | null>(() => {
+  // Initialise to null — we read the per-user key once the user is known in
+  // the effect below. Avoids reading a stale key from a previous sign-in.
+  const [locationId, setLocationId] = useState<string | null>(null)
+
+  // Hydrate the picked location from localStorage once `user.id` is available.
+  // Keyed per user so account switching on the same device doesn't leak.
+  useEffect(() => {
+    if (!user?.id) return
     try {
-      return localStorage.getItem(LS_LOCATION_KEY)
+      const saved = localStorage.getItem(lsKey(user.id))
+      if (saved) setLocationId(saved)
     } catch {
-      return null
+      /* ignore */
     }
-  })
+  }, [user?.id])
 
   // Locations query — company-scoped, active only. RLS also enforces company scope.
   const { data: locations = [], isLoading: locationsLoading } = useQuery<InventoryLocation[]>({
@@ -197,18 +210,24 @@ export function EmployeeStocktakePage() {
   useEffect(() => {
     if (!locationsLoading && locationId && !pickedLocation) {
       setLocationId(null)
-      try { localStorage.removeItem(LS_LOCATION_KEY) } catch { /* ignore */ }
+      if (user?.id) {
+        try { localStorage.removeItem(lsKey(user.id)) } catch { /* ignore */ }
+      }
     }
-  }, [locationsLoading, locationId, pickedLocation])
+  }, [locationsLoading, locationId, pickedLocation, user?.id])
 
   function selectLocation(id: string) {
     setLocationId(id)
-    try { localStorage.setItem(LS_LOCATION_KEY, id) } catch { /* ignore */ }
+    if (user?.id) {
+      try { localStorage.setItem(lsKey(user.id), id) } catch { /* ignore */ }
+    }
   }
 
   function clearLocation() {
     setLocationId(null)
-    try { localStorage.removeItem(LS_LOCATION_KEY) } catch { /* ignore */ }
+    if (user?.id) {
+      try { localStorage.removeItem(lsKey(user.id)) } catch { /* ignore */ }
+    }
     setPending({})
     setSearch('')
     setShowLowOnly(false)
@@ -265,6 +284,46 @@ export function EmployeeStocktakePage() {
   })
   const rows = itemsAndStock?.rows ?? []
 
+  // ── Baseline-shift detection (Fix 7) ─────────────────────────────────────
+  // If an admin (or another user) updates `inventory_stock` via realtime and
+  // the baseline for an item that's currently in the user's pending-edits map
+  // changes, warn the user so they don't submit against a stale mental
+  // baseline. Their pending edits are preserved — we just surface the fact.
+  useEffect(() => {
+    const prev = prevBaselineRef.current
+    const next = new Map<string, number>()
+    for (const r of rows) next.set(r.item.id, r.stock?.quantity ?? 0)
+
+    // Only consider it a "shift" if we had a previous baseline snapshot
+    // (otherwise this is the first load and everything is new).
+    if (prev.size > 0) {
+      let shiftedCount = 0
+      for (const [itemId, nextQty] of next) {
+        const prevQty = prev.get(itemId)
+        if (prevQty === undefined) continue
+        if (prevQty === nextQty) continue
+        // Baseline actually changed. Only warn if the user has pending edits
+        // for this item (otherwise silent background refresh is fine).
+        if (pending[itemId]?.touched) shiftedCount++
+      }
+      if (shiftedCount > 0) {
+        setBanner({
+          kind: 'warning',
+          text:
+            'Stock was updated elsewhere — your pending edits still stand. ' +
+            'Double-check before submitting.',
+        })
+        setTimeout(() => setBanner((b) => (b?.kind === 'warning' ? null : b)), 6000)
+      }
+    }
+
+    prevBaselineRef.current = next
+    // Intentionally not depending on `pending` — we only want to re-check when
+    // the underlying `rows` (baseline) changes, and read the current pending
+    // map at that moment. Adding `pending` would re-fire every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rows])
+
   // ── Local editing state ────────────────────────────────────────────────────
   const [pending, setPending] = useState<Record<string, PendingCount>>({})
   const [search, setSearch] = useState('')
@@ -273,6 +332,14 @@ export function EmployeeStocktakePage() {
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({})
   const [toast, setToast] = useState<string | null>(null)
   const [photoModalOpen, setPhotoModalOpen] = useState(false)
+  // Inline banner for baseline-shift warning (Fix 7). Uses the same pattern as
+  // ShoppingListPage — no toast library.
+  const [banner, setBanner] = useState<
+    { kind: 'error' | 'warning' | 'success'; text: string } | null
+  >(null)
+  // Remember the last-seen baseline (stock.quantity) per item so we can detect
+  // when an admin edits stock in another tab while the user is mid-count.
+  const prevBaselineRef = useRef<Map<string, number>>(new Map())
 
   // Catalog snapshot for the photo modal — only active items at this location.
   const knownItemsForPhoto = useMemo(
@@ -587,6 +654,38 @@ export function EmployeeStocktakePage() {
             <X size={14} />
           </button>
         </div>
+      )}
+
+      {/* Inline banner — baseline-shift warning (Fix 7) */}
+      {banner && (
+        <Card
+          className={cn(
+            banner.kind === 'warning' &&
+              'border-[var(--warning)]/40 bg-[var(--warning-bg)]',
+            banner.kind === 'error' && 'border-[var(--rust)]/40 bg-[var(--rust)]/5',
+            banner.kind === 'success' && 'border-[var(--success)]/40 bg-[var(--success-bg)]',
+          )}
+        >
+          <div className="flex items-start gap-3">
+            <AlertTriangle
+              size={18}
+              className={cn(
+                'flex-shrink-0 mt-0.5',
+                banner.kind === 'warning' && 'text-[var(--warning)]',
+                banner.kind === 'error' && 'text-[var(--rust)]',
+                banner.kind === 'success' && 'text-[var(--success)]',
+              )}
+            />
+            <p className="text-[12px] text-[var(--text-secondary)] flex-1">{banner.text}</p>
+            <button
+              onClick={() => setBanner(null)}
+              className="opacity-70 hover:opacity-100"
+              aria-label="Dismiss"
+            >
+              <X size={14} />
+            </button>
+          </div>
+        </Card>
       )}
 
       {itemsLoading ? (
