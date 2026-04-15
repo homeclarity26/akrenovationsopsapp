@@ -14,6 +14,7 @@ import { ProjectSubsTab } from './ProjectSubsTab'
 import { ProjectTeamTab } from './ProjectTeamTab'
 import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
 import type { EditableItem } from '@/components/ui/EditableDeliverable'
+import { useProjectRealtime } from '@/hooks/useProjectRealtime'
 
 type Tab = 'overview' | 'financials' | 'budget' | 'subs' | 'team' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
 
@@ -22,6 +23,9 @@ export function ProjectDetailPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const [tab, setTab] = useState<Tab>('overview')
+
+  // Live-update the whole page when anyone on the team makes a change.
+  useProjectRealtime(id)
 
   const { data: project, isLoading: projectLoading, error: projectError, refetch: projectRefetch } = useQuery({
     queryKey: ['project', id, user?.company_id],
@@ -214,6 +218,16 @@ export function ProjectDetailPage() {
               <StatusPill status={project.status} />
               <StatusPill status={project.schedule_status} />
               <span className="text-xs text-[var(--text-tertiary)] capitalize">{project.project_type}</span>
+              <span
+                className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]"
+                title="This page updates live as your team makes changes"
+              >
+                <span className="relative flex h-1.5 w-1.5">
+                  <span className="absolute inset-0 rounded-full bg-[var(--success)] opacity-60 animate-ping" />
+                  <span className="relative rounded-full bg-[var(--success)] h-1.5 w-1.5" />
+                </span>
+                Live
+              </span>
             </div>
           </div>
           <div className="text-right flex-shrink-0">
