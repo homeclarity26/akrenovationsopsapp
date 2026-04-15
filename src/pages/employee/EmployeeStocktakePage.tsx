@@ -3,7 +3,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import {
   Package, Search, Minus, Plus, ChevronDown, ChevronRight,
   Truck, Warehouse, Container, MapPin, Pencil, AlertTriangle,
-  CheckCircle2, X,
+  CheckCircle2, X, Camera,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
@@ -12,6 +12,7 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { useInventoryRealtime } from '@/hooks/useInventoryRealtime'
 import { cn } from '@/lib/utils'
+import { PhotoStocktakeModal } from '@/components/inventory/PhotoStocktakeModal'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — mirror PR 7 schema (see 20260415000600_inventory_schema.sql)
@@ -271,6 +272,19 @@ export function EmployeeStocktakePage() {
   const [showLowOnly, setShowLowOnly] = useState(false)
   const [expandedNotes, setExpandedNotes] = useState<Record<string, boolean>>({})
   const [toast, setToast] = useState<string | null>(null)
+  const [photoModalOpen, setPhotoModalOpen] = useState(false)
+
+  // Catalog snapshot for the photo modal — only active items at this location.
+  const knownItemsForPhoto = useMemo(
+    () =>
+      rows.map((r) => ({
+        item_id: r.item.id,
+        name: r.item.name,
+        unit: r.item.unit,
+        pack_size: r.item.pack_size,
+      })),
+    [rows],
+  )
 
   // Baseline quantity for an item at this location (0 if no stock row).
   function baselineQty(itemId: string): number {
@@ -539,16 +553,29 @@ export function EmployeeStocktakePage() {
         </Card>
       )}
 
-      {/* Search */}
-      <div className="relative">
-        <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
-        <input
-          type="search"
-          value={search}
-          onChange={e => setSearch(e.target.value)}
-          placeholder="Search items…"
-          className="w-full h-11 pl-9 pr-3 bg-white border border-[var(--border-light)] rounded-xl text-sm focus:outline-none focus:border-[var(--navy)]"
-        />
+      {/* Search + Scan */}
+      <div className="flex items-stretch gap-2">
+        <div className="relative flex-1">
+          <Search size={15} className="absolute left-3 top-1/2 -translate-y-1/2 text-[var(--text-tertiary)]" />
+          <input
+            type="search"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search items…"
+            className="w-full h-11 pl-9 pr-3 bg-white border border-[var(--border-light)] rounded-xl text-sm focus:outline-none focus:border-[var(--navy)]"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={() => setPhotoModalOpen(true)}
+          disabled={rows.length === 0}
+          className="h-11 px-3 rounded-xl bg-[var(--navy)] text-white text-xs font-semibold flex items-center gap-1.5 active:scale-95 transition-transform disabled:opacity-50 disabled:cursor-not-allowed whitespace-nowrap"
+          aria-label="Scan with photo"
+          title="Scan with photo"
+        >
+          <Camera size={14} />
+          Scan
+        </button>
       </div>
 
       {/* Toast */}
@@ -643,6 +670,19 @@ export function EmployeeStocktakePage() {
           </div>
         </div>
       )}
+
+      {/* Photo stocktake modal */}
+      <PhotoStocktakeModal
+        open={photoModalOpen}
+        onClose={() => setPhotoModalOpen(false)}
+        locationId={pickedLocation.id}
+        locationName={pickedLocation.name}
+        knownItems={knownItemsForPhoto}
+        onSubmitted={(count) => {
+          setToast(`Submitted ${count} count${count === 1 ? '' : 's'} from photo`)
+          setTimeout(() => setToast(null), 3500)
+        }}
+      />
     </div>
   )
 }
