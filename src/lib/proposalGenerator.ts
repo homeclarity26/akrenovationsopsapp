@@ -529,8 +529,8 @@ const sectionRow = (
       bottom: NONE_BORDER,
       left: NONE_BORDER,
       right: NONE_BORDER,
-      insideH: NONE_BORDER,
-      insideV: NONE_BORDER,
+
+
     },
     rows: [
       new TableRow({
@@ -695,8 +695,8 @@ const addOnBox = (data: ProposalData) =>
       bottom: { style: BorderStyle.SINGLE, size: 6, color: RUST },
       left: { style: BorderStyle.SINGLE, size: 6, color: RUST },
       right: { style: BorderStyle.SINGLE, size: 6, color: RUST },
-      insideH: NONE_BORDER,
-      insideV: NONE_BORDER,
+
+
     },
     rows: [
       new TableRow({
@@ -1004,7 +1004,7 @@ const termsTable = (data: ProposalData) => {
 
 // ── SIGNATURE TABLE ──────────────────────────────────────────
 
-const signatureTable = (data: ProposalData) => {
+const signatureTable = (_data: ProposalData) => {
   const HALF = W / 2;
 
   const sigBlock = (party: string, name: string | null) =>
