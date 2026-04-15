@@ -18,6 +18,7 @@ const TABLE_TO_QUERY_KEYS: Record<string, string[]> = {
   inventory_stock:          ['inventory_stock',      'inventory_location_items'],
   inventory_stocktakes:     ['inventory_stocktakes', 'inventory_location_items'],
   inventory_item_templates: ['inventory_item_templates'],
+  inventory_alerts:         ['inventory_alerts'],
 }
 
 /**

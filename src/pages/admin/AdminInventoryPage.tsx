@@ -12,16 +12,10 @@ import { InventoryStockMatrix } from '@/components/inventory/InventoryStockMatri
 import { InventoryItemForm, type InventoryItemFormValue } from '@/components/inventory/InventoryItemForm'
 import { InventoryLocationForm, type InventoryLocationFormValue } from '@/components/inventory/InventoryLocationForm'
 import { InventoryCategoryList } from '@/components/inventory/InventoryCategoryList'
+import { InventoryAlertsPanel } from '@/components/inventory/InventoryAlertsPanel'
 import { LocationTypePill, type LocationType } from '@/components/inventory/LocationTypePill'
 
-type Tab = 'stock' | 'items' | 'locations' | 'categories'
-
-const TABS: { id: Tab; label: string }[] = [
-  { id: 'stock',      label: 'Stock' },
-  { id: 'items',      label: 'Items' },
-  { id: 'locations',  label: 'Locations' },
-  { id: 'categories', label: 'Categories' },
-]
+type Tab = 'alerts' | 'stock' | 'items' | 'locations' | 'categories'
 
 interface ItemRow {
   id: string
@@ -56,9 +50,31 @@ export function AdminInventoryPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const companyId = user?.company_id ?? undefined
-  const [tab, setTab] = useState<Tab>('stock')
+  const [tab, setTab] = useState<Tab>('alerts')
 
   useInventoryRealtime()
+
+  const { data: openAlertCount = 0 } = useQuery<number>({
+    queryKey: ['inventory_alerts', companyId, 'count'],
+    enabled: !!companyId,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('inventory_alerts')
+        .select('id', { count: 'exact', head: true })
+        .eq('company_id', companyId!)
+        .eq('status', 'open')
+      if (error) throw error
+      return count ?? 0
+    },
+  })
+
+  const tabs: { id: Tab; label: string }[] = [
+    { id: 'alerts',     label: openAlertCount > 0 ? `Alerts (${openAlertCount})` : 'Alerts' },
+    { id: 'stock',      label: 'Stock' },
+    { id: 'items',      label: 'Items' },
+    { id: 'locations',  label: 'Locations' },
+    { id: 'categories', label: 'Categories' },
+  ]
 
   return (
     <div className="max-w-2xl mx-auto lg:max-w-none">
@@ -91,7 +107,7 @@ export function AdminInventoryPage() {
 
       {/* Tabs */}
       <div className="flex gap-0 overflow-x-auto border-b border-[var(--border-light)] px-4 lg:px-8">
-        {TABS.map(t => (
+        {tabs.map(t => (
           <button
             key={t.id}
             onClick={() => setTab(t.id)}
@@ -116,6 +132,7 @@ export function AdminInventoryPage() {
           </Card>
         )}
 
+        {companyId && tab === 'alerts' && <InventoryAlertsPanel />}
         {companyId && tab === 'stock' && <InventoryStockMatrix />}
         {companyId && tab === 'items' && <ItemsTab companyId={companyId} queryClient={queryClient} />}
         {companyId && tab === 'locations' && <LocationsTab companyId={companyId} queryClient={queryClient} />}

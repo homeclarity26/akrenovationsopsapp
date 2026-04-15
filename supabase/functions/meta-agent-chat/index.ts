@@ -300,6 +300,13 @@ Inventory × shopping list (PR 10):
   lists and truck/shop inventory. The function is idempotent (guarded by
   shopping_list_items.deducted_at) and records an auditable stocktake row
   referenced by deducted_stocktake_id.
+
+INVENTORY (multi-location — shop + named trucks/trailers):
+- Tables: inventory_locations, inventory_categories, inventory_items, inventory_stock (qty per location+item), inventory_stocktakes, inventory_alerts.
+- Employees submit rough counts via stocktake; admins manage catalog + review alerts.
+- For inventory questions, DELEGATE to: ai-inventory-query { query, company_id } — returns a plain-text answer.
+- Low-stock scan runs daily at 8:22 Eastern. Open alerts live in inventory_alerts WHERE status='open'.
+- When proposing a project action that consumes inventory, link shopping_list_items to inventory_items, then call deduct-shopping-item-from-stock.
 `
 
 // ---------------------------------------------------------------------------
