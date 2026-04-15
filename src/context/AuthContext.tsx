@@ -24,6 +24,9 @@ export interface AppUser {
   full_name: string
   avatar_url: string | null
   company_id: string | null
+  platform_onboarding_complete: boolean
+  company_onboarding_complete: boolean
+  field_onboarding_complete: boolean
 }
 
 interface AuthContextValue {
@@ -42,7 +45,7 @@ const AuthContext = createContext<AuthContextValue | null>(null)
 async function fetchProfile(userId: string, fallbackEmail?: string): Promise<AppUser | null> {
   const { data, error } = await supabase
     .from('profiles')
-    .select('id, role, full_name, email, avatar_url, company_id')
+    .select('id, role, full_name, email, avatar_url, company_id, platform_onboarding_complete, company_onboarding_complete, field_onboarding_complete')
     .eq('id', userId)
     .maybeSingle()
 
@@ -59,6 +62,9 @@ async function fetchProfile(userId: string, fallbackEmail?: string): Promise<App
       full_name: data.full_name ?? (fallbackEmail?.split('@')[0] ?? 'User'),
       avatar_url: data.avatar_url,
       company_id: data.company_id ?? null,
+      platform_onboarding_complete: data.platform_onboarding_complete ?? false,
+      company_onboarding_complete: data.company_onboarding_complete ?? false,
+      field_onboarding_complete: data.field_onboarding_complete ?? false,
     }
   }
 
@@ -71,6 +77,9 @@ async function fetchProfile(userId: string, fallbackEmail?: string): Promise<App
     full_name: fallbackEmail?.split('@')[0] ?? 'User',
     avatar_url: null,
     company_id: null,
+    platform_onboarding_complete: false,
+    company_onboarding_complete: false,
+    field_onboarding_complete: false,
   }
 }
 

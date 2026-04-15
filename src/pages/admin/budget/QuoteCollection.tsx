@@ -103,16 +103,7 @@ export function QuoteCollection({ projectId, trades, quotes, onTradesChange, onQ
     onQuotesChange(newQuotes)
     onTradesChange(newTrades)
 
-    // TODO: DB - when Supabase is connected, upsert to project_subcontractors:
-    // { project_id: projectId, subcontractor_id: quote.subcontractor_id, scope: quote.scope_included, bid_amount: quote.amount, contracted_amount: quote.amount, status: 'scheduled' }
-    console.log('project_subcontractors upsert (pending DB):', {
-      project_id: projectId,
-      subcontractor_id: quote.subcontractor_id,
-      scope: quote.scope_included,
-      bid_amount: quote.amount,
-      contracted_amount: quote.amount,
-      status: 'scheduled',
-    })
+    // TODO: upsert to project_subcontractors when DB table is ready
 
     setConfirmAward(null)
   }

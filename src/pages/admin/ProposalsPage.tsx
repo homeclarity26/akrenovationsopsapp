@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Eye, Send, ChevronRight, Image as ImageIcon, X } from 'lucide-react'
+import { Plus, Eye, Send, ChevronRight, Image as ImageIcon, X, Download, Sparkles, Loader2, FileText } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
@@ -8,16 +8,78 @@ import { Button } from '@/components/ui/Button'
 import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
 import type { EditableItem } from '@/components/ui/EditableDeliverable'
 import { supabase } from '@/lib/supabase'
+import { generateProposalDocx, SCOPE_FRAMEWORKS, defaultProposalData } from '@/lib/proposalGenerator'
+import type { ProposalData, ScopeSection } from '@/lib/proposalGenerator'
 
 type ProposalRecord = Record<string, unknown>
 
-const PROJECT_TYPES = ['Kitchen Remodel', 'Bathroom Remodel', 'Basement Finish', 'Addition', 'Whole-Home Renovation', 'Exterior', 'Other']
+const PROJECT_TYPES = ['Bathroom Remodel', 'Kitchen Remodel', 'Basement Finish', 'Porch / Deck', 'Flooring', 'Addition', 'Whole-Home Renovation', 'Exterior', 'Other']
+
+const PROJECT_TYPE_TO_FRAMEWORK: Record<string, string> = {
+  'Bathroom Remodel': 'bathroom',
+  'Kitchen Remodel': 'kitchen',
+  'Basement Finish': 'basement',
+  'Porch / Deck': 'porch',
+  'Flooring': 'flooring',
+}
+
+function buildProposalData(proposal: ProposalRecord): ProposalData {
+  const clientName = String(proposal.client_name ?? '')
+  const nameParts = clientName.split(' ')
+  const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : clientName
+  const address = String(proposal.client_address ?? '')
+  const addressParts = address.split(',').map(s => s.trim())
+
+  const projectType = String(proposal.project_type ?? '')
+  const frameworkKey = PROJECT_TYPE_TO_FRAMEWORK[projectType]
+  const framework = frameworkKey ? SCOPE_FRAMEWORKS[frameworkKey] : undefined
+
+  const dbSections = (proposal.sections as { title: string; bullets: string[] }[]) ?? []
+  const sections: ScopeSection[] = dbSections.length > 0
+    ? dbSections.map((s, i) => ({
+        number: `Section ${String(i + 1).padStart(2, '0')}`,
+        title: s.title,
+        bullets: (s.bullets ?? []).map(b => {
+          const parts = b.split(':')
+          return parts.length > 1
+            ? { label: parts[0].trim(), desc: parts.slice(1).join(':').trim() }
+            : { label: b, desc: null }
+        }),
+      }))
+    : (framework ?? []).map(s => ({ ...s, bullets: [] }))
+
+  const totalPrice = Number(proposal.total_price) || 0
+  const sectionCount = sections.length
+
+  return {
+    ...defaultProposalData,
+    clientLastName: lastName,
+    clientFullNames: clientName,
+    address1: addressParts[0] || '',
+    address2: addressParts.slice(1).join(', ') || '',
+    projectType: projectType.toUpperCase() + ' PROPOSAL',
+    duration: String(proposal.duration ?? '8–12 weeks'),
+    overviewTitle: String(proposal.overview_title ?? `Your ${projectType}`),
+    overviewBody: String(proposal.overview_body ?? ''),
+    totalPrice: `$${totalPrice.toLocaleString()}`,
+    sectionRange: sectionCount > 0 ? `SECTIONS 01–${String(sectionCount).padStart(2, '0')}` : '',
+    hasAddOn: false,
+    addOnName: '',
+    addOnDetail: '',
+    addOnPrice: '',
+    estimatedDuration: String(proposal.duration ?? '8–12 weeks'),
+    sections,
+    selections: [],
+  }
+}
 
 export function ProposalsPage() {
   const [selected, setSelected] = useState<string | null>(null)
   const [localProposals, setLocalProposals] = useState<ProposalRecord[]>([])
   const [showNewForm, setShowNewForm] = useState(false)
   const [saving, setSaving] = useState(false)
+  const [aiGenerating, setAiGenerating] = useState(false)
+  const [downloadingDocx, setDownloadingDocx] = useState(false)
 
   const { data: fetchedProposals = [], isLoading, error, refetch } = useQuery({
     queryKey: ['proposals'],
@@ -30,7 +92,6 @@ export function ProposalsPage() {
     },
   })
 
-  // Seed local state from fetched data (allows in-memory edits without re-fetching)
   useEffect(() => {
     if (fetchedProposals.length > 0 && localProposals.length === 0) {
       setLocalProposals(fetchedProposals)
@@ -38,8 +99,73 @@ export function ProposalsPage() {
   }, [fetchedProposals, localProposals.length])
 
   const proposals = localProposals.length > 0 ? localProposals : fetchedProposals
-
   const viewing = proposals.find(p => p.id === selected) ?? null
+
+  const handleDownloadDocx = async (proposal: ProposalRecord) => {
+    setDownloadingDocx(true)
+    try {
+      const data = buildProposalData(proposal)
+      await generateProposalDocx(data)
+    } catch (err) {
+      alert('Error generating document: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    } finally {
+      setDownloadingDocx(false)
+    }
+  }
+
+  const handleAiGenerate = async (proposalId: string) => {
+    const proposal = proposals.find(p => p.id === proposalId)
+    if (!proposal) return
+
+    setAiGenerating(true)
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token ?? (import.meta.env.VITE_SUPABASE_ANON_KEY as string)
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/agent-proposal-writer`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          proposal_id: proposalId,
+          client_name: proposal.client_name,
+          client_address: proposal.client_address,
+          project_type: proposal.project_type,
+          total_price: proposal.total_price,
+        }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Unknown error' }))
+        throw new Error(err.error || `HTTP ${res.status}`)
+      }
+
+      const result = await res.json()
+
+      if (result.sections || result.overview_body) {
+        const updates: Record<string, unknown> = { updated_at: new Date().toISOString() }
+        if (result.sections) updates.sections = result.sections
+        if (result.overview_body) updates.overview_body = result.overview_body
+        if (result.overview_title) updates.overview_title = result.overview_title
+        if (result.duration) updates.duration = result.duration
+
+        await supabase.from('proposals').update(updates).eq('id', proposalId)
+
+        setLocalProposals(prev =>
+          prev.map(p => p.id === proposalId ? { ...p, ...updates } : p)
+        )
+      }
+
+      await refetch()
+    } catch (err) {
+      alert('AI generation failed: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    } finally {
+      setAiGenerating(false)
+    }
+  }
 
   if (viewing) {
     const viewingSections = (viewing.sections as { title: string; bullets: string[] }[]) ?? []
@@ -63,6 +189,28 @@ export function ProposalsPage() {
             <p className="font-mono text-xl font-bold text-[var(--text)]">${((viewing.total_price as number) / 1000).toFixed(0)}K</p>
             <StatusPill status={viewing.status as string} />
           </div>
+        </div>
+
+        {/* AI Generate + Download actions */}
+        <div className="flex gap-2">
+          <Button
+            variant="ai"
+            size="sm"
+            onClick={() => handleAiGenerate(viewing.id as string)}
+            disabled={aiGenerating}
+          >
+            {aiGenerating ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
+            {aiGenerating ? 'Generating...' : 'Generate with AI'}
+          </Button>
+          <Button
+            variant="secondary"
+            size="sm"
+            onClick={() => handleDownloadDocx(viewing)}
+            disabled={downloadingDocx}
+          >
+            {downloadingDocx ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
+            {downloadingDocx ? 'Building...' : 'Download .docx'}
+          </Button>
         </div>
 
         {/* Overview */}
@@ -102,7 +250,7 @@ export function ProposalsPage() {
           </Card>
         ))}
 
-        {/* N39: Payment Schedule — milestones editable via EditableDeliverable */}
+        {/* Payment Schedule */}
         {(() => {
           if (paymentSchedule && paymentSchedule.length > 0) {
             const milestoneItems: EditableItem[] = paymentSchedule.map((m, idx) => ({
@@ -136,7 +284,6 @@ export function ProposalsPage() {
               </Card>
             )
           }
-          // No payment schedule exists yet — show placeholder
           return (
             <Card>
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-2">Payment Schedule</p>
@@ -165,7 +312,7 @@ export function ProposalsPage() {
           )
         })()}
 
-        {/* Our Recent Work — auto-suggested portfolio photos for this project type */}
+        {/* Our Recent Work */}
         <Card>
           <div className="flex items-center justify-between mb-3">
             <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
@@ -194,18 +341,20 @@ export function ProposalsPage() {
         </Card>
 
         {/* Actions */}
-        {viewing.status === 'sent' && (
-          <div className="space-y-2">
-            <Button fullWidth>
-              <Send size={16} />
-              Send Follow-Up
-            </Button>
-            <Button variant="secondary" fullWidth>
-              <Eye size={16} />
-              Preview as Client
-            </Button>
-          </div>
-        )}
+        <div className="space-y-2">
+          {viewing.status === 'sent' && (
+            <>
+              <Button fullWidth>
+                <Send size={16} />
+                Send Follow-Up
+              </Button>
+              <Button variant="secondary" fullWidth>
+                <Eye size={16} />
+                Preview as Client
+              </Button>
+            </>
+          )}
+        </div>
       </div>
     )
   }
@@ -215,7 +364,7 @@ export function ProposalsPage() {
       <p className="text-sm text-[var(--text-secondary)] mb-3">Unable to load proposals. Check your connection and try again.</p>
       <button onClick={() => refetch()} className="text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-3 py-2 rounded-lg">Retry</button>
     </div>
-  );
+  )
 
   return (
     <div className="p-4 space-y-4 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">
@@ -231,81 +380,13 @@ export function ProposalsPage() {
       />
 
       {/* New Proposal Modal */}
-      {showNewForm && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={() => setShowNewForm(false)}>
-          <div
-            className="w-full max-w-lg bg-white rounded-t-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <div className="flex items-center justify-between">
-              <h2 className="font-display text-lg text-[var(--navy)]">New Proposal</h2>
-              <button onClick={() => setShowNewForm(false)} className="p-1 text-[var(--text-tertiary)]"><X size={18} /></button>
-            </div>
-            <form
-              onSubmit={async (e) => {
-                e.preventDefault()
-                const fd = new FormData(e.currentTarget)
-                const title = (fd.get('title') as string).trim()
-                const clientName = (fd.get('client_name') as string).trim()
-                const projectType = fd.get('project_type') as string
-                const totalPrice = parseFloat(fd.get('total_price') as string) || 0
-                if (!title || !clientName) return
-                setSaving(true)
-                const { data, error: insertErr } = await supabase.from('proposals').insert({
-                  title,
-                  client_name: clientName,
-                  client_address: (fd.get('client_address') as string).trim() || null,
-                  project_type: projectType,
-                  total_price: totalPrice,
-                  status: 'draft',
-                  sections: [],
-                  overview_body: (fd.get('overview') as string).trim() || null,
-                }).select().single()
-                setSaving(false)
-                if (insertErr) {
-                  alert('Error creating proposal: ' + insertErr.message)
-                  return
-                }
-                setShowNewForm(false)
-                refetch()
-                if (data) setSelected(data.id)
-              }}
-              className="space-y-3"
-            >
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Proposal Title *</label>
-                <input name="title" required placeholder="e.g. Kitchen Renovation — Smith Residence" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Client Name *</label>
-                <input name="client_name" required placeholder="John Smith" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Client Address</label>
-                <input name="client_address" placeholder="123 Main St, City, OH" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Project Type</label>
-                <select name="project_type" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20">
-                  {PROJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Total Price ($)</label>
-                <input name="total_price" type="number" step="0.01" min="0" placeholder="25000" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
-              </div>
-              <div>
-                <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Overview</label>
-                <textarea name="overview" rows={3} placeholder="Brief project description..." className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
-              </div>
-              <div className="flex gap-2 pt-2">
-                <Button type="button" variant="secondary" fullWidth onClick={() => setShowNewForm(false)}>Cancel</Button>
-                <Button type="submit" fullWidth disabled={saving}>{saving ? 'Creating…' : 'Create Proposal'}</Button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
+      {showNewForm && <NewProposalModal
+        onClose={() => setShowNewForm(false)}
+        saving={saving}
+        setSaving={setSaving}
+        refetch={refetch}
+        setSelected={setSelected}
+      />}
 
       {isLoading ? (
         <div className="py-8 text-center">
@@ -313,8 +394,15 @@ export function ProposalsPage() {
         </div>
       ) : proposals.length === 0 ? (
         <div className="text-center py-12 px-4">
+          <div className="w-16 h-16 rounded-full bg-[var(--rust-subtle)] flex items-center justify-center mx-auto mb-4">
+            <FileText size={28} className="text-[var(--rust)]" />
+          </div>
           <p className="font-medium text-sm text-[var(--text)]">No proposals yet</p>
-          <p className="text-xs text-[var(--text-tertiary)] mt-1">Start an AI site walk to generate your first proposal.</p>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1 mb-4">Start an AI site walk to generate your first proposal, or create one manually.</p>
+          <Button size="sm" onClick={() => setShowNewForm(true)}>
+            <Plus size={15} />
+            New Proposal
+          </Button>
         </div>
       ) : (
         <Card padding="none">
@@ -326,7 +414,7 @@ export function ProposalsPage() {
             >
               <div className="flex-1 min-w-0">
                 <p className="font-semibold text-sm text-[var(--text)] truncate">{String(prop.title ?? '')}</p>
-                <p className="text-xs text-[var(--text-secondary)] mt-0.5">{String(prop.client_name ?? '')}</p>
+                <p className="text-xs text-[var(--text-secondary)] mt-0.5">{String(prop.client_name ?? '')} — {String(prop.project_type ?? '')}</p>
                 <div className="flex items-center gap-2 mt-1.5">
                   <StatusPill status={prop.status as string} />
                   {!!prop.sent_at && (
@@ -335,13 +423,167 @@ export function ProposalsPage() {
                 </div>
               </div>
               <div className="text-right flex-shrink-0">
-                <p className="font-mono text-sm font-bold text-[var(--text)]">${((prop.total_price as number) / 1000).toFixed(0)}K</p>
+                <p className="font-mono text-sm font-bold text-[var(--text)]">
+                  {(prop.total_price as number) >= 1000
+                    ? `$${((prop.total_price as number) / 1000).toFixed(0)}K`
+                    : `$${(prop.total_price as number).toLocaleString()}`}
+                </p>
                 <ChevronRight size={15} className="text-[var(--text-tertiary)] mt-1 ml-auto" />
               </div>
             </button>
           ))}
         </Card>
       )}
+    </div>
+  )
+}
+
+function NewProposalModal({
+  onClose,
+  saving,
+  setSaving,
+  refetch,
+  setSelected,
+}: {
+  onClose: () => void
+  saving: boolean
+  setSaving: (v: boolean) => void
+  refetch: () => void
+  setSelected: (id: string) => void
+}) {
+  const [projects, setProjects] = useState<{ id: string; title: string; client_name: string; address: string; project_type: string }[]>([])
+  const [selectedProject, setSelectedProject] = useState<string>('')
+
+  useEffect(() => {
+    supabase
+      .from('projects')
+      .select('id, title, client_name, address, project_type')
+      .order('created_at', { ascending: false })
+      .limit(50)
+      .then(({ data }) => {
+        if (data) setProjects(data as typeof projects)
+      })
+  }, [])
+
+  const handleProjectSelect = (projectId: string) => {
+    setSelectedProject(projectId)
+    if (!projectId) return
+    const proj = projects.find(p => p.id === projectId)
+    if (!proj) return
+    const form = document.getElementById('new-proposal-form') as HTMLFormElement
+    if (!form) return
+    const titleInput = form.elements.namedItem('title') as HTMLInputElement
+    const nameInput = form.elements.namedItem('client_name') as HTMLInputElement
+    const addressInput = form.elements.namedItem('client_address') as HTMLInputElement
+    const typeSelect = form.elements.namedItem('project_type') as HTMLSelectElement
+    if (titleInput && !titleInput.value) titleInput.value = proj.title || ''
+    if (nameInput && !nameInput.value) nameInput.value = proj.client_name || ''
+    if (addressInput && !addressInput.value) addressInput.value = proj.address || ''
+    if (typeSelect) {
+      const matchType = PROJECT_TYPES.find(t => t.toLowerCase().includes((proj.project_type || '').toLowerCase()))
+      if (matchType) typeSelect.value = matchType
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-white rounded-t-2xl p-5 space-y-4 max-h-[85vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-lg text-[var(--navy)]">New Proposal</h2>
+          <button onClick={onClose} className="p-1 text-[var(--text-tertiary)]"><X size={18} /></button>
+        </div>
+
+        {/* Pre-fill from project */}
+        {projects.length > 0 && (
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Pre-fill from Project</label>
+            <select
+              value={selectedProject}
+              onChange={(e) => handleProjectSelect(e.target.value)}
+              className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20"
+            >
+              <option value="">— Start from scratch —</option>
+              {projects.map(p => (
+                <option key={p.id} value={p.id}>{p.title} — {p.client_name}</option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        <form
+          id="new-proposal-form"
+          onSubmit={async (e) => {
+            e.preventDefault()
+            const fd = new FormData(e.currentTarget)
+            const title = (fd.get('title') as string).trim()
+            const clientName = (fd.get('client_name') as string).trim()
+            const projectType = fd.get('project_type') as string
+            const totalPrice = parseFloat(fd.get('total_price') as string) || 0
+            if (!title || !clientName) return
+            setSaving(true)
+            const { data, error: insertErr } = await supabase.from('proposals').insert({
+              title,
+              client_name: clientName,
+              client_address: (fd.get('client_address') as string).trim() || null,
+              project_type: projectType,
+              total_price: totalPrice,
+              status: 'draft',
+              sections: [],
+              overview_body: (fd.get('overview') as string).trim() || null,
+              duration: (fd.get('duration') as string).trim() || null,
+            }).select().single()
+            setSaving(false)
+            if (insertErr) {
+              alert('Error creating proposal: ' + insertErr.message)
+              return
+            }
+            onClose()
+            refetch()
+            if (data) setSelected(data.id)
+          }}
+          className="space-y-3"
+        >
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Proposal Title *</label>
+            <input name="title" required placeholder="e.g. Kitchen Renovation — Smith Residence" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Client Name *</label>
+            <input name="client_name" required placeholder="John Smith" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Client Address</label>
+            <input name="client_address" placeholder="123 Main St, City, OH" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Project Type</label>
+              <select name="project_type" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20">
+                {PROJECT_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Duration</label>
+              <input name="duration" placeholder="8–12 weeks" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Total Price ($)</label>
+            <input name="total_price" type="number" step="0.01" min="0" placeholder="25000" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Overview</label>
+            <textarea name="overview" rows={3} placeholder="Brief project description..." className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+          </div>
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="secondary" fullWidth onClick={onClose}>Cancel</Button>
+            <Button type="submit" fullWidth disabled={saving}>{saving ? 'Creating…' : 'Create Proposal'}</Button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }

@@ -1,10 +1,12 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { ChevronRight, User, Brain, Zap, AlertTriangle, Layers, Wrench, BookOpen, UserPlus, LayoutTemplate } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
+import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase'
 
 const INTEGRATIONS = [
   { name: 'QuickBooks Online',  desc: 'Sync invoices, expenses, payments', connected: false, icon: '📊' },
@@ -13,14 +15,18 @@ const INTEGRATIONS = [
   { name: 'Stripe Payments',    desc: 'Online invoice payments',             connected: false, icon: '💳' },
 ]
 
-const EMPLOYEES = [
-  { name: 'Jeff Miller',   role: 'Field',  active: true  },
-  { name: 'Steven Clark',  role: 'Field',  active: true  },
-]
+interface Employee {
+  id: string
+  full_name: string
+  role: string
+  is_active: boolean
+}
 
 export function SettingsPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
   const { data: company } = useCompanyProfile()
+  const [employees, setEmployees] = useState<Employee[]>([])
   const [notifications, setNotifications] = useState({
     new_lead: true,
     invoice_paid: true,
@@ -28,8 +34,54 @@ export function SettingsPage() {
     ai_action: false,
   })
 
-  const toggle = (key: keyof typeof notifications) => {
-    setNotifications(prev => ({ ...prev, [key]: !prev[key] }))
+  useEffect(() => {
+    async function loadEmployees() {
+      if (!user?.company_id) return
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('id, full_name, role, is_active')
+          .eq('company_id', user.company_id)
+          .neq('id', user.id)
+          .order('full_name')
+        if (data) setEmployees(data as Employee[])
+      } catch {
+        // Silently fail
+      }
+    }
+    loadEmployees()
+  }, [user?.company_id, user?.id])
+
+  useEffect(() => {
+    async function loadNotificationPrefs() {
+      if (!user) return
+      try {
+        const { data } = await supabase
+          .from('notification_preferences')
+          .select('new_lead, invoice_paid, message, ai_action')
+          .eq('user_id', user.id)
+          .maybeSingle()
+        if (data) setNotifications(data as typeof notifications)
+      } catch {
+        // Table may not exist — use defaults
+      }
+    }
+    loadNotificationPrefs()
+  }, [user?.id])
+
+  const toggle = async (key: keyof typeof notifications) => {
+    const updated = { ...notifications, [key]: !notifications[key] }
+    setNotifications(updated)
+    if (user) {
+      try {
+        await supabase.from('notification_preferences').upsert({
+          user_id: user.id,
+          ...updated,
+        }, { onConflict: 'user_id' })
+      } catch {
+        // Silently fail
+      }
+    }
   }
 
   return (
@@ -143,9 +195,9 @@ export function SettingsPage() {
               <User size={24} className="text-white" />
             </div>
             <div>
-              <p className="font-semibold text-[var(--text)]">Adam Kilgore</p>
-              <p className="text-xs text-[var(--text-secondary)]">adam@akrenovations.com</p>
-              <p className="text-xs text-[var(--text-tertiary)] mt-0.5">Admin · Owner</p>
+              <p className="font-semibold text-[var(--text)]">{user?.full_name ?? 'User'}</p>
+              <p className="text-xs text-[var(--text-secondary)]">{user?.email ?? ''}</p>
+              <p className="text-xs text-[var(--text-tertiary)] mt-0.5 capitalize">{user?.role?.replace('_', ' ') ?? 'User'}</p>
             </div>
           </div>
           <button className="w-full py-2.5 border border-[var(--border)] rounded-xl text-sm text-[var(--text-secondary)] font-medium">
@@ -174,15 +226,15 @@ export function SettingsPage() {
           <div className="space-y-2 text-sm">
             <div className="flex justify-between">
               <p className="text-[var(--text-secondary)]">License</p>
-              <p className="text-[var(--text)]">OH-RC-2019-4847</p>
+              <p className="text-[var(--text)]">{company?.license_number ?? '—'}</p>
             </div>
             <div className="flex justify-between">
               <p className="text-[var(--text-secondary)]">Business phone</p>
-              <p className="text-[var(--text)]">(330) 555-0100</p>
+              <p className="text-[var(--text)]">{company?.phone ?? '—'}</p>
             </div>
             <div className="flex justify-between">
               <p className="text-[var(--text-secondary)]">Target margin</p>
-              <p className="text-[var(--text)]">38%</p>
+              <p className="text-[var(--text)]">{company?.target_margin ? `${company.target_margin}%` : '38%'}</p>
             </div>
           </div>
           <button className="w-full py-2.5 border border-[var(--border)] rounded-xl text-sm text-[var(--text-secondary)] font-medium mt-4">
@@ -247,21 +299,27 @@ export function SettingsPage() {
       <div>
         <SectionHeader title="Employees" />
         <Card padding="none">
-          {EMPLOYEES.map(emp => (
-            <div key={emp.name} className="flex items-center gap-3 p-4 border-b border-[var(--border-light)] last:border-0">
-              <div className="w-9 h-9 rounded-full bg-[var(--cream-light)] flex items-center justify-center flex-shrink-0">
-                <User size={16} className="text-[var(--text-secondary)]" />
-              </div>
-              <div className="flex-1">
-                <p className="font-medium text-sm text-[var(--text)]">{emp.name}</p>
-                <p className="text-xs text-[var(--text-tertiary)]">{emp.role}</p>
-              </div>
-              <div className="flex items-center gap-2">
-                <div className="w-2 h-2 rounded-full bg-[var(--success)]" />
-                <ChevronRight size={15} className="text-[var(--text-tertiary)]" />
-              </div>
+          {employees.length === 0 ? (
+            <div className="p-4 text-center">
+              <p className="text-sm text-[var(--text-tertiary)]">No team members yet.</p>
             </div>
-          ))}
+          ) : (
+            employees.map(emp => (
+              <div key={emp.id} className="flex items-center gap-3 p-4 border-b border-[var(--border-light)] last:border-0">
+                <div className="w-9 h-9 rounded-full bg-[var(--cream-light)] flex items-center justify-center flex-shrink-0">
+                  <User size={16} className="text-[var(--text-secondary)]" />
+                </div>
+                <div className="flex-1">
+                  <p className="font-medium text-sm text-[var(--text)]">{emp.full_name}</p>
+                  <p className="text-xs text-[var(--text-tertiary)] capitalize">{emp.role?.replace('_', ' ') ?? 'Employee'}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`w-2 h-2 rounded-full ${emp.is_active !== false ? 'bg-[var(--success)]' : 'bg-[var(--text-tertiary)]'}`} />
+                  <ChevronRight size={15} className="text-[var(--text-tertiary)]" />
+                </div>
+              </div>
+            ))
+          )}
           <button
             onClick={() => navigate('/admin/onboard')}
             className="flex items-center gap-2 p-4 w-full text-left text-[var(--navy)] text-sm font-medium border-t border-[var(--border-light)]"
@@ -290,7 +348,7 @@ export function SettingsPage() {
           </div>
           <div className="mt-3 pt-3 border-t border-[var(--border-light)]">
             <p className="text-xs text-[var(--text-tertiary)]">
-              Both schedule and margin targets must be met. Margin target: 38%.
+              Both schedule and margin targets must be met. Margin target: {company?.target_margin ?? 38}%.
             </p>
           </div>
         </Card>

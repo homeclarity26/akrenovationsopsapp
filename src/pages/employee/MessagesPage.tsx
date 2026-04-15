@@ -1,30 +1,79 @@
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Send, ArrowLeft } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
+import { useAuth } from '@/context/AuthContext'
+import { supabase } from '@/lib/supabase'
 
-const INITIAL_MESSAGES = [
-  { id: 1, sender: 'Adam', role: 'admin', text: "Hey Jeff, how's the tile going today?", time: '8:02 AM', mine: false },
-  { id: 2, sender: 'Jeff', role: 'employee', text: "Going good. Shower floor is done. Starting walls after lunch.", time: '8:15 AM', mine: true },
-  { id: 3, sender: 'Adam', role: 'admin', text: "Perfect. Don't forget the Schluter strip on the threshold. Client wants that detail done right.", time: '8:17 AM', mine: false },
-  { id: 4, sender: 'Adam', role: 'admin', text: "Also — can you grab a few progress photos before you leave today?", time: '8:18 AM', mine: false },
-]
+interface Message {
+  id: string | number
+  sender: string
+  text: string
+  time: string
+  mine: boolean
+}
 
 export function MessagesPage() {
   const navigate = useNavigate()
-  const [messages, setMessages] = useState(INITIAL_MESSAGES)
+  const { user } = useAuth()
+  const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(true)
+  const bottomRef = useRef<HTMLDivElement>(null)
 
-  const send = () => {
-    if (!input.trim()) return
-    setMessages(m => [...m, {
+  useEffect(() => {
+    async function loadMessages() {
+      try {
+        const { data } = await supabase
+          .from('messages')
+          .select('id, sender_id, sender_name, body, created_at')
+          .order('created_at', { ascending: true })
+          .limit(100)
+
+        if (data && data.length > 0) {
+          setMessages(data.map(m => ({
+            id: m.id,
+            sender: m.sender_name ?? 'Unknown',
+            text: m.body ?? '',
+            time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+            mine: m.sender_id === user?.id,
+          })))
+        }
+      } catch {
+        // Table may not exist yet — show empty state
+      }
+      setLoading(false)
+    }
+    loadMessages()
+  }, [user?.id])
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const send = async () => {
+    if (!input.trim() || !user) return
+    const text = input.trim()
+    setInput('')
+
+    const newMsg: Message = {
       id: Date.now(),
-      sender: 'Jeff',
-      role: 'employee',
-      text: input,
+      sender: user.full_name,
+      text,
       time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       mine: true,
-    }])
-    setInput('')
+    }
+    setMessages(m => [...m, newMsg])
+
+    try {
+      await supabase.from('messages').insert({
+        sender_id: user.id,
+        sender_name: user.full_name,
+        body: text,
+        company_id: user.company_id,
+      })
+    } catch {
+      // Silently fail — message is shown locally
+    }
   }
 
   return (
@@ -36,36 +85,49 @@ export function MessagesPage() {
         </button>
         <div>
           <h1 className="font-semibold text-[var(--navy)] text-base">Team Chat</h1>
-          <p className="text-xs text-[var(--text-secondary)]">Adam, Jeff, Steven</p>
+          <p className="text-xs text-[var(--text-secondary)]">
+            {messages.length > 0 ? `${messages.length} messages` : 'Start a conversation'}
+          </p>
         </div>
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3">
-        {messages.map(m => (
-          <div key={m.id} className={`flex ${m.mine ? 'justify-end' : 'justify-start'}`}>
-            {!m.mine && (
-              <div className="w-8 h-8 rounded-full bg-[var(--navy)] flex items-center justify-center text-white text-xs font-semibold mr-2 flex-shrink-0 self-end">
-                {m.sender[0]}
-              </div>
-            )}
-            <div className={`max-w-[75%] ${m.mine ? '' : ''}`}>
-              {!m.mine && (
-                <p className="text-[10px] text-[var(--text-tertiary)] mb-1 ml-1">{m.sender}</p>
-              )}
-              <div className={`px-3.5 py-2.5 rounded-2xl text-sm ${
-                m.mine
-                  ? 'bg-[var(--navy)] text-white rounded-br-sm'
-                  : 'bg-gray-100 text-[var(--text)] rounded-bl-sm'
-              }`}>
-                {m.text}
-              </div>
-              <p className={`text-[10px] text-[var(--text-tertiary)] mt-1 ${m.mine ? 'text-right mr-1' : 'ml-1'}`}>
-                {m.time}
-              </p>
-            </div>
+        {loading ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-[var(--text-tertiary)]">Loading messages...</p>
           </div>
-        ))}
+        ) : messages.length === 0 ? (
+          <div className="text-center py-8">
+            <p className="text-sm text-[var(--text-tertiary)]">No messages yet. Send the first one.</p>
+          </div>
+        ) : (
+          messages.map(m => (
+            <div key={m.id} className={`flex ${m.mine ? 'justify-end' : 'justify-start'}`}>
+              {!m.mine && (
+                <div className="w-8 h-8 rounded-full bg-[var(--navy)] flex items-center justify-center text-white text-xs font-semibold mr-2 flex-shrink-0 self-end">
+                  {m.sender[0]}
+                </div>
+              )}
+              <div className="max-w-[75%]">
+                {!m.mine && (
+                  <p className="text-[10px] text-[var(--text-tertiary)] mb-1 ml-1">{m.sender}</p>
+                )}
+                <div className={`px-3.5 py-2.5 rounded-2xl text-sm ${
+                  m.mine
+                    ? 'bg-[var(--navy)] text-white rounded-br-sm'
+                    : 'bg-gray-100 text-[var(--text)] rounded-bl-sm'
+                }`}>
+                  {m.text}
+                </div>
+                <p className={`text-[10px] text-[var(--text-tertiary)] mt-1 ${m.mine ? 'text-right mr-1' : 'ml-1'}`}>
+                  {m.time}
+                </p>
+              </div>
+            </div>
+          ))
+        )}
+        <div ref={bottomRef} />
       </div>
 
       {/* Input */}

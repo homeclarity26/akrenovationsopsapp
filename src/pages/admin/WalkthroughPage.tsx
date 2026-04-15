@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { ArrowRight, ArrowLeft, Mic, Check, Sparkles, Loader2, DollarSign, Clock, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowRight, ArrowLeft, Mic, Check, Sparkles, Loader2, DollarSign, Clock, ChevronDown, ChevronUp, FileText } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
-import { WALKTHROUGH_TEMPLATES } from '@/data/mock'
+import { WALKTHROUGH_TEMPLATES } from '@/lib/walkthroughTemplates'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 
@@ -64,6 +64,7 @@ export function WalkthroughPage() {
   const [estimate, setEstimate] = useState<EstimateResult | null>(null)
   const [estimateError, setEstimateError] = useState<string | null>(null)
   const [expandedCategories, setExpandedCategories] = useState<Set<string>>(new Set())
+  const [creatingProposal, setCreatingProposal] = useState(false)
 
   const questions = projectType ? WALKTHROUGH_TEMPLATES[projectType] : []
   const current = questions[step]
@@ -139,6 +140,47 @@ export function WalkthroughPage() {
       setEstimateError(err instanceof Error ? err.message : 'Failed to connect to AI')
     } finally {
       setGenerating(false)
+    }
+  }
+
+  const createProposalFromEstimate = async () => {
+    if (!estimate || !projectType) return
+    setCreatingProposal(true)
+    try {
+      // Build sections from the grouped line items
+      const sections = Object.entries(groupedLineItems).map(([category, items]) => ({
+        title: category,
+        bullets: items.map(li => `${li.item_name}: ${li.description} (${li.quantity} ${li.unit} × $${li.unit_cost.toLocaleString()})`),
+      }))
+
+      const typeLabels: Record<string, string> = {
+        bathroom: 'Bathroom Remodel',
+        kitchen: 'Kitchen Remodel',
+        basement: 'Basement Finish',
+        addition: 'Addition',
+      }
+
+      const { data, error: insertErr } = await supabase.from('proposals').insert({
+        title: `${typeLabels[projectType] ?? projectType} Proposal`,
+        client_name: '',
+        project_type: typeLabels[projectType] ?? projectType,
+        total_price: estimate.total_proposed_price ?? 0,
+        status: 'draft',
+        sections,
+        overview_body: estimate.summary ?? '',
+        duration: estimate.estimated_duration_weeks ? `${estimate.estimated_duration_weeks} weeks` : null,
+        payment_schedule: (estimate.payment_schedule ?? []).map(pm => ({
+          label: pm.milestone,
+          percent: pm.percent,
+        })),
+      }).select().single()
+
+      if (insertErr) throw new Error(insertErr.message)
+      if (data) navigate('/admin/proposals')
+    } catch (err) {
+      alert('Error creating proposal: ' + (err instanceof Error ? err.message : 'Unknown error'))
+    } finally {
+      setCreatingProposal(false)
     }
   }
 
@@ -289,17 +331,35 @@ export function WalkthroughPage() {
 
         {/* Actions */}
         <div className="grid grid-cols-2 gap-3 pb-8">
-          {estimate.proposal_id && (
+          {estimate.proposal_id ? (
             <button
               onClick={() => navigate('/admin/proposals')}
               className="py-3.5 rounded-xl bg-[var(--navy)] text-white text-sm font-semibold"
             >
               View Proposal
             </button>
+          ) : (
+            <button
+              onClick={createProposalFromEstimate}
+              disabled={creatingProposal}
+              className="py-3.5 rounded-xl bg-[var(--navy)] text-white text-sm font-semibold disabled:opacity-60 flex items-center justify-center gap-2"
+            >
+              {creatingProposal ? (
+                <>
+                  <Loader2 size={15} className="animate-spin" />
+                  Creating...
+                </>
+              ) : (
+                <>
+                  <FileText size={15} />
+                  Create Proposal
+                </>
+              )}
+            </button>
           )}
           <button
             onClick={reset}
-            className={`py-3.5 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)] ${!estimate.proposal_id ? 'col-span-2' : ''}`}
+            className="py-3.5 rounded-xl border border-[var(--border)] text-sm text-[var(--text-secondary)]"
           >
             Start New
           </button>
