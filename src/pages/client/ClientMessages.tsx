@@ -10,8 +10,47 @@ interface Message {
   sender_id: string
   sender_role: string
   content: string
-  message_type: string
+  message_type?: string
+  is_read?: boolean | null
   created_at: string
+}
+
+interface SenderProfile {
+  id: string
+  full_name: string | null
+  avatar_url: string | null
+}
+
+function initials(name: string | null | undefined): string {
+  if (!name) return 'C'
+  return name
+    .trim()
+    .split(/\s+/)
+    .slice(0, 2)
+    .map((p) => p[0]?.toUpperCase() ?? '')
+    .join('') || 'C'
+}
+
+function isSameDay(a: Date, b: Date): boolean {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+}
+
+function formatTime(iso: string): string {
+  const d = new Date(iso)
+  if (isNaN(d.getTime())) return ''
+  const now = new Date()
+  const timeStr = d.toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })
+  if (isSameDay(d, now)) {
+    // Relative for today
+    const diffMs = now.getTime() - d.getTime()
+    const diffMin = Math.floor(diffMs / 60000)
+    if (diffMin < 1) return 'just now'
+    if (diffMin < 60) return `${diffMin} min ago`
+    return `Today, ${timeStr}`
+  }
+  // Absolute for older
+  const datePart = d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+  return `${datePart}, ${timeStr}`
 }
 
 export function ClientMessages() {
@@ -46,6 +85,28 @@ export function ClientMessages() {
       return (data ?? []) as Message[]
     },
   })
+
+  // Build sender id list for avatar/name lookup
+  const senderIds = Array.from(new Set(messages.map((m) => m.sender_id).filter(Boolean)))
+
+  const { data: profiles = [] } = useQuery<SenderProfile[]>({
+    queryKey: ['message-senders', projectId, senderIds.join(',')],
+    enabled: senderIds.length > 0,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('id, full_name, avatar_url')
+        .in('id', senderIds)
+      if (error) {
+        console.warn('[ClientMessages] profiles error:', error.message)
+        return []
+      }
+      return (data ?? []) as SenderProfile[]
+    },
+  })
+
+  const profileMap = new Map<string, SenderProfile>()
+  for (const p of profiles) profileMap.set(p.id, p)
 
   // Real-time subscription for incoming messages
   useEffect(() => {
@@ -92,12 +153,6 @@ export function ClientMessages() {
 
   const isMine = (msg: Message) => msg.sender_id === user?.id
 
-  const formatTime = (iso: string) => {
-    const d = new Date(iso)
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }) +
-      ', ' + d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
-  }
-
   return (
     <div className="flex flex-col h-[calc(100svh-8rem)] max-w-lg mx-auto">
       <div className="px-4 py-3 border-b border-[var(--border-light)]">
@@ -109,27 +164,47 @@ export function ClientMessages() {
         {messages.length === 0 && (
           <p className="text-sm text-[var(--text-tertiary)] text-center py-8">No messages yet.</p>
         )}
-        {messages.map(m => (
-          <div key={m.id} className={`flex ${isMine(m) ? 'justify-end' : 'justify-start'}`}>
-            {!isMine(m) && (
-              <div className="w-8 h-8 rounded-full bg-[var(--navy)] flex items-center justify-center text-white text-xs font-semibold mr-2 flex-shrink-0 self-end">
-                C
+        {messages.map((m) => {
+          const mine = isMine(m)
+          const sender = profileMap.get(m.sender_id)
+          const unread = !mine && m.is_read === false
+          return (
+            <div key={m.id} className={`flex ${mine ? 'justify-end' : 'justify-start'} items-end gap-2`}>
+              {!mine && (
+                <div className="w-8 h-8 rounded-full bg-[var(--navy)] flex items-center justify-center text-white text-[11px] font-semibold overflow-hidden flex-shrink-0 self-end">
+                  {sender?.avatar_url ? (
+                    <img src={sender.avatar_url} alt={sender.full_name ?? ''} className="w-full h-full object-cover" />
+                  ) : (
+                    <span>{initials(sender?.full_name)}</span>
+                  )}
+                </div>
+              )}
+              <div className="max-w-[78%]">
+                {unread && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-[var(--rust)] mb-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-[var(--rust)]" />
+                    New
+                  </span>
+                )}
+                <div
+                  className={`px-3.5 py-2.5 rounded-2xl text-sm ${
+                    mine
+                      ? 'bg-[var(--navy)] text-white rounded-br-sm'
+                      : unread
+                      ? 'bg-[var(--rust-subtle)] text-[var(--text)] rounded-bl-sm border border-[var(--rust)]/30'
+                      : 'bg-gray-100 text-[var(--text)] rounded-bl-sm'
+                  }`}
+                >
+                  {m.content}
+                </div>
+                <p className={`text-[10px] text-[var(--text-tertiary)] mt-1 ${mine ? 'text-right' : ''}`}>
+                  {!mine && sender?.full_name ? `${sender.full_name} · ` : ''}
+                  {formatTime(m.created_at)}
+                </p>
               </div>
-            )}
-            <div className="max-w-[78%]">
-              <div className={`px-3.5 py-2.5 rounded-2xl text-sm ${
-                isMine(m)
-                  ? 'bg-[var(--navy)] text-white rounded-br-sm'
-                  : 'bg-gray-100 text-[var(--text)] rounded-bl-sm'
-              }`}>
-                {m.content}
-              </div>
-              <p className={`text-[10px] text-[var(--text-tertiary)] mt-1 ${isMine(m) ? 'text-right' : ''}`}>
-                {formatTime(m.created_at)}
-              </p>
             </div>
-          </div>
-        ))}
+          )
+        })}
         <div ref={bottomRef} />
       </div>
 
@@ -138,8 +213,8 @@ export function ClientMessages() {
           className="flex-1 px-3.5 py-2.5 rounded-full border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:border-[var(--navy)]"
           placeholder="Send a message..."
           value={input}
-          onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === 'Enter' && send()}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === 'Enter' && send()}
         />
         <button
           onClick={send}
