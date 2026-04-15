@@ -1,7 +1,8 @@
-// Phase I — calculate-payroll edge function
+// calculate-payroll — Final Build (v2)
 // Computes a complete payroll record for every active worker for a given pay period.
 // Pulls from time_entries, compensation_components, benefits_enrollment, and payroll_adjustments.
 // Estimates withholdings for preview only — Gusto computes exact amounts at submit time.
+// Returns a summary with worker-level breakdown.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { verifyAuth } from '../_shared/auth.ts'
@@ -9,6 +10,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { logUsage } from '../_shared/usage-logger.ts'
 
 const InputSchema = z.object({
   pay_period_id: z.string().uuid('pay_period_id must be a valid UUID'),
@@ -306,6 +308,7 @@ async function calculateW2(
   return {
     pay_period_id: period.id,
     profile_id: worker.id,
+    worker_name: worker.full_name,
     worker_type: worker.worker_type ?? 'w2_fulltime',
     regular_hours: round2(regularHours),
     overtime_hours: round2(overtimeHours),
@@ -358,6 +361,7 @@ async function calculate1099(
   return {
     pay_period_id: period.id,
     profile_id: worker.id,
+    worker_name: worker.full_name,
     worker_type: 'contractor_1099',
     regular_hours: 0,
     overtime_hours: 0,
@@ -405,8 +409,8 @@ serve(async (req) => {
   if (!auth) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   }
-  if (auth.role !== 'admin') {
-    return new Response(JSON.stringify({ error: 'Forbidden' }), { status: 403, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
+  if (auth.role !== 'admin' && auth.role !== 'super_admin') {
+    return new Response(JSON.stringify({ error: 'Forbidden — admin only' }), { status: 403, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } })
   }
 
   const rl = await checkRateLimit(req, 'calculate-payroll')
@@ -445,7 +449,11 @@ serve(async (req) => {
 
     const workers = (workersData ?? []) as Profile[]
 
-    const records: ReturnType<typeof round2>[] | unknown[] = []
+    const records: Array<Record<string, unknown>> = []
+    let totalGrossPay = 0
+    let totalNetPay = 0
+    let totalEmployerCost = 0
+
     for (const w of workers) {
       // Skip terminated workers whose end date is before the period
       if (w.termination_date && w.termination_date < (period as PayPeriod).period_start) continue
@@ -465,32 +473,65 @@ serve(async (req) => {
           ? await calculate1099(supabase, w, period as PayPeriod)
           : await calculateW2(supabase, w, period as PayPeriod, ytdGross, ytdSS)
 
-      records.push(record)
+      records.push(record as unknown as Record<string, unknown>)
+      totalGrossPay += record.gross_pay
+      totalNetPay += record.est_net_pay
+      totalEmployerCost += record.total_employer_cost
     }
 
     // Upsert calculated records (replace any existing 'calculated' rows for this period)
     for (const rec of records) {
-      const r = rec as Record<string, unknown>
       const { data: existing } = await supabase
         .from('payroll_records')
         .select('id, status')
-        .eq('pay_period_id', r.pay_period_id)
-        .eq('profile_id', r.profile_id)
+        .eq('pay_period_id', rec.pay_period_id)
+        .eq('profile_id', rec.profile_id)
         .maybeSingle()
 
       if (existing && (existing.status === 'approved' || existing.status === 'submitted' || existing.status === 'paid')) {
         continue // do not overwrite approved or downstream records
       }
 
+      // Remove worker_name before saving (not a DB column)
+      const { worker_name: _, ...dbRecord } = rec
       if (existing) {
-        await supabase.from('payroll_records').update(r).eq('id', existing.id)
+        await supabase.from('payroll_records').update(dbRecord).eq('id', existing.id)
       } else {
-        await supabase.from('payroll_records').insert(r)
+        await supabase.from('payroll_records').insert(dbRecord)
       }
     }
 
+    // Log usage
+    logUsage({
+      service: 'supabase',
+      agentName: 'calculate-payroll',
+      units: records.length,
+      metadata: {
+        pay_period_id,
+        workers_processed: records.length,
+        total_gross: round2(totalGrossPay),
+        total_net: round2(totalNetPay),
+      },
+    }).catch(() => {})
+
     return new Response(
-      JSON.stringify({ success: true, pay_period_id, records_count: records.length }),
+      JSON.stringify({
+        success: true,
+        pay_period_id,
+        records_count: records.length,
+        summary: {
+          total_gross_pay: round2(totalGrossPay),
+          total_net_pay: round2(totalNetPay),
+          total_employer_cost: round2(totalEmployerCost),
+          workers: records.map(r => ({
+            name: r.worker_name,
+            type: r.worker_type,
+            hours: r.total_hours,
+            gross: r.gross_pay,
+            net: r.est_net_pay,
+          })),
+        },
+      }),
       { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (e) {
