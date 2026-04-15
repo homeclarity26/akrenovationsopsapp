@@ -773,7 +773,7 @@ function StepReview({
 // ===========================================================================
 
 export function CompanyOnboardingWizard() {
-  const { user } = useAuth()
+  const { user, refreshProfile } = useAuth()
   const navigate = useNavigate()
 
   // Form state — restore from localStorage if available
@@ -971,6 +971,8 @@ export function CompanyOnboardingWizard() {
         })
         .eq('id', user!.id)
 
+      // Refresh auth profile so layout guards see updated flags
+      await refreshProfile()
       // Clear the draft and navigate to dashboard
       clearDraft()
       navigate('/admin', { replace: true })
