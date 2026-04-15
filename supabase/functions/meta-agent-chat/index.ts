@@ -290,6 +290,16 @@ ai-suggest-project-action → Propose an action for admin review (SUGGESTION INB
     project_id, suggestion_type, summary, rationale,
     proposed_action: { table, operation: 'insert'|'update', values | id+patch }
   }
+
+Inventory × shopping list (PR 10):
+  shopping_list_items can link to the inventory catalog via inventory_item_id
+  (FK to inventory_items) and to a source location via source_location_id
+  (FK to inventory_locations). When a linked item is delivered to a project,
+  call deduct-shopping-item-from-stock with { shopping_list_item_id } to pull
+  the count off the source — this closes the loop between project shopping
+  lists and truck/shop inventory. The function is idempotent (guarded by
+  shopping_list_items.deducted_at) and records an auditable stocktake row
+  referenced by deducted_stocktake_id.
 `
 
 // ---------------------------------------------------------------------------
