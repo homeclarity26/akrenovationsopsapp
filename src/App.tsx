@@ -28,6 +28,7 @@ const SchedulePage = lazy(() => import('./pages/admin/SchedulePage').then(m => (
 const InvoicesPage = lazy(() => import('./pages/admin/InvoicesPage').then(m => ({ default: m.InvoicesPage })))
 const ProposalsPage = lazy(() => import('./pages/admin/ProposalsPage').then(m => ({ default: m.ProposalsPage })))
 const WalkthroughPage = lazy(() => import('./pages/admin/WalkthroughPage').then(m => ({ default: m.WalkthroughPage })))
+const AdminInventoryPage = lazy(() => import('./pages/admin/AdminInventoryPage').then(m => ({ default: m.AdminInventoryPage })))
 const SubcontractorsPage = lazy(() => import('./pages/admin/SubcontractorsPage').then(m => ({ default: m.SubcontractorsPage })))
 const SettingsPage = lazy(() => import('./pages/admin/SettingsPage').then(m => ({ default: m.SettingsPage })))
 const MemoryInspectorPage = lazy(() => import('./pages/admin/settings/MemoryInspectorPage').then(m => ({ default: m.MemoryInspectorPage })))
@@ -265,6 +266,7 @@ function AppRoutes() {
           <Route path="invoices" element={<InvoicesPage />} />
           <Route path="proposals" element={<ProposalsPage />} />
           <Route path="walkthrough" element={<WalkthroughPage />} />
+          <Route path="inventory" element={<AdminInventoryPage />} />
           <Route path="subs" element={<SubcontractorsPage />} />
           <Route path="ai" element={<MetaAgentPage />} />
           <Route path="settings" element={<SettingsPage />} />
