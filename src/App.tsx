@@ -196,7 +196,7 @@ function RootRedirect() {
 
   if (loading || checking) return <AuthLoadingScreen />
   if (!user) return <Navigate to="/login" replace />
-  if (user.role === 'super_admin') return <Navigate to="/platform" replace />
+  if (user.role === 'super_admin') return <Navigate to="/admin" replace />
   if (user.role === 'admin' && needsOnboarding) return <Navigate to="/onboard/company" replace />
   if (user.role === 'admin') return <Navigate to="/admin" replace />
   if (user.role === 'employee') return <Navigate to="/employee" replace />
