@@ -108,6 +108,9 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
   'ai-inventory-query':              { maxRequests: 30,  windowSeconds: 3600 },
   'agent-inventory-alerts':          { maxRequests: 2,   windowSeconds: 86400 },
   'agent-photo-stocktake':           { maxRequests: 50,  windowSeconds: 3600 },
+
+  // ─── Wave B / PR 19 ───
+  'generate-progress-reel':          { maxRequests: 10,  windowSeconds: 3600 },
 }
 
 const DEFAULT_LIMIT = { maxRequests: 60, windowSeconds: 3600 }

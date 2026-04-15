@@ -263,6 +263,89 @@ export function ProjectDetailPage() {
     },
   })
 
+  // PR 19: progress reels generated for this project.
+  const { data: reels = [], refetch: reelsRefetch } = useQuery({
+    queryKey: ['project_reels', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('project_reels')
+        .select('*')
+        .eq('project_id', id)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as Array<{
+        id: string
+        title: string | null
+        manifest: { photos: Array<{ url: string; caption: string | null; taken_at: string | null; category: string | null }> } | null
+        narrative: string | null
+        visible_to_client: boolean
+        created_at: string
+      }>
+    },
+  })
+
+  // PR 19: inspection reports for this project.
+  const { data: inspectionReports = [], refetch: inspectionsRefetch } = useQuery({
+    queryKey: ['inspection_reports', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('inspection_reports')
+        .select('*')
+        .eq('project_id', id)
+        .order('inspection_date', { ascending: false })
+      if (error) throw error
+      return (data ?? []) as Array<{
+        id: string
+        project_id: string
+        inspection_type: string
+        inspector_name: string | null
+        inspector_org: string | null
+        inspection_date: string
+        result: 'pass' | 'fail' | 'conditional' | 'pending'
+        notes: string | null
+        photos: string[] | null
+        follow_up_required: boolean
+        follow_up_notes: string | null
+        created_at: string
+      }>
+    },
+  })
+
+  // PR 19: reel generation + inspection form state.
+  const [generatingReel, setGeneratingReel] = useState(false)
+  const [reelError, setReelError] = useState<string | null>(null)
+  const [showInspectionForm, setShowInspectionForm] = useState(false)
+  const [inspectionSaving, setInspectionSaving] = useState(false)
+
+  async function handleGenerateReel() {
+    if (!id) return
+    setReelError(null)
+    setGeneratingReel(true)
+    try {
+      const { error } = await supabase.functions.invoke('generate-progress-reel', {
+        body: { project_id: id },
+      })
+      if (error) throw error
+      await reelsRefetch()
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setReelError(msg)
+    } finally {
+      setGeneratingReel(false)
+    }
+  }
+
+  async function handleReelVisibilityToggle(reelId: string, next: boolean) {
+    const { error } = await supabase.from('project_reels').update({ visible_to_client: next }).eq('id', reelId)
+    if (error) {
+      alert('Could not update visibility: ' + error.message)
+      return
+    }
+    reelsRefetch()
+  }
+
   if (projectLoading) {
     return (
       <div className="p-8 text-center">
@@ -780,12 +863,68 @@ export function ProjectDetailPage() {
               <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
                 {projectPhotos.length} portfolio photo{projectPhotos.length === 1 ? '' : 's'}
               </p>
-              <Button size="sm">
+              <Button size="sm" onClick={handleGenerateReel} disabled={generatingReel}>
                 <Sparkles size={13} />
-                Generate progress reel
+                {generatingReel ? 'Generating…' : 'Generate progress reel'}
               </Button>
             </div>
-{/* progress reel not yet implemented */}
+
+            {/* PR 19: progress reel(s) — narrative + sequential photo strip */}
+            {reelError && (
+              <Card>
+                <p className="text-sm text-[var(--warning)]">{reelError}</p>
+              </Card>
+            )}
+            {reels.length > 0 && (
+              <div className="space-y-3">
+                {reels.map((r) => {
+                  const photos = r.manifest?.photos ?? []
+                  return (
+                    <Card key={r.id}>
+                      <div className="flex items-start justify-between gap-3 mb-2">
+                        <div className="flex-1 min-w-0">
+                          <p className="font-semibold text-sm text-[var(--text)]">{r.title ?? 'Progress reel'}</p>
+                          <p className="text-[11px] text-[var(--text-tertiary)]">
+                            Generated {new Date(r.created_at).toLocaleDateString()} · {photos.length} photo{photos.length === 1 ? '' : 's'}
+                          </p>
+                        </div>
+                        {canShareWithClient && (
+                          <label className="flex items-center gap-1.5 text-[11px] text-[var(--text-secondary)] cursor-pointer">
+                            <input
+                              type="checkbox"
+                              checked={r.visible_to_client}
+                              onChange={(e) => handleReelVisibilityToggle(r.id, e.target.checked)}
+                              className="rounded border-[var(--border)]"
+                            />
+                            Share with client
+                          </label>
+                        )}
+                      </div>
+                      {r.narrative && (
+                        <p className="text-xs text-[var(--text-secondary)] whitespace-pre-wrap leading-relaxed mb-3">
+                          {r.narrative}
+                        </p>
+                      )}
+                      {photos.length > 0 && (
+                        <div className="flex gap-2 overflow-x-auto pb-1 -mx-2 px-2 snap-x">
+                          {photos.map((p, i) => (
+                            <div key={`${r.id}-${i}`} className="flex-shrink-0 w-40 snap-start">
+                              <div className="aspect-[4/3] rounded-lg overflow-hidden bg-[var(--bg)]">
+                                <img src={p.url} alt={p.caption ?? ''} className="w-full h-full object-cover" />
+                              </div>
+                              {p.caption && (
+                                <p className="text-[10px] text-[var(--text-tertiary)] mt-1 line-clamp-2">{p.caption}</p>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </Card>
+                  )
+                })}
+              </div>
+            )}
+
             <div className="grid grid-cols-2 gap-3">
               {(projectPhotos as Array<{ id: string; image_url: string; caption?: string; category?: string; visible_to_client?: boolean }>).map((p) => (
                 <Card key={p.id} padding="none">
@@ -911,7 +1050,88 @@ export function ProjectDetailPage() {
               )}
             </Card>
 
-{/* inspection reports not yet implemented */}
+            {/* PR 19: Inspection reports — building inspections (framing, electrical, final, etc.). */}
+            {/* Photo attachments here will trigger agent-inspection-analyzer (wired via storage trigger, not here). */}
+            <div className="flex items-center justify-between pt-2">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+                Inspections ({inspectionReports.length})
+              </p>
+              <Button size="sm" onClick={() => setShowInspectionForm(true)}>
+                <ShieldCheck size={13} />
+                Log inspection
+              </Button>
+            </div>
+
+            <Card padding="none">
+              {inspectionReports.length === 0 ? (
+                <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">
+                  No inspections logged yet
+                </div>
+              ) : (
+                inspectionReports.map((r) => {
+                  const resultColor =
+                    r.result === 'pass' ? 'bg-[var(--success-bg)] text-[var(--success)]' :
+                    r.result === 'fail' ? 'bg-red-100 text-red-700' :
+                    r.result === 'conditional' ? 'bg-[var(--warning-bg)] text-[var(--warning)]' :
+                    'bg-[var(--bg)] text-[var(--text-tertiary)]'
+                  const typeLabel = r.inspection_type
+                    .split('_')
+                    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+                    .join(' ')
+                  return (
+                    <div key={r.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${resultColor}`}>
+                            {r.result}
+                          </span>
+                          <p className="text-sm font-semibold text-[var(--text)]">{typeLabel}</p>
+                          {r.follow_up_required && (
+                            <span className="text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full bg-[var(--warning-bg)] text-[var(--warning)]">
+                              Follow-up
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-[var(--text-tertiary)] flex-shrink-0">
+                          {r.inspection_date}
+                        </p>
+                      </div>
+                      {(r.inspector_name || r.inspector_org) && (
+                        <p className="text-[11px] text-[var(--text-secondary)] mt-1">
+                          {[r.inspector_name, r.inspector_org].filter(Boolean).join(' · ')}
+                        </p>
+                      )}
+                      {r.notes && (
+                        <p className="text-[11px] text-[var(--text-secondary)] mt-2 whitespace-pre-wrap">{r.notes}</p>
+                      )}
+                      {r.follow_up_required && r.follow_up_notes && (
+                        <p className="text-[11px] text-[var(--warning)] mt-1 italic">Follow-up: {r.follow_up_notes}</p>
+                      )}
+                      {r.photos && r.photos.length > 0 && (
+                        <div className="flex gap-2 mt-2 overflow-x-auto">
+                          {r.photos.map((url, idx) => (
+                            <a key={`${r.id}-p-${idx}`} href={url} target="_blank" rel="noreferrer" className="flex-shrink-0 w-16 h-16 rounded-md overflow-hidden bg-[var(--bg)]">
+                              <img src={url} alt="" className="w-full h-full object-cover" />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )
+                })
+              )}
+            </Card>
+
+            {showInspectionForm && id && (
+              <InspectionForm
+                projectId={id}
+                onClose={() => setShowInspectionForm(false)}
+                onSaved={() => { setShowInspectionForm(false); inspectionsRefetch() }}
+                userId={user?.id ?? null}
+                saving={inspectionSaving}
+                setSaving={setInspectionSaving}
+              />
+            )}
           </div>
         )}
 
@@ -1148,6 +1368,176 @@ function CommsTab(props: CommsTabProps) {
           ))}
         </div>
       )}
+    </div>
+  )
+}
+
+// PR 19: Inspection log form. Lives here (not a separate file) so it can share
+// the page's supabase client + query invalidation callbacks directly.
+
+const INSPECTION_TYPES = [
+  'foundation',
+  'framing',
+  'electrical_rough',
+  'plumbing_rough',
+  'insulation',
+  'final',
+  'other',
+]
+
+const INSPECTION_RESULTS: Array<'pending' | 'pass' | 'fail' | 'conditional'> = [
+  'pending', 'pass', 'conditional', 'fail',
+]
+
+function InspectionForm({
+  projectId,
+  onClose,
+  onSaved,
+  userId,
+  saving,
+  setSaving,
+}: {
+  projectId: string
+  onClose: () => void
+  onSaved: () => void
+  userId: string | null
+  saving: boolean
+  setSaving: (v: boolean) => void
+}) {
+  const [followUp, setFollowUp] = useState(false)
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40" onClick={onClose}>
+      <div
+        className="w-full max-w-lg bg-white rounded-t-2xl p-5 space-y-4 max-h-[90vh] overflow-y-auto"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-center justify-between">
+          <h2 className="font-display text-lg text-[var(--navy)]">Log Inspection</h2>
+          <button onClick={onClose} className="p-1 text-[var(--text-tertiary)]">
+            <span className="text-lg leading-none">×</span>
+          </button>
+        </div>
+        <form
+          onSubmit={async (e) => {
+            e.preventDefault()
+            const fd = new FormData(e.currentTarget)
+            const inspectionType = (fd.get('inspection_type') as string) || 'other'
+            const customType = (fd.get('other_type') as string)?.trim()
+            const finalType = inspectionType === 'other' && customType ? customType : inspectionType
+            const inspectionDate = fd.get('inspection_date') as string
+            if (!inspectionDate) {
+              alert('Inspection date is required')
+              return
+            }
+            setSaving(true)
+            try {
+              // Upload photos first (if any) — same pattern as PhotosPage uses.
+              const fileInput = (e.currentTarget.elements.namedItem('photos') as HTMLInputElement | null)
+              const files = fileInput?.files ? Array.from(fileInput.files) : []
+              const uploadedUrls: string[] = []
+              for (const file of files) {
+                const ext = file.name.split('.').pop() ?? 'jpg'
+                const path = `inspections/${projectId}/${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`
+                const { error: uploadErr } = await supabase.storage
+                  .from('project-photos')
+                  .upload(path, file, { contentType: file.type })
+                if (uploadErr) throw uploadErr
+                const { data: urlData } = supabase.storage.from('project-photos').getPublicUrl(path)
+                uploadedUrls.push(urlData.publicUrl)
+              }
+
+              const { error: insertErr } = await supabase.from('inspection_reports').insert({
+                project_id: projectId,
+                inspection_type: finalType,
+                inspector_name: (fd.get('inspector_name') as string)?.trim() || null,
+                inspector_org: (fd.get('inspector_org') as string)?.trim() || null,
+                inspection_date: inspectionDate,
+                result: (fd.get('result') as string) || 'pending',
+                notes: (fd.get('notes') as string)?.trim() || null,
+                photos: uploadedUrls,
+                follow_up_required: fd.get('follow_up_required') === 'on',
+                follow_up_notes: (fd.get('follow_up_notes') as string)?.trim() || null,
+                created_by: userId,
+              })
+              if (insertErr) throw insertErr
+              onSaved()
+            } catch (err) {
+              const msg = err instanceof Error ? err.message : String(err)
+              alert('Could not save inspection: ' + msg)
+            } finally {
+              setSaving(false)
+            }
+          }}
+          className="space-y-3"
+        >
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Type *</label>
+              <select name="inspection_type" required className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20">
+                {INSPECTION_TYPES.map((t) => (
+                  <option key={t} value={t} className="capitalize">
+                    {t.split('_').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ')}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Date *</label>
+              <input
+                name="inspection_date"
+                type="date"
+                required
+                defaultValue={new Date().toISOString().split('T')[0]}
+                className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20"
+              />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Custom type (if "Other")</label>
+            <input name="other_type" placeholder="e.g. occupancy, fire marshal" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Inspector</label>
+              <input name="inspector_name" placeholder="Jane Smith" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+            </div>
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Organization</label>
+              <input name="inspector_org" placeholder="City Building Dept" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+            </div>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Result *</label>
+            <select name="result" defaultValue="pending" required className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20">
+              {INSPECTION_RESULTS.map((r) => <option key={r} value={r} className="capitalize">{r}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Notes</label>
+            <textarea name="notes" rows={3} placeholder="Inspector findings, corrections required, etc." className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Photos</label>
+            <input name="photos" type="file" accept="image/*" multiple className="w-full text-sm" />
+            <p className="text-[11px] text-[var(--text-tertiary)] mt-1">Uploaded to the project-photos bucket.</p>
+          </div>
+          <label className="flex items-center gap-2 text-xs font-semibold text-[var(--text-secondary)]">
+            <input type="checkbox" name="follow_up_required" checked={followUp} onChange={(e) => setFollowUp(e.target.checked)} className="rounded border-[var(--border)]" />
+            Follow-up required
+          </label>
+          {followUp && (
+            <div>
+              <label className="block text-xs font-semibold text-[var(--text-secondary)] mb-1">Follow-up notes</label>
+              <textarea name="follow_up_notes" rows={2} placeholder="What needs to happen before re-inspection" className="w-full border border-[var(--border)] rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/20" />
+            </div>
+          )}
+          <div className="flex gap-2 pt-2">
+            <Button type="button" variant="secondary" fullWidth onClick={onClose}>Cancel</Button>
+            <Button type="submit" fullWidth disabled={saving}>{saving ? 'Saving…' : 'Log Inspection'}</Button>
+          </div>
+        </form>
+      </div>
     </div>
   )
 }
