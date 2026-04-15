@@ -15,14 +15,18 @@ import { ProjectTeamTab } from './ProjectTeamTab'
 import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
 import type { EditableItem } from '@/components/ui/EditableDeliverable'
 import { useProjectRealtime } from '@/hooks/useProjectRealtime'
+import { ProjectActivityFeed } from '@/components/project/ProjectActivityFeed'
+import { ProjectPresenceBar } from '@/components/project/ProjectPresenceBar'
+import { ClientShareToggle } from '@/components/project/ClientShareToggle'
 
-type Tab = 'overview' | 'financials' | 'budget' | 'subs' | 'team' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
+type Tab = 'overview' | 'activity' | 'financials' | 'budget' | 'subs' | 'team' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
   const [tab, setTab] = useState<Tab>('overview')
+  const canShareWithClient = user?.role === 'admin' || user?.role === 'super_admin'
 
   // Live-update the whole page when anyone on the team makes a change.
   useProjectRealtime(id)
@@ -187,6 +191,7 @@ export function ProjectDetailPage() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview',   label: 'Overview' },
+    { id: 'activity',   label: 'Activity' },
     { id: 'team',       label: `Team${assignmentCount ? ` (${assignmentCount})` : ''}` },
     { id: 'financials', label: 'Financials' },
     ...(isBudgetProject ? [{ id: 'budget' as Tab, label: 'Budget' }] : []),
@@ -230,8 +235,11 @@ export function ProjectDetailPage() {
               </span>
             </div>
           </div>
-          <div className="text-right flex-shrink-0">
-            <p className="font-mono text-lg font-bold text-[var(--text)]">${(project.contract_value/1000).toFixed(0)}K</p>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {id && <ProjectPresenceBar projectId={id} />}
+            <div className="text-right">
+              <p className="font-mono text-lg font-bold text-[var(--text)]">${(project.contract_value/1000).toFixed(0)}K</p>
+            </div>
           </div>
         </div>
 
@@ -391,6 +399,16 @@ export function ProjectDetailPage() {
               </div>
             </Card>
           </>
+        )}
+
+        {/* ── ACTIVITY ── */}
+        {tab === 'activity' && id && (
+          <div className="space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+              Live project activity — every edit, log, and team change as it happens.
+            </p>
+            <ProjectActivityFeed projectId={id} />
+          </div>
         )}
 
         {/* ── BUDGET ── */}
@@ -566,11 +584,18 @@ export function ProjectDetailPage() {
             {logs.length === 0 ? (
               <Card><p className="text-center text-sm text-[var(--text-tertiary)]">No logs yet</p></Card>
             ) : (
-              (logs as Array<{ id: string; log_date: string; employee_id: string; weather?: string; summary: string; workers_on_site?: string[] }>).map(log => (
+              (logs as Array<{ id: string; log_date: string; employee_id: string; weather?: string; summary: string; workers_on_site?: string[]; visible_to_client?: boolean }>).map(log => (
                 <Card key={log.id}>
                   <div className="flex items-center gap-2 mb-2">
-                    <p className="font-semibold text-sm text-[var(--text)]">{log.log_date}</p>
+                    <p className="font-semibold text-sm text-[var(--text)] flex-1">{log.log_date}</p>
                     {log.weather && <span className="text-xs text-[var(--text-tertiary)]">· {log.weather}</span>}
+                    {canShareWithClient && (
+                      <ClientShareToggle
+                        table="daily_logs"
+                        rowId={log.id}
+                        visible={log.visible_to_client ?? false}
+                      />
+                    )}
                   </div>
                   <p className="text-sm text-[var(--text-secondary)] leading-relaxed">{log.summary}</p>
                   {log.workers_on_site && log.workers_on_site.length > 0 && (
@@ -588,7 +613,7 @@ export function ProjectDetailPage() {
             {changeOrders.length === 0 ? (
               <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No change orders</div>
             ) : (
-              (changeOrders as Array<{ id: string; title: string; description: string; flagged_at?: string; status: string; cost_change?: number; schedule_change_days?: number }>).map(co => (
+              (changeOrders as Array<{ id: string; title: string; description: string; flagged_at?: string; status: string; cost_change?: number; schedule_change_days?: number; visible_to_client?: boolean }>).map(co => (
                 <div key={co.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
                   <div className="flex items-start justify-between gap-3 mb-2">
                     <div className="flex items-start gap-2 flex-1 min-w-0">
@@ -599,7 +624,16 @@ export function ProjectDetailPage() {
                         {co.flagged_at && <p className="text-xs text-[var(--text-tertiary)] mt-1">Flagged {co.flagged_at.split('T')[0]}</p>}
                       </div>
                     </div>
-                    <StatusPill status={co.status} />
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <StatusPill status={co.status} />
+                      {canShareWithClient && (
+                        <ClientShareToggle
+                          table="change_orders"
+                          rowId={co.id}
+                          visible={co.visible_to_client ?? false}
+                        />
+                      )}
+                    </div>
                   </div>
                   {(co.cost_change ?? 0) !== 0 && (
                     <div className="flex items-center gap-1 mt-2">
@@ -630,7 +664,7 @@ export function ProjectDetailPage() {
             </div>
 {/* progress reel not yet implemented */}
             <div className="grid grid-cols-2 gap-3">
-              {(projectPhotos as Array<{ id: string; image_url: string; caption?: string; category?: string }>).map((p) => (
+              {(projectPhotos as Array<{ id: string; image_url: string; caption?: string; category?: string; visible_to_client?: boolean }>).map((p) => (
                 <Card key={p.id} padding="none">
                   <div className="aspect-[4/3] rounded-t-xl overflow-hidden bg-[var(--bg)] relative">
                     <img src={p.image_url} alt={p.caption ?? ''} className="w-full h-full object-cover" />
@@ -638,12 +672,21 @@ export function ProjectDetailPage() {
                       <Star size={12} className="text-[var(--text-tertiary)]" />
                     </div>
                   </div>
-                  <div className="p-2.5">
-                    <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2">{p.caption}</p>
-                    <button className="text-[10px] text-[var(--navy)] font-semibold mt-1.5">
-                      <ImageIcon size={10} className="inline mr-1" />
-                      In portfolio
-                    </button>
+                  <div className="p-2.5 flex items-start gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="text-[11px] text-[var(--text-secondary)] line-clamp-2">{p.caption}</p>
+                      <button className="text-[10px] text-[var(--navy)] font-semibold mt-1.5">
+                        <ImageIcon size={10} className="inline mr-1" />
+                        In portfolio
+                      </button>
+                    </div>
+                    {canShareWithClient && (
+                      <ClientShareToggle
+                        table="project_photos"
+                        rowId={p.id}
+                        visible={p.visible_to_client ?? false}
+                      />
+                    )}
                   </div>
                 </Card>
               ))}
@@ -709,7 +752,7 @@ export function ProjectDetailPage() {
               {warrantyClaims.length === 0 ? (
                 <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No warranty claims</div>
               ) : (
-                (warrantyClaims as Array<{ id: string; description: string; status: string; reported_at?: string; resolution?: string }>).map((c) => (
+                (warrantyClaims as Array<{ id: string; description: string; status: string; reported_at?: string; resolution?: string; visible_to_client?: boolean }>).map((c) => (
                   <div key={c.id} className="p-4 border-b border-[var(--border-light)] last:border-0">
                     <div className="flex items-start justify-between gap-2">
                       <span className={`text-[10px] font-semibold uppercase px-2 py-0.5 rounded-full ${
@@ -719,6 +762,13 @@ export function ProjectDetailPage() {
                       }`}>
                         {c.status}
                       </span>
+                      {canShareWithClient && (
+                        <ClientShareToggle
+                          table="warranty_claims"
+                          rowId={c.id}
+                          visible={c.visible_to_client ?? false}
+                        />
+                      )}
                     </div>
                     <p className="text-sm font-semibold text-[var(--text)] mt-1">{c.description}</p>
                     {c.reported_at && (
