@@ -15,8 +15,10 @@ import { ProjectTeamTab } from './ProjectTeamTab'
 import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
 import type { EditableItem } from '@/components/ui/EditableDeliverable'
 import { useProjectRealtime } from '@/hooks/useProjectRealtime'
+import { ProjectActivityFeed } from '@/components/project/ProjectActivityFeed'
+import { ProjectPresenceBar } from '@/components/project/ProjectPresenceBar'
 
-type Tab = 'overview' | 'financials' | 'budget' | 'subs' | 'team' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
+type Tab = 'overview' | 'activity' | 'financials' | 'budget' | 'subs' | 'team' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -187,6 +189,7 @@ export function ProjectDetailPage() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview',   label: 'Overview' },
+    { id: 'activity',   label: 'Activity' },
     { id: 'team',       label: `Team${assignmentCount ? ` (${assignmentCount})` : ''}` },
     { id: 'financials', label: 'Financials' },
     ...(isBudgetProject ? [{ id: 'budget' as Tab, label: 'Budget' }] : []),
@@ -230,8 +233,11 @@ export function ProjectDetailPage() {
               </span>
             </div>
           </div>
-          <div className="text-right flex-shrink-0">
-            <p className="font-mono text-lg font-bold text-[var(--text)]">${(project.contract_value/1000).toFixed(0)}K</p>
+          <div className="flex items-center gap-3 flex-shrink-0">
+            {id && <ProjectPresenceBar projectId={id} />}
+            <div className="text-right">
+              <p className="font-mono text-lg font-bold text-[var(--text)]">${(project.contract_value/1000).toFixed(0)}K</p>
+            </div>
           </div>
         </div>
 
@@ -391,6 +397,16 @@ export function ProjectDetailPage() {
               </div>
             </Card>
           </>
+        )}
+
+        {/* ── ACTIVITY ── */}
+        {tab === 'activity' && id && (
+          <div className="space-y-3">
+            <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+              Live project activity — every edit, log, and team change as it happens.
+            </p>
+            <ProjectActivityFeed projectId={id} />
+          </div>
         )}
 
         {/* ── BUDGET ── */}
