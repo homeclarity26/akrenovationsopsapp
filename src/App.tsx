@@ -67,6 +67,8 @@ const BusinessContextPage = lazy(() => import('./pages/admin/settings/BusinessCo
 const HealthPage = lazy(() => import('./pages/admin/settings/HealthPage').then(m => ({ default: m.HealthPage })))
 const OnboardingPage = lazy(() => import('./pages/admin/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const CompanyOnboardingWizard = lazy(() => import('./pages/onboarding/CompanyOnboardingWizard').then(m => ({ default: m.CompanyOnboardingWizard })))
+const PlatformOnboarding = lazy(() => import('./pages/onboarding/PlatformOnboarding').then(m => ({ default: m.PlatformOnboarding })))
+const FieldOnboarding = lazy(() => import('./pages/onboarding/FieldOnboarding').then(m => ({ default: m.FieldOnboarding })))
 
 // Employee pages
 const EmployeeHome = lazy(() => import('./pages/employee/EmployeeHome').then(m => ({ default: m.EmployeeHome })))
@@ -161,20 +163,22 @@ function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'clie
 function RootRedirect() {
   const { user, loading } = useAuth()
   const [checking, setChecking] = useState(true)
-  const [needsOnboarding, setNeedsOnboarding] = useState(false)
+  const [needsCompanyOnboarding, setNeedsCompanyOnboarding] = useState(false)
 
   useEffect(() => {
-    if (loading || !user || user.role !== 'admin') {
+    if (loading || !user) {
       setChecking(false)
       return
     }
-    // Check if company onboarding is complete.
-    // The AuthContext already fetched the profile (including company_id),
-    // so we skip the redundant profile query and go straight to companies.
+    // Only check company onboarding for admin role (super_admin uses profile flags)
+    if (user.role !== 'admin') {
+      setChecking(false)
+      return
+    }
     async function check() {
       try {
         if (!user!.company_id) {
-          setNeedsOnboarding(true)
+          setNeedsCompanyOnboarding(true)
           setChecking(false)
           return
         }
@@ -184,7 +188,7 @@ function RootRedirect() {
           .eq('id', user!.company_id)
           .maybeSingle()
         if (!company || company.onboarding_complete === false) {
-          setNeedsOnboarding(true)
+          setNeedsCompanyOnboarding(true)
         }
       } catch {
         // On error, skip onboarding check and let them through
@@ -196,8 +200,28 @@ function RootRedirect() {
 
   if (loading || checking) return <AuthLoadingScreen />
   if (!user) return <Navigate to="/login" replace />
+
+  // 3-level onboarding routing
+  // Level 1: Platform admin onboarding (super_admin only)
+  if (user.role === 'super_admin' && !user.platform_onboarding_complete) {
+    return <Navigate to="/onboard/platform" replace />
+  }
+
+  // Level 2: Company/business admin onboarding (admin + super_admin)
+  if (user.role === 'super_admin' && !user.company_onboarding_complete) {
+    return <Navigate to="/onboard/company" replace />
+  }
+  if (user.role === 'admin' && (needsCompanyOnboarding || !user.company_onboarding_complete)) {
+    return <Navigate to="/onboard/company" replace />
+  }
+
+  // Level 3: Field mode onboarding (employees, or admin/super_admin who haven't done it)
+  if (user.role === 'employee' && !user.field_onboarding_complete) {
+    return <Navigate to="/onboard/field" replace />
+  }
+
+  // Normal routing
   if (user.role === 'super_admin') return <Navigate to="/admin" replace />
-  if (user.role === 'admin' && needsOnboarding) return <Navigate to="/onboard/company" replace />
   if (user.role === 'admin') return <Navigate to="/admin" replace />
   if (user.role === 'employee') return <Navigate to="/employee" replace />
   return <Navigate to="/client/progress" replace />
@@ -212,8 +236,10 @@ function AppRoutes() {
         <Route path="/forgot-password" element={<ForgotPasswordPage />} />
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
-        {/* Company onboarding wizard (standalone, no layout chrome) */}
+        {/* Onboarding wizards (standalone, no layout chrome) */}
+        <Route path="/onboard/platform" element={<ProtectedRoute role="super_admin"><PlatformOnboarding /></ProtectedRoute>} />
         <Route path="/onboard/company" element={<ProtectedRoute role="admin"><CompanyOnboardingWizard /></ProtectedRoute>} />
+        <Route path="/onboard/field" element={<ProtectedRoute role="employee"><FieldOnboarding /></ProtectedRoute>} />
 
         {/* Admin */}
         <Route path="/admin" element={<ProtectedRoute role="admin"><AdminLayout /></ProtectedRoute>}>

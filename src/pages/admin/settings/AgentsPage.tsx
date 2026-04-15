@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { Play, CheckCircle, XCircle, Clock, Zap, RefreshCw } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
+import { supabase } from '@/lib/supabase'
 
 interface AgentDef {
   id: string
@@ -16,8 +17,7 @@ interface AgentDef {
   type: 'proactive' | 'reactive'
 }
 
-const AGENTS: AgentDef[] = [
-  // Proactive
+const DEFAULT_AGENTS: AgentDef[] = [
   { id: 'morning-brief',       name: 'Morning Brief',           description: 'Daily business summary delivered at 6am', schedule: 'Daily 6am',      trigger: 'cron', enabled: true,  lastRun: null, lastStatus: null, type: 'proactive' },
   { id: 'lead-aging',          name: 'Lead Aging Monitor',      description: 'Drafts follow-ups for stale leads',        schedule: 'Daily 8am',      trigger: 'cron', enabled: true,  lastRun: null, lastStatus: null, type: 'proactive' },
   { id: 'risk-monitor',        name: 'At-Risk Monitor',         description: 'Checks project health scores',             schedule: 'Daily 7am',      trigger: 'cron', enabled: true,  lastRun: null, lastStatus: null, type: 'proactive' },
@@ -30,7 +30,6 @@ const AGENTS: AgentDef[] = [
   { id: 'warranty-tracker',    name: 'Warranty Tracker',        description: 'Alerts on expiring warranties',            schedule: 'Daily 9am',      trigger: 'cron', enabled: true,  lastRun: null, lastStatus: null, type: 'proactive' },
   { id: 'weather-schedule',    name: 'Weather Alert',           description: 'Flags weather impacting outdoor work',     schedule: 'Daily 6:30am',   trigger: 'cron', enabled: false, lastRun: null, lastStatus: null, type: 'proactive' },
   { id: 'daily-log',           name: 'Daily Log Generator',     description: 'Drafts daily logs at 5:30pm per project',  schedule: 'Daily 5:30pm',   trigger: 'cron', enabled: true,  lastRun: null, lastStatus: null, type: 'proactive' },
-  // Reactive
   { id: 'bonus-qualification', name: 'Bonus Qualification',     description: 'Calculates bonus on project completion',   schedule: 'On completion',  trigger: 'event', enabled: true,  lastRun: null, lastStatus: null, type: 'reactive' },
   { id: 'review-request',      name: 'Review Request',          description: 'Sends review link 7 days after completion', schedule: '7d post-complete', trigger: 'event', enabled: true,  lastRun: null, lastStatus: null, type: 'reactive' },
   { id: 'receipt-processor',   name: 'Receipt Processor',       description: 'Extracts data from uploaded receipts',     schedule: 'On upload',      trigger: 'event', enabled: true,  lastRun: null, lastStatus: null, type: 'reactive' },
@@ -48,18 +47,80 @@ const AGENTS: AgentDef[] = [
 ]
 
 export function AgentsPage() {
-  const [agents, setAgents] = useState<AgentDef[]>(AGENTS)
+  const [agents, setAgents] = useState<AgentDef[]>(DEFAULT_AGENTS)
   const [globalEnabled, setGlobalEnabled] = useState(true)
   const [runningAgent, setRunningAgent] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  const toggleAgent = (id: string) => {
-    setAgents(prev => prev.map(a => a.id === id ? { ...a, enabled: !a.enabled } : a))
+  useEffect(() => {
+    async function loadAgentConfigs() {
+      try {
+        const { data } = await supabase
+          .from('agent_configs')
+          .select('agent_id, enabled, last_run_at, last_status')
+
+        if (data && data.length > 0) {
+          const configMap = new Map(data.map(d => [d.agent_id, d]))
+          setAgents(prev => prev.map(agent => {
+            const config = configMap.get(agent.id)
+            if (!config) return agent
+            return {
+              ...agent,
+              enabled: config.enabled ?? agent.enabled,
+              lastRun: config.last_run_at ? new Date(config.last_run_at).toLocaleTimeString() : null,
+              lastStatus: config.last_status as AgentDef['lastStatus'] ?? null,
+            }
+          }))
+        }
+      } catch {
+        // Table may not exist — use defaults
+      }
+      setLoading(false)
+    }
+    loadAgentConfigs()
+  }, [])
+
+  const toggleAgent = async (id: string) => {
+    const agent = agents.find(a => a.id === id)
+    if (!agent) return
+    const newEnabled = !agent.enabled
+    setAgents(prev => prev.map(a => a.id === id ? { ...a, enabled: newEnabled } : a))
+    try {
+      await supabase.from('agent_configs').upsert({ agent_id: id, enabled: newEnabled }, { onConflict: 'agent_id' })
+    } catch {
+      // Silently fail
+    }
   }
 
   const runNow = async (id: string) => {
     setRunningAgent(id)
-    await new Promise(r => setTimeout(r, 1500))
-    setAgents(prev => prev.map(a => a.id === id ? { ...a, lastRun: new Date().toLocaleTimeString(), lastStatus: 'success' } : a))
+    try {
+      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
+      const { data: { session } } = await supabase.auth.getSession()
+      const token = session?.access_token ?? (import.meta.env.VITE_SUPABASE_ANON_KEY as string)
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/run-agent`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
+        },
+        body: JSON.stringify({ agent_id: id }),
+      })
+
+      const status = res.ok ? 'success' : 'error'
+      setAgents(prev => prev.map(a => a.id === id ? {
+        ...a,
+        lastRun: new Date().toLocaleTimeString(),
+        lastStatus: status as AgentDef['lastStatus'],
+      } : a))
+    } catch {
+      setAgents(prev => prev.map(a => a.id === id ? {
+        ...a,
+        lastRun: new Date().toLocaleTimeString(),
+        lastStatus: 'error',
+      } : a))
+    }
     setRunningAgent(null)
   }
 
@@ -114,7 +175,7 @@ export function AgentsPage() {
 
   return (
     <div className="p-4 space-y-6 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">
-      <PageHeader title="AI Agents" subtitle="Manage all 27 autonomous agents" />
+      <PageHeader title="AI Agents" subtitle={`${agents.length} configured agents`} />
 
       {/* Global toggle */}
       <Card>
@@ -126,7 +187,7 @@ export function AgentsPage() {
             <div>
               <p className="font-semibold text-[var(--text)]">AI Agent System</p>
               <p className="text-xs text-[var(--text-secondary)]">
-                {globalEnabled ? `${agents.filter(a => a.enabled).length} of ${agents.length} agents enabled` : 'All agents paused'}
+                {loading ? 'Loading...' : globalEnabled ? `${agents.filter(a => a.enabled).length} of ${agents.length} agents enabled` : 'All agents paused'}
               </p>
             </div>
           </div>

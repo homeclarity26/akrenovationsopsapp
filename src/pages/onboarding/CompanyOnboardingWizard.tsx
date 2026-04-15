@@ -967,6 +967,7 @@ export function CompanyOnboardingWizard() {
           email: form.ownerEmail.trim(),
           phone: form.ownerPhone.trim() || null,
           photo_url: photoUrl,
+          company_onboarding_complete: true,
         })
         .eq('id', user!.id)
 
