@@ -93,6 +93,12 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
   // ─── Phase N: Universal Template System ───
   'suggest-deliverable-items':            { maxRequests: 60,  windowSeconds: 3600 },
   'agent-template-improvement-suggester': { maxRequests: 5,   windowSeconds: 86400 },
+
+  // ─── Final Build: New standalone functions ───
+  'send-email':                      { maxRequests: 50,  windowSeconds: 3600 },
+  'agent-proposal-writer':           { maxRequests: 20,  windowSeconds: 3600 },
+  'backup-database':                 { maxRequests: 5,   windowSeconds: 86400 },
+  'sync-google-drive':               { maxRequests: 30,  windowSeconds: 3600 },
 }
 
 const DEFAULT_LIMIT = { maxRequests: 60, windowSeconds: 3600 }
