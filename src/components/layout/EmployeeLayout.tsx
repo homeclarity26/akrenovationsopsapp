@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import {
   Home, ShoppingCart, Clock, Calendar,
-  MessageCircle, Sparkles
+  MessageCircle, Sparkles, FolderOpen
 } from 'lucide-react'
 import { AIBar } from '@/components/ui/AIBar'
 import { Badge } from '@/components/ui/Badge'
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils'
 // unread/pending queries exist so users never see fake notification counts.
 const NAV = [
   { to: '/employee',          label: 'Home',     icon: Home,            exact: true, badge: 0 },
+  { to: '/employee/projects', label: 'Projects', icon: FolderOpen,      badge: 0 },
   { to: '/employee/shopping', label: 'List',     icon: ShoppingCart,    badge: 0 },
   { to: '/employee/time',     label: 'Clock',    icon: Clock,           badge: 0 },
   { to: '/employee/schedule', label: 'Schedule', icon: Calendar,        badge: 0 },
@@ -55,7 +56,7 @@ export function EmployeeLayout() {
 
       {/* Bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-[var(--border-light)] z-40">
-        <div className="grid grid-cols-5 h-16">
+        <div className="grid grid-cols-6 h-16">
           {NAV.map(({ to, label, icon: Icon, exact, badge }) => (
             <NavLink
               key={to}
