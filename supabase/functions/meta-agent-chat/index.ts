@@ -275,6 +275,21 @@ backup-database → On-demand database backup
 sync-google-drive → Sync project files to Google Drive
   Use when: User wants to sync project documents to Drive
   Input: { project_id }
+
+ai-suggest-project-action → Propose an action for admin review (SUGGESTION INBOX)
+  Use when: The action modifies project data (create task, draft daily log,
+    add shopping item, change status on a punch/change-order/message/photo)
+    AND you want an admin to review before it lands — i.e. proactive work,
+    not an explicit user command. The admin sees pending suggestions in the
+    Suggestion Inbox at the top of the Project Detail page and Approves or
+    Rejects. Approved suggestions dispatch apply-project-suggestion which
+    writes the change; rejected ones never mutate anything.
+  Allowed tables in proposed_action: tasks, daily_logs, shopping_list_items,
+    punch_list_items, change_orders, messages, project_photos.
+  Input: {
+    project_id, suggestion_type, summary, rationale,
+    proposed_action: { table, operation: 'insert'|'update', values | id+patch }
+  }
 `
 
 // ---------------------------------------------------------------------------

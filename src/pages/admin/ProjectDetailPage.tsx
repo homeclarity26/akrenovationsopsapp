@@ -18,6 +18,7 @@ import { useProjectRealtime } from '@/hooks/useProjectRealtime'
 import { ProjectActivityFeed } from '@/components/project/ProjectActivityFeed'
 import { ProjectPresenceBar } from '@/components/project/ProjectPresenceBar'
 import { ClientShareToggle } from '@/components/project/ClientShareToggle'
+import { ProjectSuggestionInbox } from '@/components/project/ProjectSuggestionInbox'
 
 type Tab = 'overview' | 'activity' | 'financials' | 'budget' | 'subs' | 'team' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
 
@@ -253,6 +254,13 @@ export function ProjectDetailPage() {
           </div>
         )}
       </div>
+
+      {/* AI Suggestion Inbox — renders nothing when there are no pending rows */}
+      {canShareWithClient && id && (
+        <div className="px-4 pt-3 lg:px-8">
+          <ProjectSuggestionInbox projectId={id} />
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="flex gap-0 overflow-x-auto border-b border-[var(--border-light)] px-4 lg:px-8">
