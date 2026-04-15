@@ -11,10 +11,11 @@ import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
 import { BudgetTab } from './budget/BudgetTab'
 import { ProjectSubsTab } from './ProjectSubsTab'
+import { ProjectTeamTab } from './ProjectTeamTab'
 import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
 import type { EditableItem } from '@/components/ui/EditableDeliverable'
 
-type Tab = 'overview' | 'financials' | 'budget' | 'subs' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
+type Tab = 'overview' | 'financials' | 'budget' | 'subs' | 'team' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
 
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -132,6 +133,20 @@ export function ProjectDetailPage() {
     },
   })
 
+  const { data: assignmentCount = 0 } = useQuery({
+    queryKey: ['project_assignments_count', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { count, error } = await supabase
+        .from('project_assignments')
+        .select('id', { count: 'exact', head: true })
+        .eq('project_id', id)
+        .eq('active', true)
+      if (error) throw error
+      return count ?? 0
+    },
+  })
+
   if (projectLoading) {
     return (
       <div className="p-8 text-center">
@@ -168,6 +183,7 @@ export function ProjectDetailPage() {
 
   const TABS: { id: Tab; label: string }[] = [
     { id: 'overview',   label: 'Overview' },
+    { id: 'team',       label: `Team${assignmentCount ? ` (${assignmentCount})` : ''}` },
     { id: 'financials', label: 'Financials' },
     ...(isBudgetProject ? [{ id: 'budget' as Tab, label: 'Budget' }] : []),
     ...(isBudgetProject ? [{ id: 'subs' as Tab, label: 'Subs' }] : []),
@@ -371,6 +387,11 @@ export function ProjectDetailPage() {
         {/* ── SUBS (Phase H) ── */}
         {tab === 'subs' && (
           <ProjectSubsTab projectId={project.id} />
+        )}
+
+        {/* ── TEAM ── */}
+        {tab === 'team' && (
+          <ProjectTeamTab projectId={project.id} />
         )}
 
         {/* ── FINANCIALS ── */}

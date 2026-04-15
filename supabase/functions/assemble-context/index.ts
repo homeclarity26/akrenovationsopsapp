@@ -86,7 +86,8 @@ async function fetchEntityData(
   supabase: ReturnType<typeof createClient>,
   entityType: string,
   entityId: string,
-  role: string
+  role: string,
+  userId: string
 ): Promise<{ type: string; data: object } | null> {
   const tableMap: Record<string, string> = {
     project:       'projects',
@@ -98,18 +99,29 @@ async function fetchEntityData(
   const table = tableMap[entityType]
   if (!table) return null
 
-  let query = supabase.from(table).select('*').eq('id', entityId).single()
-
-  // Employees only see their assigned projects
+  // Employees only see their assigned projects. We use the service role client,
+  // which bypasses RLS, so the check must be explicit here. If the employee has
+  // no active assignment on this project, return null (treated as denied).
   if (role === 'employee' && entityType === 'project') {
-    query = supabase
+    const { data: assignment } = await supabase
+      .from('project_assignments')
+      .select('id')
+      .eq('project_id', entityId)
+      .eq('employee_id', userId)
+      .eq('active', true)
+      .maybeSingle()
+    if (!assignment) return null
+
+    const { data, error } = await supabase
       .from('projects')
       .select('id, title, status, project_type, address, client_name, client_phone, current_phase, percent_complete, estimated_start_date, target_completion_date')
       .eq('id', entityId)
       .single()
+    if (error || !data) return null
+    return { type: entityType, data }
   }
 
-  const { data, error } = await query
+  const { data, error } = await supabase.from(table).select('*').eq('id', entityId).single()
   if (error || !data) return null
   return { type: entityType, data }
 }
@@ -249,7 +261,26 @@ serve(async (req) => {
     // 8. FETCH LIVE ENTITY DATA
     let entityData: { type: string; data: object } | null = null
     if (input.entity_id && input.entity_type) {
-      entityData = await fetchEntityData(supabase, input.entity_type, input.entity_id, input.user_role)
+      entityData = await fetchEntityData(supabase, input.entity_type, input.entity_id, input.user_role, input.user_id)
+    }
+
+    // If an employee asked for a project they're not assigned to, deny
+    // explicitly so the agent can't leak context via other sections.
+    if (
+      input.user_role === 'employee'
+      && input.entity_type === 'project'
+      && input.entity_id
+      && !entityData
+    ) {
+      return new Response(
+        JSON.stringify({
+          denied: true,
+          deny_reason: 'You are not assigned to this project',
+          system_prompt: '',
+          allowed_capabilities: [],
+        } satisfies AssembledContext),
+        { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
+      )
     }
 
     // 9. BUILD SYSTEM PROMPT
