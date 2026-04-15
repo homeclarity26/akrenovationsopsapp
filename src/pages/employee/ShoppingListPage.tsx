@@ -1,11 +1,24 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Plus, Check, ArrowLeft, Trash2 } from 'lucide-react'
+import { Plus, Check, ArrowLeft, Trash2, Link2, X as XIcon, PackageMinus, CircleCheck } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { cn } from '@/lib/utils'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
+import { InventoryItemPicker } from '@/components/inventory/InventoryItemPicker'
+
+interface InventoryItemRef {
+  id: string
+  name: string
+}
+
+interface InventoryLocationRef {
+  id: string
+  name: string
+  type: string
+  is_active: boolean
+}
 
 interface ShoppingItem {
   id: string
@@ -16,6 +29,12 @@ interface ShoppingItem {
   status: string
   project_id: string | null
   project_title?: string
+  // PR 10 inventory integration columns
+  inventory_item_id: string | null
+  source_location_id: string | null
+  deducted_at: string | null
+  deducted_stocktake_id: string | null
+  inventory_items: InventoryItemRef | null
 }
 
 interface ActiveProject {
@@ -27,6 +46,7 @@ export function ShoppingListPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
 
   // ── add-item sheet state ──────────────────────────────────────────
   const [sheetOpen, setSheetOpen] = useState(false)
@@ -38,17 +58,24 @@ export function ShoppingListPage() {
   const [submitting, setSubmitting] = useState(false)
   const [formError, setFormError] = useState('')
 
+  // ── inventory picker state ───────────────────────────────────────
+  // `pickerForItemId` = id of the shopping row the picker is linking to.
+  const [pickerForItemId, setPickerForItemId] = useState<string | null>(null)
+
   // ── fetch items ───────────────────────────────────────────────────
   const { data: rawItems = [], isLoading, error: itemsError, refetch: itemsRefetch } = useQuery({
     queryKey: ['shopping-list-items'],
     queryFn: async () => {
       const { data } = await supabase
         .from('shopping_list_items')
-        .select('*, projects(title)')
+        .select(
+          'id, item_name, quantity, unit, notes, status, project_id, inventory_item_id, source_location_id, deducted_at, deducted_stocktake_id, projects(title), inventory_items(id, name)',
+        )
         .order('created_at', { ascending: false })
       return (data ?? []).map((i: any) => ({
         ...i,
         project_title: i.projects?.title ?? 'No Project',
+        inventory_items: i.inventory_items ?? null,
       })) as ShoppingItem[]
     },
   })
@@ -66,8 +93,32 @@ export function ShoppingListPage() {
     },
   })
 
+  // ── fetch active inventory locations (admin only, for source picker) ──
+  const { data: locations = [] } = useQuery({
+    queryKey: ['inventory-locations-for-shopping', user?.company_id],
+    enabled: isAdmin && !!user?.company_id,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('inventory_locations')
+        .select('id, name, type, is_active')
+        .eq('company_id', user!.company_id!)
+        .eq('is_active', true)
+        .order('type') // 'shop' sorts before 'trailer'/'truck' alphabetically
+        .order('name')
+      return (data ?? []) as InventoryLocationRef[]
+    },
+  })
+
+  // shop-first ordering: put 'shop' types first, everything else alphabetical.
+  const orderedLocations = [...locations].sort((a, b) => {
+    if (a.type === 'shop' && b.type !== 'shop') return -1
+    if (b.type === 'shop' && a.type !== 'shop') return 1
+    return a.name.localeCompare(b.name)
+  })
+
   // ── optimistic local overrides ────────────────────────────────────
   const [localOverrides, setLocalOverrides] = useState<Record<string, string>>({})
+  const [busyIds, setBusyIds] = useState<Record<string, boolean>>({})
 
   const items: ShoppingItem[] = rawItems.map(i => ({
     ...i,
@@ -86,12 +137,70 @@ export function ShoppingListPage() {
   }
 
   // ── toggle needed ↔ purchased ─────────────────────────────────────
-  const toggle = async (id: string) => {
+  // Admin-only: when marking an item "delivered"/purchased and it has a
+  // linked inventory item + source location, also auto-deduct from stock.
+  const toggle = async (id: string, opts?: { autoDeduct?: boolean }) => {
     const item = items.find(i => i.id === id)
     if (!item) return
     const newStatus = item.status === 'needed' ? 'purchased' : 'needed'
     setLocalOverrides(prev => ({ ...prev, [id]: newStatus }))
     await supabase.from('shopping_list_items').update({ status: newStatus }).eq('id', id)
+
+    // Auto-deduct path — admins, transitioning to purchased, linked + not
+    // already deducted. UI offers a checkbox; if we get here we honor it.
+    if (
+      isAdmin &&
+      newStatus === 'purchased' &&
+      opts?.autoDeduct &&
+      item.inventory_item_id &&
+      item.source_location_id &&
+      !item.deducted_at
+    ) {
+      await deductFromStock(id)
+    }
+
+    queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
+  }
+
+  // ── deduct from stock (admin) ────────────────────────────────────
+  const deductFromStock = async (id: string) => {
+    setBusyIds(prev => ({ ...prev, [id]: true }))
+    try {
+      const { data, error } = await supabase.functions.invoke('deduct-shopping-item-from-stock', {
+        body: { shopping_list_item_id: id },
+      })
+      if (error) {
+        window.alert(`Could not deduct: ${error.message}`)
+        return
+      }
+      if (data?.warning) {
+        window.alert(`Deducted with a warning: ${data.warning}`)
+      }
+      queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
+    } finally {
+      setBusyIds(prev => {
+        const next = { ...prev }
+        delete next[id]
+        return next
+      })
+    }
+  }
+
+  // ── link / unlink inventory ──────────────────────────────────────
+  const saveInventoryLink = async (rowId: string, inventoryItemId: string | null) => {
+    // When unlinking, also clear source location so the UI never offers to
+    // deduct against a stale link.
+    const patch: Record<string, unknown> = { inventory_item_id: inventoryItemId }
+    if (inventoryItemId === null) patch.source_location_id = null
+    await supabase.from('shopping_list_items').update(patch).eq('id', rowId)
+    queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
+  }
+
+  const saveSourceLocation = async (rowId: string, locationId: string | null) => {
+    await supabase
+      .from('shopping_list_items')
+      .update({ source_location_id: locationId })
+      .eq('id', rowId)
     queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
   }
 
@@ -176,6 +285,8 @@ export function ShoppingListPage() {
     )
   }
 
+  const pickerRow = pickerForItemId ? items.find(i => i.id === pickerForItemId) : null
+
   // ── main render ───────────────────────────────────────────────────
   return (
     <>
@@ -223,7 +334,18 @@ export function ShoppingListPage() {
                   {project}
                 </p>
                 {projectItems.map(item => (
-                  <ItemRow key={item.id} item={item} onToggle={toggle} />
+                  <ItemRow
+                    key={item.id}
+                    item={item}
+                    onToggle={toggle}
+                    isAdmin={isAdmin}
+                    locations={orderedLocations}
+                    busy={!!busyIds[item.id]}
+                    onOpenPicker={() => setPickerForItemId(item.id)}
+                    onUnlinkInventory={() => saveInventoryLink(item.id, null)}
+                    onChangeSource={(locId) => saveSourceLocation(item.id, locId)}
+                    onDeduct={() => deductFromStock(item.id)}
+                  />
                 ))}
               </div>
             ))}
@@ -248,12 +370,34 @@ export function ShoppingListPage() {
             </div>
             <Card padding="none">
               {purchased.map(item => (
-                <ItemRow key={item.id} item={item} onToggle={toggle} showProject />
+                <ItemRow
+                  key={item.id}
+                  item={item}
+                  onToggle={toggle}
+                  showProject
+                  isAdmin={isAdmin}
+                  locations={orderedLocations}
+                  busy={!!busyIds[item.id]}
+                  onOpenPicker={() => setPickerForItemId(item.id)}
+                  onUnlinkInventory={() => saveInventoryLink(item.id, null)}
+                  onChangeSource={(locId) => saveSourceLocation(item.id, locId)}
+                  onDeduct={() => deductFromStock(item.id)}
+                />
               ))}
             </Card>
           </div>
         )}
       </div>
+
+      {/* Inventory picker modal */}
+      <InventoryItemPicker
+        companyId={user?.company_id}
+        open={!!pickerForItemId && isAdmin}
+        onClose={() => setPickerForItemId(null)}
+        onPick={(picked) => {
+          if (pickerRow) void saveInventoryLink(pickerRow.id, picked.id)
+        }}
+      />
 
       {/* Add Item bottom sheet overlay */}
       {sheetOpen && (
@@ -380,52 +524,163 @@ export function ShoppingListPage() {
 
 interface ItemRowProps {
   item: ShoppingItem
-  onToggle: (id: string) => void
+  onToggle: (id: string, opts?: { autoDeduct?: boolean }) => void | Promise<void>
   showProject?: boolean
+  isAdmin: boolean
+  locations: InventoryLocationRef[]
+  busy: boolean
+  onOpenPicker: () => void
+  onUnlinkInventory: () => void | Promise<void>
+  onChangeSource: (locationId: string | null) => void | Promise<void>
+  onDeduct: () => void | Promise<void>
 }
 
-function ItemRow({ item, onToggle, showProject = false }: ItemRowProps) {
+function ItemRow({
+  item,
+  onToggle,
+  showProject = false,
+  isAdmin,
+  locations,
+  busy,
+  onOpenPicker,
+  onUnlinkInventory,
+  onChangeSource,
+  onDeduct,
+}: ItemRowProps) {
   const isPurchased = item.status !== 'needed'
-  return (
-    <div className="flex items-center gap-3 px-4 py-3.5 border-b border-[var(--border-light)] last:border-0 min-h-[44px]">
-      <button
-        onClick={() => onToggle(item.id)}
-        className={cn(
-          'w-6 h-6 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all',
-          isPurchased
-            ? 'bg-[var(--success)] border-[var(--success)]'
-            : 'border-[var(--border)] hover:border-[var(--navy)] active:scale-90'
-        )}
-        aria-label={isPurchased ? 'Mark as needed' : 'Mark as purchased'}
-      >
-        {isPurchased && <Check size={13} className="text-white" />}
-      </button>
+  const isLinked = !!item.inventory_item_id
+  const hasSource = !!item.source_location_id
+  const deducted = !!item.deducted_at
+  const canDeduct = isAdmin && isLinked && hasSource && !deducted
 
-      <div className="flex-1 min-w-0">
-        <p className={cn(
-          'text-sm font-medium text-[var(--text)] truncate',
-          isPurchased && 'line-through text-[var(--text-tertiary)]'
-        )}>
-          {item.item_name}
-        </p>
-        <div className="flex items-center gap-1.5 flex-wrap">
-          {(item.quantity != null || item.unit) && (
-            <span className="text-xs text-[var(--text-tertiary)]">
-              {item.quantity ?? 1}{item.unit ? ` ${item.unit}` : ''}
-            </span>
+  // Admins get a "also deduct" checkbox next to the status circle. Default
+  // checked when everything is wired up — purchased is the delivery signal.
+  const [autoDeductChecked, setAutoDeductChecked] = useState(true)
+
+  return (
+    <div className="px-4 py-3 border-b border-[var(--border-light)] last:border-0">
+      <div className="flex items-start gap-3 min-h-[44px]">
+        <button
+          onClick={() => onToggle(item.id, { autoDeduct: canDeduct && autoDeductChecked })}
+          className={cn(
+            'w-6 h-6 mt-0.5 rounded-full border-2 flex items-center justify-center flex-shrink-0 transition-all',
+            isPurchased
+              ? 'bg-[var(--success)] border-[var(--success)]'
+              : 'border-[var(--border)] hover:border-[var(--navy)] active:scale-90',
           )}
-          {showProject && item.project_title && (
-            <span className="text-xs text-[var(--text-tertiary)]">
-              {item.quantity != null || item.unit ? '·' : ''} {item.project_title}
+          aria-label={isPurchased ? 'Mark as needed' : 'Mark as purchased'}
+        >
+          {isPurchased && <Check size={13} className="text-white" />}
+        </button>
+
+        <div className="flex-1 min-w-0">
+          <p className={cn(
+            'text-sm font-medium text-[var(--text)] truncate',
+            isPurchased && 'line-through text-[var(--text-tertiary)]',
+          )}>
+            {item.item_name}
+          </p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {(item.quantity != null || item.unit) && (
+              <span className="text-xs text-[var(--text-tertiary)]">
+                {item.quantity ?? 1}{item.unit ? ` ${item.unit}` : ''}
+              </span>
+            )}
+            {showProject && item.project_title && (
+              <span className="text-xs text-[var(--text-tertiary)]">
+                {item.quantity != null || item.unit ? '·' : ''} {item.project_title}
+              </span>
+            )}
+            {item.notes && (
+              <span className="text-xs text-[var(--text-tertiary)] italic truncate max-w-[160px]">
+                {item.notes}
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* Admin inventory controls — render below the main row so the mobile
+          layout doesn't get squeezed. Employees don't see any of this. */}
+      {isAdmin && (
+        <div className="pl-9 pt-2 flex flex-wrap items-center gap-2">
+          {/* Link chip */}
+          {isLinked ? (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium bg-[var(--border-light)] text-[var(--text)] px-2 py-1 rounded-full">
+              <Link2 size={11} />
+              {item.inventory_items?.name ?? 'Linked item'}
+              <button
+                onClick={onUnlinkInventory}
+                aria-label="Unlink inventory item"
+                className="ml-0.5 w-3.5 h-3.5 flex items-center justify-center rounded-full hover:bg-[var(--border)]"
+              >
+                <XIcon size={9} />
+              </button>
             </span>
+          ) : (
+            <button
+              onClick={onOpenPicker}
+              className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--navy)] border border-[var(--border)] px-2 py-1 rounded-full hover:bg-[var(--border-light)] transition-colors"
+            >
+              <Link2 size={11} />
+              Link to inventory
+            </button>
           )}
-          {item.notes && (
-            <span className="text-xs text-[var(--text-tertiary)] italic truncate max-w-[160px]">
-              {item.notes}
+
+          {/* Source location select (only if linked) */}
+          {isLinked && (
+            <select
+              value={item.source_location_id ?? ''}
+              onChange={(e) => onChangeSource(e.target.value || null)}
+              disabled={deducted}
+              className="text-[11px] border border-[var(--border)] rounded-full px-2 py-1 bg-white text-[var(--text)] focus:outline-none focus:border-[var(--navy)] disabled:opacity-60"
+              aria-label="Source location"
+            >
+              <option value="">Pulling from: select location</option>
+              {locations.map((l) => (
+                <option key={l.id} value={l.id}>
+                  Pulling from: {l.name}
+                </option>
+              ))}
+            </select>
+          )}
+
+          {/* Deduct button */}
+          {canDeduct && (
+            <button
+              onClick={onDeduct}
+              disabled={busy}
+              className="inline-flex items-center gap-1 text-[11px] font-semibold text-white bg-[var(--navy)] px-2 py-1 rounded-full disabled:opacity-60"
+            >
+              <PackageMinus size={11} />
+              {busy ? 'Deducting...' : 'Deduct from stock'}
+            </button>
+          )}
+
+          {/* Auto-deduct checkbox — shows only when canDeduct and item is
+              still in 'needed'. Clicking the status circle will fire the
+              deduction in addition to flipping status. */}
+          {canDeduct && !isPurchased && (
+            <label className="inline-flex items-center gap-1 text-[11px] text-[var(--text-secondary)] cursor-pointer">
+              <input
+                type="checkbox"
+                checked={autoDeductChecked}
+                onChange={(e) => setAutoDeductChecked(e.target.checked)}
+                className="w-3 h-3"
+              />
+              Also deduct on delivery
+            </label>
+          )}
+
+          {/* Deducted pill */}
+          {deducted && (
+            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--success)] bg-[var(--success)]/10 px-2 py-1 rounded-full">
+              <CircleCheck size={11} />
+              Stock deducted
             </span>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }
