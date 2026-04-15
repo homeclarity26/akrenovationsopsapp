@@ -12,6 +12,7 @@ import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
+import { AI_CONFIG } from '../_shared/aiConfig.ts'
 
 const InputSchema = z.object({
   system: z.string(),
@@ -59,7 +60,7 @@ serve(async (req) => {
 
   const system = (body.system || '').toString().slice(0, 8000)
   const message = (body.message || '').toString().slice(0, 2000)
-  const model = body.model || 'claude-haiku-4-5'
+  const model = body.model || AI_CONFIG.FAST_MODEL
   const maxTokens = Math.min(body.max_tokens || 300, 500)
 
   const apiKey = Deno.env.get('ANTHROPIC_API_KEY')

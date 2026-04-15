@@ -11,12 +11,14 @@ import { useAuth } from '@/context/AuthContext'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 import { cn } from '@/lib/utils'
 
+// Badge counts are not wired to real data yet — keep them at 0 until the
+// unread/pending queries exist so users never see fake notification counts.
 const NAV = [
   { to: '/employee',          label: 'Home',     icon: Home,            exact: true, badge: 0 },
-  { to: '/employee/shopping', label: 'List',     icon: ShoppingCart,    badge: 4 },
+  { to: '/employee/shopping', label: 'List',     icon: ShoppingCart,    badge: 0 },
   { to: '/employee/time',     label: 'Clock',    icon: Clock,           badge: 0 },
   { to: '/employee/schedule', label: 'Schedule', icon: Calendar,        badge: 0 },
-  { to: '/employee/messages', label: 'Messages', icon: MessageCircle,   badge: 2 },
+  { to: '/employee/messages', label: 'Messages', icon: MessageCircle,   badge: 0 },
 ]
 
 export function EmployeeLayout() {
