@@ -1,11 +1,11 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { ArrowLeft, MapPin, Phone, Mail, Check, Flag, AlertCircle, ChevronRight, Mic, Sparkles, Star, Image as ImageIcon, ShieldCheck } from 'lucide-react'
+import { ArrowLeft, MapPin, Phone, Mail, Check, Flag, AlertCircle, ChevronRight, Mic, Sparkles, Star, Image as ImageIcon, ShieldCheck, Plus, Loader2, ArrowDownLeft, ArrowUpRight, MessageCircle, Users } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
@@ -23,12 +23,75 @@ import { InviteClientToPortal } from '@/components/project/InviteClientToPortal'
 
 type Tab = 'overview' | 'activity' | 'financials' | 'budget' | 'subs' | 'team' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
 
+interface CommLogEntry {
+  id: string
+  project_id: string | null
+  direction: 'inbound' | 'outbound' | 'internal' | null
+  channel: 'email' | 'sms' | 'phone' | 'in_app' | 'meeting' | 'other' | null
+  comm_type: string | null
+  party_name: string | null
+  party_type: string | null
+  summary: string | null
+  body: string | null
+  logged_by: string | null
+  logged_via: string | null
+  occurred_at: string
+  created_at: string
+}
+
+function commDateLabel(iso: string): string {
+  const d = new Date(iso)
+  const today = new Date()
+  const y = new Date()
+  y.setDate(today.getDate() - 1)
+  const sameDay = (a: Date, b: Date) =>
+    a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate()
+  if (sameDay(d, today)) return 'Today'
+  if (sameDay(d, y)) return 'Yesterday'
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: d.getFullYear() === today.getFullYear() ? undefined : 'numeric' })
+}
+
+function commRelativeTime(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime()
+  const mins = Math.floor(diff / 60_000)
+  if (mins < 1) return 'just now'
+  if (mins < 60) return `${mins}m ago`
+  const hrs = Math.floor(mins / 60)
+  if (hrs < 24) return `${hrs}h ago`
+  const days = Math.floor(hrs / 24)
+  if (days < 7) return `${days}d ago`
+  return new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+}
+
+function commChannelIcon(channel: string | null) {
+  if (channel === 'email') return Mail
+  if (channel === 'sms' || channel === 'in_app') return MessageCircle
+  if (channel === 'phone') return Phone
+  if (channel === 'meeting') return Users
+  return MessageCircle
+}
+
+function commDirectionIcon(direction: string | null) {
+  if (direction === 'inbound') return ArrowDownLeft
+  if (direction === 'outbound') return ArrowUpRight
+  return Users
+}
+
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const [tab, setTab] = useState<Tab>('overview')
   const canShareWithClient = user?.role === 'admin' || user?.role === 'super_admin'
+
+  // Comms tab — local state for the "Log conversation" inline form.
+  const [commFormOpen, setCommFormOpen] = useState(false)
+  const [commChannel, setCommChannel] = useState<'email' | 'sms' | 'phone' | 'in_app' | 'meeting' | 'other'>('phone')
+  const [commDirection, setCommDirection] = useState<'inbound' | 'outbound' | 'internal'>('inbound')
+  const [commPartyName, setCommPartyName] = useState('')
+  const [commPartyType, setCommPartyType] = useState<'client' | 'subcontractor' | 'supplier' | 'inspector' | 'team' | 'other'>('client')
+  const [commSummary, setCommSummary] = useState('')
 
   // Live-update the whole page when anyone on the team makes a change.
   useProjectRealtime(id)
@@ -133,6 +196,49 @@ export function ProjectDetailPage() {
     },
   })
 
+  // PR 17: real comms timeline from communication_log.
+  const { data: commEntries = [] } = useQuery({
+    queryKey: ['project_comm_log', id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('communication_log')
+        .select('id, project_id, direction, channel, comm_type, party_name, party_type, summary, body, logged_by, logged_via, occurred_at, created_at')
+        .eq('project_id', id)
+        .order('occurred_at', { ascending: false })
+        .limit(50)
+      if (error) throw error
+      return (data ?? []) as CommLogEntry[]
+    },
+  })
+
+  const logCommMutation = useMutation({
+    mutationFn: async () => {
+      if (!id || !user?.id) throw new Error('Missing project or user')
+      const summaryTrimmed = commSummary.trim()
+      if (!summaryTrimmed) throw new Error('Summary required')
+      const { error } = await supabase.from('communication_log').insert({
+        project_id: id,
+        direction: commDirection,
+        channel: commChannel,
+        comm_type: commChannel === 'sms' ? 'sms' : commChannel === 'email' ? 'email' : commChannel === 'meeting' ? 'meeting' : 'call',
+        party_name: commPartyName.trim() || null,
+        party_type: commPartyType,
+        summary: summaryTrimmed,
+        logged_by: user.id,
+        logged_via: 'manual',
+        occurred_at: new Date().toISOString(),
+      })
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['project_comm_log', id] })
+      setCommFormOpen(false)
+      setCommPartyName('')
+      setCommSummary('')
+    },
+  })
+
   const { data: timeEntries = [] } = useQuery({
     queryKey: ['project_time_entries', id, user?.company_id],
     enabled: !!id,
@@ -179,9 +285,6 @@ export function ProjectDetailPage() {
       </div>
     )
   }
-
-  // Comm log — no real table yet, show empty state
-  const commEntries: never[] = []
 
   const expenseTotal = (expenses as Array<{ amount: number }>).reduce((s, e) => s + e.amount, 0)
   const invoiceTotal = (invoices as Array<{ total: number }>).reduce((s, i) => s + i.total, 0)
@@ -723,20 +826,24 @@ export function ProjectDetailPage() {
 
         {/* ── COMMUNICATION LOG (timeline) ── */}
         {tab === 'comms' && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
-                Unified communication timeline
-              </p>
-              <Button size="sm">
-                <Mic size={13} />
-                Log conversation
-              </Button>
-            </div>
-            <Card padding="none">
-              <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No communication yet</div>
-            </Card>
-          </div>
+          <CommsTab
+            entries={commEntries}
+            formOpen={commFormOpen}
+            setFormOpen={setCommFormOpen}
+            channel={commChannel}
+            setChannel={setCommChannel}
+            direction={commDirection}
+            setDirection={setCommDirection}
+            partyName={commPartyName}
+            setPartyName={setCommPartyName}
+            partyType={commPartyType}
+            setPartyType={setCommPartyType}
+            summary={commSummary}
+            setSummary={setCommSummary}
+            onSubmit={() => logCommMutation.mutate()}
+            submitting={logCommMutation.isPending}
+            errorMsg={logCommMutation.error instanceof Error ? logCommMutation.error.message : null}
+          />
         )}
 
         {/* ── WARRANTY ── */}
@@ -835,6 +942,212 @@ export function ProjectDetailPage() {
           </Card>
         )}
       </div>
+    </div>
+  )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CommsTab — PR 17: project-scoped timeline from communication_log + inline
+// manual-entry form. Voice transcription via Mic is intentionally deferred
+// to a future PR; only the text entry is wired here.
+// ─────────────────────────────────────────────────────────────────────────────
+
+interface CommsTabProps {
+  entries: CommLogEntry[]
+  formOpen: boolean
+  setFormOpen: (v: boolean) => void
+  channel: 'email' | 'sms' | 'phone' | 'in_app' | 'meeting' | 'other'
+  setChannel: (v: 'email' | 'sms' | 'phone' | 'in_app' | 'meeting' | 'other') => void
+  direction: 'inbound' | 'outbound' | 'internal'
+  setDirection: (v: 'inbound' | 'outbound' | 'internal') => void
+  partyName: string
+  setPartyName: (v: string) => void
+  partyType: 'client' | 'subcontractor' | 'supplier' | 'inspector' | 'team' | 'other'
+  setPartyType: (v: 'client' | 'subcontractor' | 'supplier' | 'inspector' | 'team' | 'other') => void
+  summary: string
+  setSummary: (v: string) => void
+  onSubmit: () => void
+  submitting: boolean
+  errorMsg: string | null
+}
+
+function CommsTab(props: CommsTabProps) {
+  const grouped = useMemo(() => {
+    const map = new Map<string, CommLogEntry[]>()
+    for (const entry of props.entries) {
+      const label = commDateLabel(entry.occurred_at)
+      if (!map.has(label)) map.set(label, [])
+      map.get(label)!.push(entry)
+    }
+    return Array.from(map.entries())
+  }, [props.entries])
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">
+          Unified communication timeline
+        </p>
+        <div className="flex gap-2">
+          <Button size="sm" variant="secondary" onClick={() => props.setFormOpen(!props.formOpen)}>
+            <Plus size={13} />
+            {props.formOpen ? 'Cancel' : 'Log conversation'}
+          </Button>
+          <Button size="sm" title="Voice transcription coming soon" disabled>
+            <Mic size={13} />
+            Voice
+          </Button>
+        </div>
+      </div>
+
+      {props.formOpen && (
+        <Card>
+          <p className="text-sm font-semibold text-[var(--text)] mb-3">New communication</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Channel</label>
+              <select
+                value={props.channel}
+                onChange={e => props.setChannel(e.target.value as CommsTabProps['channel'])}
+                className="mt-1 w-full text-sm px-2 py-2 rounded-lg border border-[var(--border)] bg-white"
+              >
+                <option value="phone">Phone</option>
+                <option value="email">Email</option>
+                <option value="sms">SMS</option>
+                <option value="meeting">Meeting</option>
+                <option value="in_app">In-app</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Direction</label>
+              <select
+                value={props.direction}
+                onChange={e => props.setDirection(e.target.value as CommsTabProps['direction'])}
+                className="mt-1 w-full text-sm px-2 py-2 rounded-lg border border-[var(--border)] bg-white"
+              >
+                <option value="inbound">Inbound</option>
+                <option value="outbound">Outbound</option>
+                <option value="internal">Internal</option>
+              </select>
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Party name</label>
+              <input
+                type="text"
+                value={props.partyName}
+                onChange={e => props.setPartyName(e.target.value)}
+                placeholder="e.g. Sarah Chen"
+                className="mt-1 w-full text-sm px-2 py-2 rounded-lg border border-[var(--border)] bg-white"
+              />
+            </div>
+            <div>
+              <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Party type</label>
+              <select
+                value={props.partyType}
+                onChange={e => props.setPartyType(e.target.value as CommsTabProps['partyType'])}
+                className="mt-1 w-full text-sm px-2 py-2 rounded-lg border border-[var(--border)] bg-white"
+              >
+                <option value="client">Client</option>
+                <option value="subcontractor">Subcontractor</option>
+                <option value="supplier">Supplier</option>
+                <option value="inspector">Inspector</option>
+                <option value="team">Team</option>
+                <option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div className="mt-3">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Summary</label>
+            <textarea
+              value={props.summary}
+              onChange={e => props.setSummary(e.target.value)}
+              placeholder="Short summary of what was discussed"
+              rows={3}
+              className="mt-1 w-full text-sm px-2 py-2 rounded-lg border border-[var(--border)] bg-white resize-y"
+            />
+          </div>
+          {props.errorMsg && (
+            <p className="mt-2 text-xs text-[var(--danger)]">{props.errorMsg}</p>
+          )}
+          <div className="mt-3 flex justify-end gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              onClick={() => props.setFormOpen(false)}
+              disabled={props.submitting}
+            >
+              Cancel
+            </Button>
+            <Button
+              size="sm"
+              onClick={props.onSubmit}
+              disabled={props.submitting || props.summary.trim().length === 0}
+            >
+              {props.submitting ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}
+              Log
+            </Button>
+          </div>
+        </Card>
+      )}
+
+      {props.entries.length === 0 ? (
+        <Card padding="none">
+          <div className="p-6 text-center text-sm text-[var(--text-tertiary)]">No communication yet</div>
+        </Card>
+      ) : (
+        <div className="space-y-4">
+          {grouped.map(([dateLabel, entries]) => (
+            <div key={dateLabel}>
+              <p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-2 px-1">
+                {dateLabel}
+              </p>
+              <Card padding="none">
+                {entries.map((entry, idx) => {
+                  const ChannelIcon = commChannelIcon(entry.channel ?? entry.comm_type)
+                  const DirectionIcon = commDirectionIcon(entry.direction)
+                  return (
+                    <div
+                      key={entry.id}
+                      className={`p-4 ${idx < entries.length - 1 ? 'border-b border-[var(--border-light)]' : ''}`}
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-8 h-8 rounded-full bg-[var(--cream-light)] flex items-center justify-center flex-shrink-0">
+                          <ChannelIcon size={14} className="text-[var(--navy)]" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 flex-wrap mb-0.5">
+                            <DirectionIcon size={12} className="text-[var(--text-tertiary)]" />
+                            <p className="text-xs font-semibold text-[var(--text)] truncate">
+                              {entry.party_name || (entry.party_type ? entry.party_type.replace(/_/g, ' ') : 'Unknown')}
+                            </p>
+                            {entry.party_type && (
+                              <span className="text-[10px] font-medium text-[var(--text-tertiary)] bg-[var(--cream-light)] px-2 py-0.5 rounded-full">
+                                {entry.party_type}
+                              </span>
+                            )}
+                            {entry.logged_via === 'ai' && (
+                              <span className="text-[10px] font-medium text-[var(--navy)] bg-[var(--cream-light)] px-2 py-0.5 rounded-full">
+                                AI
+                              </span>
+                            )}
+                            <span className="text-[10px] text-[var(--text-tertiary)] ml-auto">
+                              {commRelativeTime(entry.occurred_at)}
+                            </span>
+                          </div>
+                          <p className="text-sm text-[var(--text-secondary)] break-words">
+                            {entry.summary || entry.body || '(no summary)'}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </Card>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

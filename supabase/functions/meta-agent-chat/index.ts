@@ -319,6 +319,11 @@ INVENTORY DELEGATES:
     Vision proposals from a shelf/truck photo. Never writes stocktakes — caller reviews.
   deduct-shopping-item-from-stock { shopping_list_item_id } → { ok, previous_qty, new_qty, stocktake_id }
     Pulls a linked shopping item off its source_location via a stocktake row. Idempotent.
+
+OBSERVABILITY & COMMS TABLES (PR 17):
+- communication_log: project-scoped comms timeline. Write when you hear about a call/email/meeting. Columns: project_id, direction (inbound/outbound/internal), channel (email/sms/phone/in_app/meeting/other), party_name, party_type (client/subcontractor/supplier/inspector/team/other), summary, body, logged_by, logged_via (manual/ai/import), occurred_at. Use logged_via='ai' when you insert rows yourself.
+- improvement_suggestions: company-scoped "what to improve" queue. Driven by agent-improvement-analysis weekly. Columns: company_id, category (free text), title, description, rationale, priority, status (open/acknowledged/in_progress/done/dismissed).
+- error_log / agent_execution_log: observability. Admins view in /admin/settings/health. Do not write to these directly from chat — the _shared/logError.ts helper and agent runners handle them.
 `
 
 // ---------------------------------------------------------------------------
