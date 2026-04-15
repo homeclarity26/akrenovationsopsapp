@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import {
   Home, ShoppingCart, Clock, Calendar,
   MessageCircle, Sparkles
@@ -7,6 +7,7 @@ import {
 import { AIBar } from '@/components/ui/AIBar'
 import { Badge } from '@/components/ui/Badge'
 import { ModeToggle } from '@/components/ui/ModeToggle'
+import { useAuth } from '@/context/AuthContext'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 import { cn } from '@/lib/utils'
 
@@ -20,7 +21,13 @@ const NAV = [
 
 export function EmployeeLayout() {
   const [aiOpen, setAiOpen] = useState(false)
+  const { user } = useAuth()
   const { data: company } = useCompanyProfile()
+
+  // Onboarding guard — redirect to field wizard if incomplete
+  if (user && !user.field_onboarding_complete) {
+    return <Navigate to="/onboard/field" replace />
+  }
 
   return (
     <div className="flex flex-col min-h-svh bg-[var(--bg)]">

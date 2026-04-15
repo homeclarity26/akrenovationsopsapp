@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { NavLink, Outlet } from 'react-router-dom'
+import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, Users, FolderOpen, DollarSign,
   Calendar, Sparkles, Settings, Menu, X, FileText,
@@ -33,6 +33,14 @@ export function AdminLayout() {
   const { user } = useAuth()
   const { data: company } = useCompanyProfile()
   const isSuperAdmin = user?.role === 'super_admin'
+
+  // Onboarding guards — redirect to the appropriate wizard if incomplete
+  if (isSuperAdmin && !user?.platform_onboarding_complete) {
+    return <Navigate to="/onboard/platform" replace />
+  }
+  if ((isSuperAdmin || user?.role === 'admin') && !user?.company_onboarding_complete) {
+    return <Navigate to="/onboard/company" replace />
+  }
 
   return (
     <div className="flex flex-col min-h-svh bg-[var(--bg)]">

@@ -138,6 +138,14 @@ function AuthLoadingScreen() {
   )
 }
 
+/** Requires authentication but no specific role — used for onboarding wizards accessible by any role. */
+function AuthRequired({ children }: { children: React.ReactNode }) {
+  const { user, loading } = useAuth()
+  if (loading) return <AuthLoadingScreen />
+  if (!user) return <Navigate to="/login" replace />
+  return <>{children}</>
+}
+
 function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'client' | 'super_admin'; children: React.ReactNode }) {
   const { user, loading } = useAuth()
   // Wait for the initial Supabase session check to complete before deciding
@@ -239,7 +247,7 @@ function AppRoutes() {
         {/* Onboarding wizards (standalone, no layout chrome) */}
         <Route path="/onboard/platform" element={<ProtectedRoute role="super_admin"><PlatformOnboarding /></ProtectedRoute>} />
         <Route path="/onboard/company" element={<ProtectedRoute role="admin"><CompanyOnboardingWizard /></ProtectedRoute>} />
-        <Route path="/onboard/field" element={<ProtectedRoute role="employee"><FieldOnboarding /></ProtectedRoute>} />
+        <Route path="/onboard/field" element={<AuthRequired><FieldOnboarding /></AuthRequired>} />
 
         {/* Admin */}
         <Route path="/admin" element={<ProtectedRoute role="admin"><AdminLayout /></ProtectedRoute>}>

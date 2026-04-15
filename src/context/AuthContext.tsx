@@ -36,6 +36,8 @@ interface AuthContextValue {
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signUp: (email: string, password: string, fullName?: string) => Promise<{ error: string | null }>
   signOut: () => Promise<void>
+  /** Re-fetch the profile from Supabase and update in-memory user state. */
+  refreshProfile: () => Promise<void>
   /** Legacy shim for any old code that calls `login(userId)` — no-op now. */
   login: (_userId: string) => void
 }
@@ -157,13 +159,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setSession(null)
   }
 
+  const refreshProfile = async () => {
+    if (!session?.user) return
+    const profile = await fetchProfile(session.user.id, session.user.email)
+    if (profile) setUser(profile)
+  }
+
   // Legacy no-op — old code path that used `login(userId)` from mock
   const login = (_userId: string) => {
     console.warn('[auth] legacy login() called — use signIn(email, password) instead')
   }
 
   return (
-    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut, login }}>
+    <AuthContext.Provider value={{ user, session, loading, signIn, signUp, signOut, refreshProfile, login }}>
       {children}
     </AuthContext.Provider>
   )

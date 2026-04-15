@@ -54,7 +54,7 @@ const STEPS = [
 
 export function PlatformOnboarding() {
   const navigate = useNavigate()
-  const { user } = useAuth()
+  const { user, refreshProfile } = useAuth()
   const [step, setStep] = useState(0)
   const [completing, setCompleting] = useState(false)
 
@@ -70,6 +70,7 @@ export function PlatformOnboarding() {
         .from('profiles')
         .update({ platform_onboarding_complete: true })
         .eq('id', user.id)
+      await refreshProfile()
       navigate('/onboard/company')
     } catch {
       navigate('/onboard/company')
