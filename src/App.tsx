@@ -87,6 +87,8 @@ const EmployeeChecklistsPage = lazy(() => import('./pages/employee/EmployeeCheck
 const ToolRequestPage = lazy(() => import('./pages/employee/ToolRequestPage').then(m => ({ default: m.ToolRequestPage })))
 const EmployeeProjectsPage = lazy(() => import('./pages/employee/EmployeeProjectsPage').then(m => ({ default: m.EmployeeProjectsPage })))
 const EmployeeProjectDetailPage = lazy(() => import('./pages/employee/EmployeeProjectDetailPage').then(m => ({ default: m.EmployeeProjectDetailPage })))
+// PR 9 — employee stocktake flow
+const EmployeeStocktakePage = lazy(() => import('./pages/employee/EmployeeStocktakePage').then(m => ({ default: m.EmployeeStocktakePage })))
 
 // Client pages
 const ClientProgress = lazy(() => import('./pages/client/ClientProgress').then(m => ({ default: m.ClientProgress })))
@@ -325,6 +327,8 @@ function AppRoutes() {
           {/* PR 5 — field-mode project detail */}
           <Route path="projects" element={<EmployeeProjectsPage />} />
           <Route path="projects/:id" element={<EmployeeProjectDetailPage />} />
+          {/* PR 9 — employee stocktake */}
+          <Route path="stocktake" element={<EmployeeStocktakePage />} />
         </Route>
 
         {/* Client */}

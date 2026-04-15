@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import {
   Home, ShoppingCart, Clock, Calendar,
-  MessageCircle, Sparkles, FolderOpen
+  MessageCircle, Sparkles, FolderOpen, Package
 } from 'lucide-react'
 import { AIBar } from '@/components/ui/AIBar'
 import { Badge } from '@/components/ui/Badge'
@@ -14,12 +14,13 @@ import { cn } from '@/lib/utils'
 // Badge counts are not wired to real data yet — keep them at 0 until the
 // unread/pending queries exist so users never see fake notification counts.
 const NAV = [
-  { to: '/employee',          label: 'Home',     icon: Home,            exact: true, badge: 0 },
-  { to: '/employee/projects', label: 'Projects', icon: FolderOpen,      badge: 0 },
-  { to: '/employee/shopping', label: 'List',     icon: ShoppingCart,    badge: 0 },
-  { to: '/employee/time',     label: 'Clock',    icon: Clock,           badge: 0 },
-  { to: '/employee/schedule', label: 'Schedule', icon: Calendar,        badge: 0 },
-  { to: '/employee/messages', label: 'Messages', icon: MessageCircle,   badge: 0 },
+  { to: '/employee',           label: 'Home',     icon: Home,            exact: true, badge: 0 },
+  { to: '/employee/projects',  label: 'Projects', icon: FolderOpen,      badge: 0 },
+  { to: '/employee/shopping',  label: 'List',     icon: ShoppingCart,    badge: 0 },
+  { to: '/employee/stocktake', label: 'Stock',    icon: Package,         badge: 0 },
+  { to: '/employee/time',      label: 'Clock',    icon: Clock,           badge: 0 },
+  { to: '/employee/schedule',  label: 'Schedule', icon: Calendar,        badge: 0 },
+  { to: '/employee/messages',  label: 'Messages', icon: MessageCircle,   badge: 0 },
 ]
 
 export function EmployeeLayout() {
@@ -56,7 +57,7 @@ export function EmployeeLayout() {
 
       {/* Bottom nav */}
       <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-[var(--border-light)] z-40">
-        <div className="grid grid-cols-6 h-16">
+        <div className="grid grid-cols-7 h-16">
           {NAV.map(({ to, label, icon: Icon, exact, badge }) => (
             <NavLink
               key={to}
@@ -70,7 +71,7 @@ export function EmployeeLayout() {
               }
             >
               <div className="relative">
-                <Icon size={22} />
+                <Icon size={20} />
                 {badge > 0 && (
                   <Badge count={badge} className="absolute -top-1.5 -right-1.5" />
                 )}
