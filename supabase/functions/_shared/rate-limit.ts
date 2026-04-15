@@ -99,6 +99,15 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
   'agent-proposal-writer':           { maxRequests: 20,  windowSeconds: 3600 },
   'backup-database':                 { maxRequests: 5,   windowSeconds: 86400 },
   'sync-google-drive':               { maxRequests: 30,  windowSeconds: 3600 },
+
+  // ─── Wave A additions: PRs 6 / 10 / 11 / 12 ───
+  'ai-suggest-project-action':       { maxRequests: 30,  windowSeconds: 3600 },
+  'apply-project-suggestion':        { maxRequests: 10,  windowSeconds: 3600 },
+  'reject-project-suggestion':       { maxRequests: 30,  windowSeconds: 3600 },
+  'deduct-shopping-item-from-stock': { maxRequests: 50,  windowSeconds: 3600 },
+  'ai-inventory-query':              { maxRequests: 30,  windowSeconds: 3600 },
+  'agent-inventory-alerts':          { maxRequests: 2,   windowSeconds: 86400 },
+  'agent-photo-stocktake':           { maxRequests: 50,  windowSeconds: 3600 },
 }
 
 const DEFAULT_LIMIT = { maxRequests: 60, windowSeconds: 3600 }

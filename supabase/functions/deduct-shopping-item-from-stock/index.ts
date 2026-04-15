@@ -15,6 +15,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { z } from 'npm:zod@3'
 import { verifyAuth } from '../_shared/auth.ts'
+import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
 
 const InputSchema = z.object({
@@ -38,6 +39,9 @@ serve(async (req) => {
     if (auth.role !== 'admin' && auth.role !== 'super_admin') {
       return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 403, headers })
     }
+
+    const rl = await checkRateLimit(req, 'deduct-shopping-item-from-stock')
+    if (!rl.allowed) return rateLimitResponse(rl)
 
     const body = await req.json().catch(() => ({}))
     const parsed = InputSchema.safeParse(body)

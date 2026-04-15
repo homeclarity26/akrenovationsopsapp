@@ -13,6 +13,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { z } from 'npm:zod@3'
 import { verifyAuth } from '../_shared/auth.ts'
+import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
 
 // Tables the apply function is allowed to mutate. Anything else → 400.
@@ -57,6 +58,9 @@ serve(async (req) => {
         { status: 403, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
+
+    const rl = await checkRateLimit(req, 'apply-project-suggestion')
+    if (!rl.allowed) return rateLimitResponse(rl)
 
     const body = await req.json().catch(() => ({}))
     const parsed = InputSchema.safeParse(body)
@@ -134,10 +138,16 @@ serve(async (req) => {
         if (!action.id || !action.patch || typeof action.patch !== 'object') {
           throw new Error("update requires 'id' and 'patch'")
         }
+        // Scope the UPDATE by the suggestion's project_id so a malformed or
+        // malicious proposed_action can't modify a row in another project.
+        // All whitelisted tables (tasks, daily_logs, shopping_list_items,
+        // punch_list_items, change_orders, messages, project_photos) have
+        // a project_id column, so this filter is always safe.
         const { data, error } = await supabase
           .from(action.table)
           .update(action.patch)
           .eq('id', action.id)
+          .eq('project_id', suggestion.project_id)
           .select()
           .single()
         if (error) throw new Error(error.message)
