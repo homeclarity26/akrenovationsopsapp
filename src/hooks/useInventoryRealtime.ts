@@ -6,12 +6,17 @@ import { supabase } from '@/lib/supabase'
 // feed. When a postgres_changes event fires, we invalidate every matching
 // cache key so useQuery refetches. Cache keys are structured as
 // [prefix, companyId, ...rest] — React Query does prefix matching.
+//
+// `inventory_location_items` is a composite cache key used by the employee
+// stocktake page (items LEFT JOIN stock for the picked location). Any change
+// to inventory_stock, inventory_stocktakes, or inventory_items can affect
+// that view, so all three also invalidate it.
 const TABLE_TO_QUERY_KEYS: Record<string, string[]> = {
   inventory_locations:      ['inventory_locations'],
   inventory_categories:     ['inventory_categories'],
-  inventory_items:          ['inventory_items'],
-  inventory_stock:          ['inventory_stock'],
-  inventory_stocktakes:     ['inventory_stocktakes'],
+  inventory_items:          ['inventory_items',      'inventory_location_items'],
+  inventory_stock:          ['inventory_stock',      'inventory_location_items'],
+  inventory_stocktakes:     ['inventory_stocktakes', 'inventory_location_items'],
   inventory_item_templates: ['inventory_item_templates'],
 }
 
