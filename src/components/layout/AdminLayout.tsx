@@ -3,7 +3,7 @@ import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, Users, FolderOpen, DollarSign,
   Calendar, Sparkles, Settings, Menu, X, FileText,
-  Receipt, ClipboardList, HardHat, Shield, Wallet, ArrowLeft
+  Receipt, ClipboardList, HardHat, Shield, Wallet, ArrowLeft, Package
 } from 'lucide-react'
 import { AIBar } from '@/components/ui/AIBar'
 import { APIUsageBar } from '@/components/ui/APIUsageBar'
@@ -17,6 +17,7 @@ const NAV = [
   { to: '/admin',              label: 'Home',      icon: LayoutDashboard, exact: true },
   { to: '/admin/crm',          label: 'CRM',       icon: Users },
   { to: '/admin/projects',     label: 'Projects',  icon: FolderOpen },
+  { to: '/admin/inventory',    label: 'Inventory', icon: Package },
   { to: '/admin/financials',   label: 'Money',     icon: DollarSign },
   { to: '/admin/schedule',     label: 'Schedule',  icon: Calendar },
   { to: '/admin/invoices',     label: 'Invoices',  icon: Receipt },
