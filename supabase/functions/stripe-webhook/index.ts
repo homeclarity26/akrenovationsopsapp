@@ -1,4 +1,4 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 import Stripe from 'https://esm.sh/stripe@13?target=deno';
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts';
@@ -25,7 +25,7 @@ serve(async (req: Request) => {
   }
 
   const rateLimitResult = await checkRateLimit(req, 'stripe-webhook');
-  if (!rateLimitResult.allowed) return rateLimitResponse();
+  if (!rateLimitResult.allowed) return rateLimitResponse(rateLimitResult);
 
   const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
   const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');

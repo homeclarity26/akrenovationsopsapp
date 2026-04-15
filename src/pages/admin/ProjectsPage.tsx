@@ -1,25 +1,64 @@
-import { Plus } from 'lucide-react'
+import { useState } from 'react'
+import { Plus, X } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 export function ProjectsPage() {
   const navigate = useNavigate()
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+
+  const [showNew, setShowNew] = useState(false)
+  const [form, setForm] = useState({ title: '', client_name: '' })
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
 
   const { data: projects = [], isLoading, error, refetch } = useQuery({
-    queryKey: ['projects'],
+    queryKey: ['projects', user?.company_id],
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error: supaError } = await supabase
         .from('projects')
         .select('*')
         .order('created_at', { ascending: false })
+      if (supaError) throw supaError
       return data ?? []
     },
   })
+
+  const resetForm = () => {
+    setForm({ title: '', client_name: '' })
+    setCreateError(null)
+  }
+
+  const handleCreate = async () => {
+    const title = form.title.trim()
+    if (!title) {
+      setCreateError('Project name is required')
+      return
+    }
+    setCreating(true)
+    setCreateError(null)
+    const { error: insertError } = await supabase.from('projects').insert({
+      title,
+      client_name: form.client_name.trim() || null,
+      status: 'planning',
+      company_id: user?.company_id ?? null,
+    })
+    setCreating(false)
+    if (insertError) {
+      setCreateError(insertError.message)
+      return
+    }
+    setShowNew(false)
+    resetForm()
+    queryClient.invalidateQueries({ queryKey: ['projects', user?.company_id] })
+  }
 
   if (error) return (
     <div className="p-8 text-center">
@@ -33,8 +72,58 @@ export function ProjectsPage() {
       <PageHeader
         title="Projects"
         subtitle={`${projects.length} total projects`}
-        action={<Button size="sm"><Plus size={15} />New Project</Button>}
+        action={
+          <Button size="sm" onClick={() => setShowNew(true)}>
+            <Plus size={15} />New Project
+          </Button>
+        }
       />
+
+      {showNew && (
+        <Card>
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="font-semibold text-sm text-[var(--text)]">New Project</h3>
+            <button
+              type="button"
+              onClick={() => { setShowNew(false); resetForm() }}
+              className="p-1 rounded hover:bg-gray-100 text-[var(--text-tertiary)]"
+              aria-label="Close"
+            >
+              <X size={16} />
+            </button>
+          </div>
+          <div className="space-y-2">
+            <input
+              type="text"
+              placeholder="Project name"
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/30"
+            />
+            <input
+              type="text"
+              placeholder="Client name (optional)"
+              value={form.client_name}
+              onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))}
+              className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/30"
+            />
+            {createError && <p className="text-xs text-red-600">{createError}</p>}
+            <div className="flex justify-end gap-2 pt-2">
+              <Button
+                size="sm"
+                variant="secondary"
+                onClick={() => { setShowNew(false); resetForm() }}
+                disabled={creating}
+              >
+                Cancel
+              </Button>
+              <Button size="sm" onClick={handleCreate} disabled={creating}>
+                {creating ? 'Creating…' : 'Create'}
+              </Button>
+            </div>
+          </div>
+        </Card>
+      )}
 
       {isLoading ? (
         <div className="py-8 text-center">

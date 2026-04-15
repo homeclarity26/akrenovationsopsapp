@@ -7,6 +7,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { Button } from '@/components/ui/Button'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 import { cn } from '@/lib/utils'
 import { BudgetTab } from './budget/BudgetTab'
 import { ProjectSubsTab } from './ProjectSubsTab'
@@ -18,103 +19,115 @@ type Tab = 'overview' | 'financials' | 'budget' | 'subs' | 'tasks' | 'logs' | 'c
 export function ProjectDetailPage() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const [tab, setTab] = useState<Tab>('overview')
 
   const { data: project, isLoading: projectLoading, error: projectError, refetch: projectRefetch } = useQuery({
-    queryKey: ['project', id],
+    queryKey: ['project', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('projects').select('*').eq('id', id).single()
+      const { data, error } = await supabase.from('projects').select('*').eq('id', id).single()
+      if (error) throw error
       return data
     },
   })
 
   const { data: phases = [] } = useQuery({
-    queryKey: ['project_phases', id],
+    queryKey: ['project_phases', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('project_phases').select('*').eq('project_id', id).order('sort_order')
+      const { data, error } = await supabase.from('project_phases').select('*').eq('project_id', id).order('sort_order')
+      if (error) throw error
       return data ?? []
     },
   })
 
   const { data: expenses = [] } = useQuery({
-    queryKey: ['project_expenses', id],
+    queryKey: ['project_expenses', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('expenses').select('*').eq('project_id', id).order('date', { ascending: false })
+      const { data, error } = await supabase.from('expenses').select('*').eq('project_id', id).order('date', { ascending: false })
+      if (error) throw error
       return data ?? []
     },
   })
 
   const { data: invoices = [] } = useQuery({
-    queryKey: ['project_invoices', id],
+    queryKey: ['project_invoices', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('invoices').select('*').eq('project_id', id)
+      const { data, error } = await supabase.from('invoices').select('*').eq('project_id', id)
+      if (error) throw error
       return data ?? []
     },
   })
 
   const { data: tasks = [] } = useQuery({
-    queryKey: ['project_tasks', id],
+    queryKey: ['project_tasks', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('tasks').select('*').eq('project_id', id).order('sort_order')
+      const { data, error } = await supabase.from('tasks').select('*').eq('project_id', id).order('sort_order')
+      if (error) throw error
       return data ?? []
     },
   })
 
   const { data: logs = [] } = useQuery({
-    queryKey: ['project_daily_logs', id],
+    queryKey: ['project_daily_logs', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('daily_logs').select('*').eq('project_id', id).order('log_date', { ascending: false })
+      const { data, error } = await supabase.from('daily_logs').select('*').eq('project_id', id).order('log_date', { ascending: false })
+      if (error) throw error
       return data ?? []
     },
   })
 
   const { data: changeOrders = [] } = useQuery({
-    queryKey: ['project_change_orders', id],
+    queryKey: ['project_change_orders', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('change_orders').select('*').eq('project_id', id)
+      const { data, error } = await supabase.from('change_orders').select('*').eq('project_id', id)
+      if (error) throw error
       return data ?? []
     },
   })
 
   const { data: punchList = [] } = useQuery({
-    queryKey: ['project_punch_list', id],
+    queryKey: ['project_punch_list', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('punch_list_items').select('*').eq('project_id', id).order('sort_order')
+      const { data, error } = await supabase.from('punch_list_items').select('*').eq('project_id', id).order('sort_order')
+      if (error) throw error
       return data ?? []
     },
   })
 
   const { data: warrantyClaims = [] } = useQuery({
-    queryKey: ['project_warranty_claims', id],
+    queryKey: ['project_warranty_claims', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('warranty_claims').select('*').eq('project_id', id)
+      const { data, error } = await supabase.from('warranty_claims').select('*').eq('project_id', id)
+      if (error) throw error
       return data ?? []
     },
   })
 
   const { data: projectPhotos = [] } = useQuery({
-    queryKey: ['project_photos', id],
+    queryKey: ['project_photos', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('project_photos').select('*').eq('project_id', id).order('taken_at', { ascending: false })
+      const { data, error } = await supabase.from('project_photos').select('*').eq('project_id', id).order('taken_at', { ascending: false })
+      if (error) throw error
       return data ?? []
     },
   })
 
   const { data: timeEntries = [] } = useQuery({
-    queryKey: ['project_time_entries', id],
+    queryKey: ['project_time_entries', id, user?.company_id],
     enabled: !!id,
     queryFn: async () => {
-      const { data } = await supabase.from('time_entries').select('*').eq('project_id', id).not('clock_out', 'is', null)
+      const { data, error } = await supabase.from('time_entries').select('*').eq('project_id', id).not('clock_out', 'is', null)
+      if (error) throw error
       return data ?? []
     },
   })

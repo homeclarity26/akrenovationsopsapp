@@ -32,23 +32,25 @@ export function ReceiptsPage() {
   const [uploadError, setUploadError] = useState<string | null>(null)
 
   const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ['active-projects-receipts'],
+    queryKey: ['active-projects-receipts', user?.company_id],
     queryFn: async () => {
-      const { data } = await supabase.from('projects').select('id, title').eq('status', 'active').order('title')
+      const { data, error } = await supabase.from('projects').select('id, title').eq('status', 'active').order('title')
+      if (error) throw error
       return (data ?? []) as Project[]
     },
   })
 
   const { data: receipts = [], error: receiptsError, refetch: receiptsRefetch } = useQuery<ReceiptRow[]>({
-    queryKey: ['receipts', user?.id],
+    queryKey: ['receipts', user?.id, user?.company_id],
     enabled: !!user?.id,
     queryFn: async () => {
-      const { data } = await supabase
+      const { data, error } = await supabase
         .from('expenses')
         .select('id, vendor, amount, date, project_id, receipt_image_url, projects(title)')
         .eq('entered_by', user!.id)
         .not('receipt_image_url', 'is', null)
         .order('date', { ascending: false })
+      if (error) throw error
       return (data ?? []).map((r: any) => ({
         id: r.id, vendor: r.vendor ?? 'Unknown', amount: r.amount, date: r.date,
         project: r.projects?.title ?? 'No Project', project_id: r.project_id, status: 'submitted' as const,

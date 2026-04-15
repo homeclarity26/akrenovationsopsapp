@@ -33,9 +33,10 @@ export function NotesPage() {
   const [submittingLog, setSubmittingLog] = useState(false)
 
   const { data: projects = [], error: projectsError, refetch: projectsRefetch } = useQuery<Project[]>({
-    queryKey: ['active-projects-notes'],
+    queryKey: ['active-projects-notes', user?.company_id],
     queryFn: async () => {
-      const { data } = await supabase.from('projects').select('id, title').eq('status', 'active').order('title')
+      const { data, error } = await supabase.from('projects').select('id, title').eq('status', 'active').order('title')
+      if (error) throw error
       return (data ?? []) as Project[]
     },
   })
