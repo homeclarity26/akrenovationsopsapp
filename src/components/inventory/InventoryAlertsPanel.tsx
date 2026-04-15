@@ -53,7 +53,16 @@ function alertIcon(type: AlertType) {
   }
 }
 
-export function InventoryAlertsPanel() {
+interface InventoryAlertsPanelProps {
+  /**
+   * When provided, clicking an alert row (outside the action buttons)
+   * calls this with the alert's item_id — used to jump the parent's tab
+   * state to the Stock matrix filtered to that item.
+   */
+  onItemClick?: (itemId: string) => void
+}
+
+export function InventoryAlertsPanel({ onItemClick }: InventoryAlertsPanelProps = {}) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const companyId = user?.company_id ?? undefined
@@ -135,8 +144,30 @@ export function InventoryAlertsPanel() {
     <div className="space-y-2">
       {alerts.map(a => {
         const itemName = a.inventory_items?.name ?? 'Unknown item'
+        const clickable = !!onItemClick
         return (
-          <Card key={a.id} padding="md">
+          <div
+            key={a.id}
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            aria-label={clickable ? `View stock for ${itemName}` : undefined}
+            onClick={clickable ? () => onItemClick!(a.item_id) : undefined}
+            onKeyDown={
+              clickable
+                ? e => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onItemClick!(a.item_id)
+                    }
+                  }
+                : undefined
+            }
+            className={cn(
+              'rounded-xl',
+              clickable && 'cursor-pointer hover:ring-2 hover:ring-[var(--navy)]/20 focus:outline-none focus:ring-2 focus:ring-[var(--navy)] transition-all',
+            )}
+          >
+          <Card padding="md">
             <div className="flex items-start gap-3">
               <div className="flex-shrink-0 mt-0.5">{alertIcon(a.alert_type)}</div>
               <div className="flex-1 min-w-0">
@@ -154,10 +185,13 @@ export function InventoryAlertsPanel() {
                     {formatRelativeTime(a.created_at)}
                   </div>
                 </div>
-                <div className="flex flex-wrap gap-1.5 mt-2">
+                <div
+                  className="flex flex-wrap gap-1.5 mt-2"
+                  onClick={e => e.stopPropagation()}
+                >
                   <button
                     disabled={busyId === a.id}
-                    onClick={() => handleAction(a.id, 'acknowledged')}
+                    onClick={e => { e.stopPropagation(); handleAction(a.id, 'acknowledged') }}
                     className={cn(
                       'inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border',
                       'border-[var(--border)] text-[var(--text-secondary)] hover:bg-[var(--bg)]',
@@ -168,7 +202,7 @@ export function InventoryAlertsPanel() {
                   </button>
                   <button
                     disabled={busyId === a.id}
-                    onClick={() => handleAction(a.id, 'resolved')}
+                    onClick={e => { e.stopPropagation(); handleAction(a.id, 'resolved') }}
                     className={cn(
                       'inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium',
                       'bg-[var(--navy)] text-white hover:opacity-90',
@@ -179,7 +213,7 @@ export function InventoryAlertsPanel() {
                   </button>
                   <button
                     disabled={busyId === a.id}
-                    onClick={() => handleAction(a.id, 'dismissed')}
+                    onClick={e => { e.stopPropagation(); handleAction(a.id, 'dismissed') }}
                     className={cn(
                       'inline-flex items-center gap-1 px-2 py-1 rounded-md text-[11px] font-medium border',
                       'border-[var(--border)] text-[var(--text-tertiary)] hover:bg-[var(--bg)]',
@@ -192,6 +226,7 @@ export function InventoryAlertsPanel() {
               </div>
             </div>
           </Card>
+          </div>
         )
       })}
     </div>

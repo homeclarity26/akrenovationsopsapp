@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Package, Plus, Pencil, Trash2, Search, MapPin, User } from 'lucide-react'
+import { Package, Plus, Pencil, Trash2, Search, MapPin, User, Clock } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -13,6 +13,7 @@ import { InventoryItemForm, type InventoryItemFormValue } from '@/components/inv
 import { InventoryLocationForm, type InventoryLocationFormValue } from '@/components/inventory/InventoryLocationForm'
 import { InventoryCategoryList } from '@/components/inventory/InventoryCategoryList'
 import { InventoryAlertsPanel } from '@/components/inventory/InventoryAlertsPanel'
+import { InventoryItemHistory } from '@/components/inventory/InventoryItemHistory'
 import { LocationTypePill, type LocationType } from '@/components/inventory/LocationTypePill'
 
 type Tab = 'alerts' | 'stock' | 'items' | 'locations' | 'categories'
@@ -51,6 +52,10 @@ export function AdminInventoryPage() {
   const queryClient = useQueryClient()
   const companyId = user?.company_id ?? undefined
   const [tab, setTab] = useState<Tab>('alerts')
+  // Optional cross-tab filter: when the user clicks an alert row we jump to
+  // the Stock tab with this itemId pre-filled. Switching tabs by hand
+  // clears it so the filter doesn't follow the user around.
+  const [stockItemFilter, setStockItemFilter] = useState<string | undefined>(undefined)
 
   useInventoryRealtime()
 
@@ -110,7 +115,11 @@ export function AdminInventoryPage() {
         {tabs.map(t => (
           <button
             key={t.id}
-            onClick={() => setTab(t.id)}
+            onClick={() => {
+              setTab(t.id)
+              // Manual tab switches always clear the cross-tab item filter.
+              setStockItemFilter(undefined)
+            }}
             className={cn(
               'py-3 px-3 text-xs font-semibold whitespace-nowrap border-b-2 transition-all',
               tab === t.id
@@ -132,8 +141,20 @@ export function AdminInventoryPage() {
           </Card>
         )}
 
-        {companyId && tab === 'alerts' && <InventoryAlertsPanel />}
-        {companyId && tab === 'stock' && <InventoryStockMatrix />}
+        {companyId && tab === 'alerts' && (
+          <InventoryAlertsPanel
+            onItemClick={itemId => {
+              setStockItemFilter(itemId)
+              setTab('stock')
+            }}
+          />
+        )}
+        {companyId && tab === 'stock' && (
+          <InventoryStockMatrix
+            initialItemId={stockItemFilter}
+            onClearItemFilter={() => setStockItemFilter(undefined)}
+          />
+        )}
         {companyId && tab === 'items' && <ItemsTab companyId={companyId} queryClient={queryClient} />}
         {companyId && tab === 'locations' && <LocationsTab companyId={companyId} queryClient={queryClient} />}
         {companyId && tab === 'categories' && <InventoryCategoryList />}
@@ -155,6 +176,7 @@ function ItemsTab({ companyId, queryClient }: ItemsTabProps) {
   const [showInactive, setShowInactive] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
   const [editing, setEditing] = useState<InventoryItemFormValue | null>(null)
+  const [historyItem, setHistoryItem] = useState<{ id: string; name: string; unit: string; totalOnHand: number } | null>(null)
 
   const { data: categories = [] } = useQuery({
     queryKey: ['inventory_categories', companyId],
@@ -357,6 +379,14 @@ function ItemsTab({ companyId, queryClient }: ItemsTabProps) {
                   <td className="px-3 py-2 text-right">
                     <div className="flex gap-1 justify-end">
                       <button
+                        onClick={() => setHistoryItem({ id: i.id, name: i.name, unit: i.unit, totalOnHand: total })}
+                        className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-gray-100"
+                        aria-label={`View history for ${i.name}`}
+                        title="Stocktake history"
+                      >
+                        <Clock size={14} />
+                      </button>
+                      <button
                         onClick={() => openEdit(i)}
                         className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-gray-100"
                         aria-label={`Edit ${i.name}`}
@@ -407,6 +437,14 @@ function ItemsTab({ companyId, queryClient }: ItemsTabProps) {
               </div>
               <div className="flex gap-1 justify-end mt-2">
                 <button
+                  onClick={() => setHistoryItem({ id: i.id, name: i.name, unit: i.unit, totalOnHand: total })}
+                  className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-gray-100"
+                  aria-label={`View history for ${i.name}`}
+                  title="Stocktake history"
+                >
+                  <Clock size={14} />
+                </button>
+                <button
                   onClick={() => openEdit(i)}
                   className="p-1.5 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-gray-100"
                   aria-label={`Edit ${i.name}`}
@@ -429,6 +467,13 @@ function ItemsTab({ companyId, queryClient }: ItemsTabProps) {
           )
         })}
       </div>
+
+      <InventoryItemHistory
+        open={!!historyItem}
+        onClose={() => setHistoryItem(null)}
+        item={historyItem ? { id: historyItem.id, name: historyItem.name, unit: historyItem.unit } : null}
+        totalOnHand={historyItem?.totalOnHand}
+      />
     </div>
   )
 }

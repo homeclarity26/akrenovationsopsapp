@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlertCircle, Check, Search, X } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
@@ -67,7 +67,25 @@ function formatRelative(iso: string | null): string {
 
 type SortMode = 'name' | 'low_stock'
 
-export function InventoryStockMatrix() {
+interface InventoryStockMatrixProps {
+  /**
+   * When provided, the matrix is filtered down to the single item with this
+   * id (e.g. after clicking an alert on the Alerts tab). The caller also
+   * gets a chance to clear the filter through the search input or the
+   * onClearItemFilter callback.
+   */
+  initialItemId?: string
+  /**
+   * Called when the user clears the item-id filter via the in-UI
+   * "Show all items" button. Lets the parent reset its own stockFilter.itemId.
+   */
+  onClearItemFilter?: () => void
+}
+
+export function InventoryStockMatrix({
+  initialItemId,
+  onClearItemFilter,
+}: InventoryStockMatrixProps = {}) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const companyId = user?.company_id ?? undefined
@@ -89,6 +107,9 @@ export function InventoryStockMatrix() {
   // Tracks the timestamp of the last keystroke so onBlur can gate on "at least
   // 300ms since the last keystroke" before committing.
   const lastKeystrokeRef = useRef<number>(0)
+  // When AdminInventoryPage passes `initialItemId`, this ref points at the row
+  // so useEffect can scrollIntoView on mount.
+  const highlightRowRef = useRef<HTMLTableRowElement | null>(null)
 
   const { data: locations = [] } = useQuery<LocationRow[]>({
     queryKey: ['inventory_locations', companyId],
@@ -133,6 +154,25 @@ export function InventoryStockMatrix() {
       return (data ?? []) as ItemRow[]
     },
   })
+
+  // When the caller hands us an initialItemId (e.g. from the Alerts tab),
+  // pre-populate the search input with the item's name as soon as the items
+  // query resolves. We don't lock the input — clearing it drops the filter.
+  useEffect(() => {
+    if (!initialItemId) return
+    const match = items.find(i => i.id === initialItemId)
+    if (!match) return
+    setSearch(prev => (prev.length === 0 ? match.name : prev))
+    // Clear any unrelated category filter so the item isn't filtered out.
+    setCategoryFilter('')
+    // Scroll the single-item row into view on the next paint.
+    requestAnimationFrame(() => {
+      highlightRowRef.current?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    })
+  }, [initialItemId, items])
 
   const { data: stock = [] } = useQuery<StockRow[]>({
     queryKey: ['inventory_stock', companyId],
@@ -185,6 +225,10 @@ export function InventoryStockMatrix() {
   // Filter + sort items.
   const displayedItems = useMemo(() => {
     let list = items
+    // Hard filter when the caller asked us to focus on a single item.
+    if (initialItemId) {
+      list = list.filter(i => i.id === initialItemId)
+    }
     if (categoryFilter) {
       list = list.filter(i => i.category_id === categoryFilter)
     }
@@ -208,7 +252,7 @@ export function InventoryStockMatrix() {
       })
     }
     return withMeta
-  }, [items, categoryFilter, search, sortMode, totalsByItem, categoryById])
+  }, [items, initialItemId, categoryFilter, search, sortMode, totalsByItem, categoryById])
 
   const upsertMutation = useMutation({
     mutationFn: async ({ itemId, locationId, quantity }: { itemId: string; locationId: string; quantity: number }) => {
@@ -301,8 +345,32 @@ export function InventoryStockMatrix() {
     )
   }
 
+  const focusedItemName = initialItemId
+    ? items.find(i => i.id === initialItemId)?.name ?? null
+    : null
+
   return (
     <div className="space-y-3">
+      {/* Item-focus banner — shown when the caller handed us an initialItemId
+          (e.g. after clicking an alert). One-click escape hatch. */}
+      {initialItemId && focusedItemName && onClearItemFilter && (
+        <div className="flex items-center justify-between gap-2 bg-[var(--navy)]/5 border border-[var(--navy)]/20 rounded-xl px-3 py-2">
+          <p className="text-xs text-[var(--navy)]">
+            Filtered to <span className="font-semibold">{focusedItemName}</span>
+          </p>
+          <button
+            type="button"
+            onClick={() => {
+              setSearch('')
+              onClearItemFilter()
+            }}
+            className="inline-flex items-center gap-1 text-[11px] font-medium text-[var(--navy)] hover:underline"
+          >
+            <X size={11} /> Show all items
+          </button>
+        </div>
+      )}
+
       {/* Filter bar */}
       <div className="flex flex-wrap items-center gap-2">
         <div className="relative flex-1 min-w-[180px]">
@@ -362,8 +430,16 @@ export function InventoryStockMatrix() {
             ) : (
               displayedItems.map(({ item, total, category }) => {
                 const isLow = item.min_stock_alert !== null && total < Number(item.min_stock_alert)
+                const isFocused = initialItemId === item.id
                 return (
-                  <tr key={item.id} className="border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg)]">
+                  <tr
+                    key={item.id}
+                    ref={isFocused ? highlightRowRef : undefined}
+                    className={cn(
+                      'border-b border-[var(--border-light)] last:border-0 hover:bg-[var(--bg)]',
+                      isFocused && 'bg-[var(--navy)]/5',
+                    )}
+                  >
                     <td className="px-3 py-2 sticky left-0 bg-white z-10 border-r border-[var(--border-light)]">
                       <div className="flex items-center gap-2">
                         {isLow && (
