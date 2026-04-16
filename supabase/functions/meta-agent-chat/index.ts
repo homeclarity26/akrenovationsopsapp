@@ -320,6 +320,31 @@ INVENTORY DELEGATES:
   deduct-shopping-item-from-stock { shopping_list_item_id } → { ok, previous_qty, new_qty, stocktake_id }
     Pulls a linked shopping item off its source_location via a stocktake row. Idempotent.
 
+═══ ACTION DECISION HEURISTIC ═══
+For every project-scoped action, decide DIRECT-EXECUTE vs PROPOSE:
+
+PROPOSE (emit a \`propose\` action block → calls ai-suggest-project-action) when:
+  • You inferred the action yourself (the user did NOT explicitly ask for it in this turn)
+  • The action is multi-step, destructive, or AI-initiated
+  • The caller is an employee (employees cannot direct-execute writes)
+  • You are creating tasks, daily logs, shopping items, punch list items,
+    change orders, messages, or photo updates proactively
+
+DIRECT-EXECUTE (emit a \`db_action\` or \`delegate\` block) when:
+  • The user explicitly asked for this exact action in this turn
+  • The action is small and reversible (e.g. logging time, qualifying a lead)
+  • The caller is an admin or super_admin who gave a clear command
+
+When you PROPOSE, tell the user what you queued and that it's waiting for
+admin review in the Suggestion Inbox on the project detail page.
+
+Propose action block format:
+\`\`\`action
+{"type": "propose", "project_id": "uuid", "suggestion_type": "short_label",
+ "summary": "What will happen", "rationale": "Why you suggest it",
+ "proposed_action": {"table": "tasks", "operation": "insert", "values": {...}}}
+\`\`\`
+
 OBSERVABILITY & COMMS TABLES (PR 17):
 - communication_log: project-scoped comms timeline. Write when you hear about a call/email/meeting. Columns: project_id, direction (inbound/outbound/internal), channel (email/sms/phone/in_app/meeting/other), party_name, party_type (client/subcontractor/supplier/inspector/team/other), summary, body, logged_by, logged_via (manual/ai/import), occurred_at. Use logged_via='ai' when you insert rows yourself.
 - improvement_suggestions: company-scoped "what to improve" queue. Driven by agent-improvement-analysis weekly. Columns: company_id, category (free text), title, description, rationale, priority, status (open/acknowledged/in_progress/done/dismissed).
@@ -739,7 +764,22 @@ interface DelegateAction {
   payload: Record<string, unknown>
 }
 
-type ActionBlock = DbAction | DelegateAction
+interface ProposeAction {
+  type: 'propose'
+  project_id: string
+  suggestion_type: string
+  summary: string
+  rationale?: string
+  proposed_action: {
+    table: string
+    operation: 'insert' | 'update'
+    values?: Record<string, unknown>
+    id?: string
+    patch?: Record<string, unknown>
+  }
+}
+
+type ActionBlock = DbAction | DelegateAction | ProposeAction
 
 function parseActionBlocks(reply: string): ActionBlock[] {
   const actions: ActionBlock[] = []
@@ -748,7 +788,7 @@ function parseActionBlocks(reply: string): ActionBlock[] {
   while ((match = actionRegex.exec(reply)) !== null) {
     try {
       const parsed = JSON.parse(match[1].trim())
-      if (parsed.type === 'db_action' || parsed.type === 'delegate') {
+      if (parsed.type === 'db_action' || parsed.type === 'delegate' || parsed.type === 'propose') {
         actions.push(parsed)
       }
     } catch {
@@ -810,6 +850,28 @@ async function executeActions(
           throw new Error(`${fnName} returned ${res.status}: ${errText}`)
         }
         executed.push(`Delegated to ${fnName}`)
+      } else if (action.type === 'propose') {
+        const proposePayload = {
+          project_id: action.project_id,
+          suggestion_type: action.suggestion_type,
+          summary: action.summary,
+          rationale: action.rationale ?? '',
+          proposed_action: action.proposed_action,
+          source: 'meta-agent',
+        }
+        const res = await fetch(`${supabaseUrl()}/functions/v1/ai-suggest-project-action`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${serviceKey()}`,
+          },
+          body: JSON.stringify(proposePayload),
+        })
+        if (!res.ok) {
+          const errText = await res.text().catch(() => 'Unknown error')
+          throw new Error(`ai-suggest-project-action returned ${res.status}: ${errText}`)
+        }
+        executed.push(`Proposed: ${action.summary}`)
       }
     } catch (err) {
       errors.push(`Action failed: ${(err as Error).message}`)
