@@ -320,6 +320,10 @@ INVENTORY DELEGATES:
   deduct-shopping-item-from-stock { shopping_list_item_id } → { ok, previous_qty, new_qty, stocktake_id }
     Pulls a linked shopping item off its source_location via a stocktake row. Idempotent.
 
+Gusto Payroll: connected via OAuth. Syncs employees + pay periods.
+  DELEGATE: sync-to-gusto { pay_period_id? } → { employees_synced, payroll_synced, errors }
+  Use when: admin asks "send payroll to Gusto" or "sync employees to Gusto"
+
 ═══ ACTION DECISION HEURISTIC ═══
 For every project-scoped action, decide DIRECT-EXECUTE vs PROPOSE:
 

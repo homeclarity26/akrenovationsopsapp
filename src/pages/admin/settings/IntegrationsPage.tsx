@@ -31,6 +31,19 @@ export function IntegrationsPage() {
   const [disconnecting, setDisconnecting] = useState(false)
   const [lastResult, setLastResult] = useState<SyncResult | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [gustoIntegration, setGustoIntegration] = useState<Integration | null>(null)
+
+  const loadIntegration = useCallback(async () => {
+    if (!user?.company_id) return
+    const { data } = await supabase
+      .from('integrations')
+      .select('id, provider, is_active, last_synced_at, realm_id, created_at')
+      .eq('company_id', user.company_id)
+      .eq('provider', 'gusto')
+      .eq('is_active', true)
+      .maybeSingle()
+    setGustoIntegration(data)
+  }, [user?.company_id])
 
   const fetchIntegration = useCallback(async () => {
     if (!user?.company_id) return
@@ -46,7 +59,7 @@ export function IntegrationsPage() {
     setLoading(false)
   }, [user?.company_id])
 
-  useEffect(() => { fetchIntegration() }, [fetchIntegration])
+  useEffect(() => { fetchIntegration(); loadIntegration() }, [fetchIntegration, loadIntegration])
 
   // Handle OAuth callback params if present
   useEffect(() => {
@@ -292,9 +305,68 @@ export function IntegrationsPage() {
         </div>
       </div>
 
+      {/* Gusto Payroll Card */}
+      <div className="bg-white rounded-xl border border-[var(--border-light)] px-5 py-4">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center flex-shrink-0">
+            <span className="text-lg font-bold text-green-600">G</span>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-sm text-[var(--text)]">Gusto Payroll</h3>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Sync employees and pay periods. Gusto handles tax calculations, direct deposits, and compliance.
+            </p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">
+              Connect via the Gusto OAuth flow, then use "Send to Gusto" on the Pay Period detail page.
+            </p>
+            <div className="mt-3">
+              {gustoIntegration ? (
+                <div className="flex items-center gap-3">
+                  <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--success)]">
+                    <CheckCircle2 size={13} />
+                    Connected
+                  </span>
+                  <span className="text-[11px] text-[var(--text-tertiary)]">
+                    {gustoIntegration.last_synced_at
+                      ? `Last sync: ${new Date(gustoIntegration.last_synced_at).toLocaleString()}`
+                      : 'Never synced'}
+                  </span>
+                  <button
+                    className="text-[11px] font-semibold text-[var(--danger)] ml-auto"
+                    onClick={async () => {
+                      await supabase.from('integrations').update({ is_active: false }).eq('id', gustoIntegration.id)
+                      loadIntegration()
+                    }}
+                  >
+                    Disconnect
+                  </button>
+                </div>
+              ) : (
+                <button
+                  className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-semibold bg-[var(--navy)] text-white"
+                  onClick={async () => {
+                    try {
+                      const { data } = await supabase.functions.invoke('gusto-auth', {
+                        body: { action: 'connect' },
+                      })
+                      if (data?.url) window.open(data.url, '_blank')
+                    } catch (err) {
+                      console.error('Gusto connect error', err)
+                    }
+                  }}
+                >
+                  <Plug size={13} />
+                  Connect Gusto
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Future integrations placeholder */}
       <div className="space-y-3">
-        {['Gusto Payroll', 'Stripe Payments', 'Twilio SMS'].map((name) => (
+        {['Stripe Payments', 'Twilio SMS'].map((name) => (
           <div
             key={name}
             className="bg-white rounded-xl border border-[var(--border-light)] px-5 py-4 flex items-center gap-4 opacity-60"
