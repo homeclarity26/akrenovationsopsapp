@@ -1,4 +1,8 @@
-# AK Ops — Session A Status
+# AK Ops — Historical Task Log (Apr 8-9, 2026)
+
+> ⚠️ **HISTORICAL FILE ONLY.** This is a task log from sessions A/B/C in early April 2026.
+> For current app state, see **SESSION_STATE.md** (authoritative) or the Desktop's **CLAUDE.md**.
+> As of 2026-04-16, the app has shipped 33 PRs beyond what's described below — all client portal pages, inventory system, AI agent bar, integrations (QB/Gusto/Stripe/Twilio), white-label branding, and more are now live.
 
 ## Task Log
 

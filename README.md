@@ -1,73 +1,84 @@
-# React + TypeScript + Vite
+# AK Renovations Ops App
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+AI-native operations platform for residential construction companies. Built for AK Renovations (primary tenant) and designed for white-label multi-tenancy so trade contractors can use the same platform under their own brand.
 
-Currently, two official plugins are available:
+## What it does
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- **Live project state** — Realtime-updating project pages where office, field, and client see the same truth
+- **AI co-worker, not AI feature** — An always-visible agent bar with 82 commands, voice input, and attachment handling. Ask "What needs my attention today?" or "Clock me in to the Johnson bathroom" via text or voice, from any page.
+- **Multi-location inventory** — Shop + named trucks/trailers. Employees take rough stocktakes on mobile (or a photo and the AI proposes counts). Shopping list items can pull directly from truck stock.
+- **Client portal** — Clients see their project progress, photos, documents, invoices, and schedule live. Chat with the team. Pay invoices online via Stripe.
+- **Integrations** — QuickBooks (invoices + expenses + payments), Gusto (payroll), Stripe (payments), Twilio (SMS), Resend (email), Google Drive (backups).
+- **Proactive AI agents** — 15 scheduled agents (morning brief, risk monitor, invoice aging, weather impact, cash flow, compliance monitor, etc.) + 15 reactive agents (receipt processor, photo tagger, change order drafter, etc.).
+- **White-label branding** — Each contractor configures their own logo, colors, and tagline. "Powered by TradeOffice AI" footer is toggleable.
 
-## React Compiler
+## Tech stack
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+- **Frontend:** React 19, Vite, TypeScript, Tailwind CSS, TanStack Query, deployed on Vercel
+- **Backend:** Supabase (Postgres + RLS + realtime + storage + auth + edge functions)
+- **Edge functions:** ~86 Deno functions including the AI agents and integrations
+- **AI:** Claude (Anthropic) for reasoning, Gemini (Google) for vision, Resend for email
+- **Auth:** Supabase Auth with 4 roles: `super_admin`, `admin`, `employee`, `client`
+- **Testing:** Vitest — 118 test cases across hooks, components, and lib
 
-## Expanding the ESLint configuration
+## Development
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
-
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+```bash
+npm install
+npm run build          # tsc -b && vite build — must pass clean
+npm test               # vitest run — 118 tests
+npm run dev            # local dev server on http://localhost:5173
 ```
 
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
+## Deployment
 
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
+- **Frontend:** Vercel (https://akrenovationsopsapp.vercel.app)
+- **Backend:** Supabase project `mebzqfeeiciayxdetteb`
+- **Edge functions:** Auto-deployed via GitHub Actions workflow `.github/workflows/deploy-edge-functions.yml` on push to `main`
+- **Migrations:** Applied via Supabase Management API — see `scripts/verify-deployment.sh`
 
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
+## Required env vars
+
+See [`docs/ENV_VARS.md`](docs/ENV_VARS.md) for the full list (25+ vars). Minimum for the app to function:
+
+**Frontend (Vercel):**
+- `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_SENTRY_DSN`
+
+**Edge functions (Supabase secrets):**
+- `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`
+- `ANTHROPIC_API_KEY`, `GEMINI_API_KEY`, `RESEND_API_KEY`
+- `TOKEN_ENCRYPTION_KEY` (AES-256-GCM base64 key — required once any OAuth integration is configured)
+
+**Optional integrations** (graceful fallback if unset):
+- QuickBooks: `QBO_CLIENT_ID`, `QBO_CLIENT_SECRET`, `QBO_REDIRECT_URI`, `QBO_ENVIRONMENT`
+- Gusto: `GUSTO_CLIENT_ID`, `GUSTO_CLIENT_SECRET`, `GUSTO_REDIRECT_URI`, `GUSTO_ENVIRONMENT`
+- Stripe: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_SUCCESS_URL`, `STRIPE_CANCEL_URL`
+- Twilio: `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER`
+
+## Project structure
+
 ```
+src/pages/admin/       — Admin pages (dashboard, CRM, projects, payroll, inventory, settings)
+src/pages/employee/    — Field mode (time clock, stocktake, shopping list, photos, receipts)
+src/pages/client/      — Client portal (7 pages, all wired to real data)
+src/pages/onboarding/  — Platform / Company / Field onboarding wizards
+src/components/ui/     — AgentBar, Toast, Skeleton, VoiceInput, AttachmentSheet, BrandLogo, PoweredByFooter
+src/components/project/— Activity feed, presence, suggestion inbox, client share toggle
+src/components/inventory/— Stock matrix, alerts, item history, photo stocktake
+src/components/layout/ — AdminLayout, EmployeeLayout, ClientLayout
+src/context/           — AuthContext, ThemeContext (branding)
+src/hooks/             — 20+ custom hooks for realtime, presence, activity, suggestions, etc.
+src/lib/               — Supabase client, commands registry (82 commands), voice intents, entity search
+supabase/functions/    — ~86 Deno edge functions
+supabase/migrations/   — 118+ SQL migrations (all applied)
+```
+
+## Session handoff for Claude / AI agents
+
+- **`SESSION_STATE.md`** (this repo) — authoritative current state, features shipped, deployment status
+- **`CLAUDE.md`** (in `/Users/adamkilgore/Desktop/CODE REVIEW FOR AKOPPS/`) — Claude Desktop context file with architecture overview and code review rules
+- **`DEPLOYMENT_CHECKLIST.md`** — generated by `scripts/verify-deployment.sh`, manual verification guide
+
+## License
+
+Private. All rights reserved.

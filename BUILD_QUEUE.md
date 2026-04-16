@@ -1,5 +1,10 @@
 # BUILD QUEUE
 
+> ⚠️ **Priority queue below is HISTORICAL** (from early April 2026, pre-PR-1).
+> All items in the P0/P1 sections have since been completed or superseded by 33 shipped PRs.
+> For current app state, see **SESSION_STATE.md** (authoritative).
+> The "Global Build Override Rules" section immediately below is still in effect.
+
 ## Global Build Override Rules
 - `bypassPermissions` is active — never ask for approval on any tool call
 - Never ask "what should I work on" — read SESSION_STATE.md and the user's prompt, infer, and start
