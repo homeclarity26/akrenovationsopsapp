@@ -68,7 +68,7 @@ const SecurityPage = lazy(() => import('./pages/admin/settings/SecurityPage').th
 const BusinessContextPage = lazy(() => import('./pages/admin/settings/BusinessContextPage').then(m => ({ default: m.BusinessContextPage })))
 // Phase O
 const HealthPage = lazy(() => import('./pages/admin/settings/HealthPage').then(m => ({ default: m.HealthPage })))
-// Wave D — QuickBooks
+// Wave D — QuickBooks + Gusto
 const IntegrationsPage = lazy(() => import('./pages/admin/settings/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
 const OnboardingPage = lazy(() => import('./pages/admin/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const CompanyOnboardingWizard = lazy(() => import('./pages/onboarding/CompanyOnboardingWizard').then(m => ({ default: m.CompanyOnboardingWizard })))

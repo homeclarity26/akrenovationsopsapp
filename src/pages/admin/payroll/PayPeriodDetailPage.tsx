@@ -9,6 +9,7 @@ import {
   Download,
   Send,
   X,
+  Loader2,
 } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
@@ -16,6 +17,7 @@ import { StatusPill } from '@/components/ui/StatusPill'
 import { Input } from '@/components/ui/Input'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { useToast } from '@/hooks/useToast'
 import type { PayrollAdjustment, PayrollRecord, PayrollRecordStatus } from '@/data/mock'
 
 function fmtCurrency(n: number): string {
@@ -72,10 +74,67 @@ export function PayPeriodDetailPage() {
     },
   })
 
+  const { toast } = useToast()
   const [records, setRecords] = useState<PayrollRecord[]>([])
   const [, setAdjustments] = useState<PayrollAdjustment[]>([])
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [adjustmentFor, setAdjustmentFor] = useState<string | null>(null)
+  const [gustoSyncing, setGustoSyncing] = useState(false)
+
+  // Check if Gusto is connected
+  const { data: gustoConnected } = useQuery({
+    queryKey: ['gusto_connected'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('integrations')
+        .select('id')
+        .eq('provider', 'gusto')
+        .eq('is_active', true)
+        .limit(1)
+      return (data ?? []).length > 0
+    },
+  })
+
+  async function handleSendToGusto() {
+    if (!periodId) return
+
+    if (!gustoConnected) {
+      toast.warning('Gusto is not connected. Go to Settings > Integrations to connect.')
+      return
+    }
+
+    setGustoSyncing(true)
+    try {
+      const { data, error } = await supabase.functions.invoke('sync-to-gusto', {
+        body: { pay_period_id: periodId },
+      })
+      if (error) throw error
+      const result = data as {
+        success?: boolean
+        payroll_synced?: number
+        errors?: Array<{ profile_id: string; error?: string }>
+        gusto_review_url?: string
+        error?: string
+      }
+      if (result.error) {
+        toast.error(result.error)
+      } else {
+        const errCount = result.errors?.length ?? 0
+        if (errCount > 0) {
+          toast.warning(`${result.payroll_synced} record(s) synced, ${errCount} error(s). Review in Gusto.`)
+        } else {
+          toast.success(`${result.payroll_synced} record(s) sent to Gusto.`, {
+            label: 'Open Gusto',
+            onClick: () => window.open(result.gusto_review_url, '_blank'),
+          })
+        }
+      }
+    } catch (e) {
+      toast.error(`Gusto sync failed: ${(e as Error).message}`)
+    } finally {
+      setGustoSyncing(false)
+    }
+  }
 
   // Sync fetched records into local state
   useEffect(() => {
@@ -359,11 +418,11 @@ export function PayPeriodDetailPage() {
             <Button
               variant="primary"
               size="md"
-              disabled={!allApproved}
-              onClick={() => alert('Would call sync-to-gusto edge function and open Gusto for final review.')}
+              disabled={!allApproved || gustoSyncing}
+              onClick={handleSendToGusto}
             >
-              <Send size={14} />
-              Send to Gusto
+              {gustoSyncing ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />}
+              {gustoSyncing ? 'Syncing...' : 'Send to Gusto'}
             </Button>
           </div>
         </div>

@@ -73,7 +73,8 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
 
   // ─── Payroll (strict) ───
   'calculate-payroll':               { maxRequests: 30,  windowSeconds: 3600 },
-  'sync-to-gusto':                   { maxRequests: 5,   windowSeconds: 3600 },
+  'sync-to-gusto':                   { maxRequests: 10,  windowSeconds: 3600 },
+  'gusto-auth':                      { maxRequests: 10,  windowSeconds: 3600 },
   'generate-payroll-register':       { maxRequests: 30,  windowSeconds: 3600 },
 
   // ─── Memory / embedding ───
