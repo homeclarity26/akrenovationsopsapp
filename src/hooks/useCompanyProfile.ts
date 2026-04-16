@@ -12,6 +12,15 @@ export interface CompanyProfile {
   phone: string | null
   license_number: string | null
   target_margin: number | null
+  // White-label branding
+  brand_logo_url: string | null
+  brand_color_primary: string | null
+  brand_color_accent: string | null
+  brand_color_bg: string | null
+  brand_favicon_url: string | null
+  brand_tagline: string | null
+  powered_by_visible: boolean
+  powered_by_text: string | null
 }
 
 export function useCompanyProfile() {
@@ -23,7 +32,7 @@ export function useCompanyProfile() {
     queryFn: async () => {
       const { data, error } = await supabase
         .from('companies')
-        .select('id, name, logo_url, owner_name, city, state, phone, license_number, target_margin')
+        .select('id, name, logo_url, owner_name, city, state, phone, license_number, target_margin, brand_logo_url, brand_color_primary, brand_color_accent, brand_color_bg, brand_favicon_url, brand_tagline, powered_by_visible, powered_by_text')
         .eq('id', user!.company_id!)
         .maybeSingle()
       if (error) {

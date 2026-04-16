@@ -6,6 +6,7 @@ import {
 import { AgentBar } from '@/components/ui/AgentBar'
 import { Badge } from '@/components/ui/Badge'
 import { ModeToggle } from '@/components/ui/ModeToggle'
+import { PoweredByFooter } from '@/components/ui/PoweredByFooter'
 import { useAuth } from '@/context/AuthContext'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 import { cn } from '@/lib/utils'
@@ -46,6 +47,7 @@ export function EmployeeLayout() {
       <main className="flex-1 pt-11 pb-20 overflow-x-hidden">
         <AgentBar />
         <Outlet />
+        <PoweredByFooter />
       </main>
 
       {/* Bottom nav */}

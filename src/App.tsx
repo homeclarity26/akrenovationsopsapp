@@ -4,6 +4,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { ModeProvider } from '@/context/ModeContext'
+import { ThemeProvider } from '@/context/ThemeContext'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
 import { ToastProvider } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
@@ -70,6 +71,7 @@ const BusinessContextPage = lazy(() => import('./pages/admin/settings/BusinessCo
 const HealthPage = lazy(() => import('./pages/admin/settings/HealthPage').then(m => ({ default: m.HealthPage })))
 // Wave D — QuickBooks + Gusto
 const IntegrationsPage = lazy(() => import('./pages/admin/settings/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
+const BrandingPage = lazy(() => import('./pages/admin/settings/BrandingPage').then(m => ({ default: m.BrandingPage })))
 const OnboardingPage = lazy(() => import('./pages/admin/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const CompanyOnboardingWizard = lazy(() => import('./pages/onboarding/CompanyOnboardingWizard').then(m => ({ default: m.CompanyOnboardingWizard })))
 const PlatformOnboarding = lazy(() => import('./pages/onboarding/PlatformOnboarding').then(m => ({ default: m.PlatformOnboarding })))
@@ -279,6 +281,7 @@ function AppRoutes() {
           <Route path="settings" element={<SettingsLayout />}>
             <Route index element={<SettingsPage />} />
             <Route path="context" element={<BusinessContextPage />} />
+            <Route path="branding" element={<BrandingPage />} />
             <Route path="rates" element={<WorkTypeRatesPage />} />
             <Route path="approvals" element={<ApprovalsPage />} />
             <Route path="templates" element={<TemplatesPage />} />
@@ -381,6 +384,7 @@ export default function App() {
   return (
     <QueryClientProvider client={qc}>
       <AuthProvider>
+        <ThemeProvider>
         <BrowserRouter>
           <ModeProvider>
             <Sentry.ErrorBoundary
@@ -399,6 +403,7 @@ export default function App() {
             </Sentry.ErrorBoundary>
           </ModeProvider>
         </BrowserRouter>
+        </ThemeProvider>
       </AuthProvider>
     </QueryClientProvider>
   )
