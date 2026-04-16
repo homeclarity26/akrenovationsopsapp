@@ -111,6 +111,10 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
 
   // ─── Wave B / PR 19 ───
   'generate-progress-reel':          { maxRequests: 10,  windowSeconds: 3600 },
+
+  // ─── Wave D / PR 23: QuickBooks Online ───
+  'sync-quickbooks':                 { maxRequests: 10,  windowSeconds: 3600 },
+  'quickbooks-auth':                 { maxRequests: 10,  windowSeconds: 3600 },
 }
 
 const DEFAULT_LIMIT = { maxRequests: 60, windowSeconds: 3600 }
