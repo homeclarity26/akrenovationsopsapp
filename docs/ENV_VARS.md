@@ -59,8 +59,10 @@ or via `supabase secrets set KEY=VALUE`.
 | `GOOGLE_SERVICE_ACCOUNT_JSON` | Yes | Google Cloud Console > IAM > Service Accounts | sync-to-drive, sync-google-drive, backup-daily, backup-database, backup-storage-manifest |
 | `GOOGLE_DRIVE_ROOT_FOLDER_ID` | Yes | Google Drive (folder ID from URL) | sync-to-drive, sync-google-drive |
 | `GOOGLE_DRIVE_BACKUP_FOLDER_ID` | Yes | Google Drive (folder ID from URL) | backup-daily, backup-database, backup-storage-manifest |
-| `STRIPE_SECRET_KEY` | Optional | [Stripe Dashboard](https://dashboard.stripe.com/) > Developers > API Keys | stripe-webhook |
+| `STRIPE_SECRET_KEY` | Optional | [Stripe Dashboard](https://dashboard.stripe.com/) > Developers > API Keys | create-checkout-session, stripe-webhook |
 | `STRIPE_WEBHOOK_SECRET` | Optional | Stripe Dashboard > Webhooks > Signing secret | stripe-webhook |
+| `STRIPE_SUCCESS_URL` | Optional | Manual (defaults to `https://akrenovationsopsapp.vercel.app/client/invoices?payment=success`) | create-checkout-session |
+| `STRIPE_CANCEL_URL` | Optional | Manual (defaults to `https://akrenovationsopsapp.vercel.app/client/invoices?payment=cancelled`) | create-checkout-session |
 | `OPENWEATHERMAP_API_KEY` | Yes | [OpenWeatherMap](https://openweathermap.org/api) | agent-weather-schedule |
 | `DEEPGRAM_API_KEY` | Optional | [Deepgram Console](https://console.deepgram.com/) | agent-conversation-transcriber |
 

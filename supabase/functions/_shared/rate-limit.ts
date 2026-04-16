@@ -117,6 +117,9 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
   'sync-quickbooks':                 { maxRequests: 10,  windowSeconds: 3600 },
   'quickbooks-auth':                 { maxRequests: 10,  windowSeconds: 3600 },
 
+  // ─── Stripe payments ───
+  'create-checkout-session':         { maxRequests: 30,  windowSeconds: 3600 },
+
   // ─── Uncategorized / webhooks / utilities ───
   'get-usage-stats':                 { maxRequests: 60,  windowSeconds: 3600 },
   'invite-client-to-portal':        { maxRequests: 30,  windowSeconds: 3600 },

@@ -362,6 +362,14 @@ QUICKBOOKS ONLINE (PR 23):
   DELEGATE: sync-quickbooks {} → { invoices_synced, expenses_synced, payments_pulled, errors }
     Use when: admin asks "sync to QuickBooks", "push invoices to QBO",
     "sync expenses", or "update QuickBooks"
+
+Stripe: clients pay invoices online via Checkout. Webhook auto-marks invoices paid.
+  create-checkout-session { invoice_id } → { url }
+    Creates a Stripe Checkout session for an unpaid invoice. Client portal "Pay Now"
+    button calls this, then redirects to the Checkout URL.
+  stripe-webhook (no auth — called by Stripe): handles checkout.session.completed
+    to mark invoices as paid with stripe_payment_id and paid_at timestamp.
+  Configured via env vars STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET.
 `
 
 // ---------------------------------------------------------------------------

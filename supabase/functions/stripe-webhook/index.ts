@@ -1,72 +1,61 @@
-import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import Stripe from 'https://esm.sh/stripe@13?target=deno';
-import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts';
+// stripe-webhook — Handles Stripe webhook events.
+// Verifies signature using STRIPE_WEBHOOK_SECRET + raw body.
+// Handles checkout.session.completed: marks invoice paid.
+// Handles checkout.session.expired: no-op (user abandoned).
+// No auth check — Stripe calls this directly.
+
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import Stripe from 'https://esm.sh/stripe@13?target=deno'
+import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
-
-// Stripe webhook handler
-// This function receives webhook events from Stripe and routes them to the
-// appropriate handlers. It verifies the webhook signature before processing.
-//
-// Required Supabase secrets:
-// - STRIPE_SECRET_KEY: Your Stripe secret key
-// - STRIPE_WEBHOOK_SECRET: From Stripe Dashboard → Webhooks → signing secret
-//
-// To activate: Add both secrets in Supabase dashboard, then set up the webhook
-// endpoint in Stripe Dashboard pointing to this function's URL:
-//   https://mebzqfeeiciayxdetteb.supabase.co/functions/v1/stripe-webhook
-//
-// STATUS: STUB — ready to activate when Stripe is configured.
-
 
 serve(async (req: Request) => {
   if (req.method === 'OPTIONS') {
-    return new Response('ok', { headers: getCorsHeaders(req) });
+    return new Response('ok', { headers: getCorsHeaders(req) })
   }
 
-  const rateLimitResult = await checkRateLimit(req, 'stripe-webhook');
-  if (!rateLimitResult.allowed) return rateLimitResponse(rateLimitResult);
+  const rateLimitResult = await checkRateLimit(req, 'stripe-webhook')
+  if (!rateLimitResult.allowed) return rateLimitResponse(rateLimitResult)
 
-  const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY');
-  const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET');
+  const stripeSecretKey = Deno.env.get('STRIPE_SECRET_KEY')
+  const webhookSecret = Deno.env.get('STRIPE_WEBHOOK_SECRET')
 
-  // If Stripe is not yet configured, log and return 200
-  // (Stripe retries on non-200 responses, which would fill the error log)
+  // If Stripe is not yet configured, return 200 so Stripe doesn't retry
   if (!stripeSecretKey || !webhookSecret) {
-    console.log('stripe-webhook: Stripe not configured. Add STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET to proceed.');
+    console.log('stripe-webhook: Stripe not configured. Add STRIPE_SECRET_KEY and STRIPE_WEBHOOK_SECRET to proceed.')
     return new Response(JSON.stringify({ received: true, status: 'not_configured' }), {
       status: 200,
       headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-    });
+    })
   }
 
-  const signature = req.headers.get('stripe-signature');
+  const signature = req.headers.get('stripe-signature')
   if (!signature) {
-    return new Response('Missing stripe-signature header', { status: 400 });
+    return new Response('Missing stripe-signature header', { status: 400 })
   }
 
-  const body = await req.text();
+  const body = await req.text()
 
-  // Log the webhook event to the database for debugging
   const supabase = createClient(
     Deno.env.get('SUPABASE_URL') ?? '',
-    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-  );
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  )
 
   try {
-    const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' });
-    let event: Stripe.Event;
+    const stripe = new Stripe(stripeSecretKey, { apiVersion: '2024-06-20' })
+    let event: Stripe.Event
     try {
-      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret);
+      event = await stripe.webhooks.constructEventAsync(body, signature, webhookSecret)
     } catch (verifyErr) {
-      console.error('stripe-webhook: signature verification failed:', verifyErr);
+      console.error('stripe-webhook: signature verification failed:', verifyErr)
       return new Response(JSON.stringify({ error: 'Invalid signature' }), {
         status: 400,
         headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-      });
+      })
     }
 
-    // Log the event
+    // Log the event (best-effort — table may not exist)
     await supabase.from('stripe_webhook_events').insert({
       event_id: event.id,
       event_type: event.type,
@@ -74,43 +63,63 @@ serve(async (req: Request) => {
       received_at: new Date().toISOString(),
       processed: false,
     }).catch(() => {
-      // Table may not exist yet — log to console
-      console.log('stripe-webhook event received:', event.type, event.id);
-    });
-
-    const eventObject = event.data.object as Record<string, unknown>;
+      console.log('stripe-webhook event received:', event.type, event.id)
+    })
 
     // Route to handlers based on event type
     switch (event.type) {
-      case 'payment_intent.succeeded':
-        // TODO: Mark invoice as paid, send receipt
-        console.log('Payment succeeded:', eventObject.id);
-        break;
+      case 'checkout.session.completed': {
+        const session = event.data.object as Stripe.Checkout.Session
+        const invoiceId = session.metadata?.invoice_id
+        if (invoiceId) {
+          const { error: updateErr } = await supabase
+            .from('invoices')
+            .update({
+              status: 'paid',
+              stripe_payment_id: typeof session.payment_intent === 'string'
+                ? session.payment_intent
+                : (session.payment_intent as { id: string } | null)?.id ?? null,
+              paid_at: new Date().toISOString(),
+            })
+            .eq('id', invoiceId)
 
-      case 'payment_intent.payment_failed':
-        // TODO: Notify admin of failed payment
-        console.log('Payment failed:', eventObject.id);
-        break;
+          if (updateErr) {
+            console.error('stripe-webhook: failed to update invoice:', updateErr.message)
+          } else {
+            console.log('stripe-webhook: invoice marked paid:', invoiceId)
+          }
 
-      case 'invoice.paid':
-        // TODO: Update invoice status in AK Ops
-        console.log('Invoice paid:', eventObject.id);
-        break;
+          // Mark webhook event as processed
+          await supabase
+            .from('stripe_webhook_events')
+            .update({ processed: true })
+            .eq('event_id', event.id)
+            .catch(() => {})
+        } else {
+          console.warn('stripe-webhook: checkout.session.completed missing invoice_id in metadata')
+        }
+        break
+      }
+
+      case 'checkout.session.expired': {
+        // No-op — user abandoned the checkout. Log it and move on.
+        console.log('stripe-webhook: checkout session expired:', (event.data.object as { id: string }).id)
+        break
+      }
 
       default:
-        console.log('Unhandled Stripe event type:', event.type);
+        console.log('Unhandled Stripe event type:', event.type)
     }
 
     return new Response(JSON.stringify({ received: true }), {
       status: 200,
       headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
-    });
-
+    })
   } catch (err) {
-    console.error('stripe-webhook error:', err);
+    console.error('stripe-webhook error:', err)
     return new Response(
       JSON.stringify({ error: 'Webhook processing failed' }),
-      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } }
-    );
+      { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+    )
   }
-});
+})
