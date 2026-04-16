@@ -9,6 +9,7 @@ import { AgentBar } from '@/components/ui/AgentBar'
 import { APIUsageBar } from '@/components/ui/APIUsageBar'
 import { BrandLogo } from '@/components/ui/BrandLogo'
 import { ModeToggle } from '@/components/ui/ModeToggle'
+import { PoweredByFooter } from '@/components/ui/PoweredByFooter'
 import { useAuth } from '@/context/AuthContext'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 import { cn } from '@/lib/utils'
@@ -50,7 +51,7 @@ export function AdminLayout() {
           <BrandLogo
             variant="company"
             companyName={company?.name}
-            logoUrl={company?.logo_url}
+            logoUrl={company?.brand_logo_url ?? company?.logo_url}
             size="lg"
           />
           <div className="mt-3">
@@ -160,6 +161,7 @@ export function AdminLayout() {
       <main className="flex-1 lg:ml-60 pt-11 lg:pt-0 pb-20 lg:pb-0 overflow-x-hidden">
         <AgentBar />
         <Outlet />
+        <PoweredByFooter />
       </main>
 
       {/* Mobile bottom nav — only top 5 */}

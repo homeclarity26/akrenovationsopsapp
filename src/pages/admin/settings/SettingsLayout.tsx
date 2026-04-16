@@ -3,7 +3,7 @@ import {
   Building2, Users, Workflow, Plug, Activity, Database,
   BookOpen, Brain, Zap, AlertTriangle, Layers, Wrench,
   LayoutTemplate, DollarSign, ClipboardList, Shield,
-  HardDrive, Stethoscope, ChevronRight,
+  HardDrive, Stethoscope, ChevronRight, Palette,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -34,6 +34,7 @@ const SECTIONS: SettingsSection[] = [
     icon: Building2,
     links: [
       { label: 'Business Context', desc: 'Teach the AI about your company', to: 'context', icon: BookOpen },
+      { label: 'Branding', desc: 'Logo, colors, powered-by footer', to: 'branding', icon: Palette },
       { label: 'Work-Type Rates', desc: 'Hourly rates for each trade', to: 'rates', icon: DollarSign },
     ],
   },

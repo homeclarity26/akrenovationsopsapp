@@ -328,6 +328,12 @@ send-sms { to, body } → Send real SMS to any phone via Twilio
   Note: Requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER env vars.
   If Twilio is not configured, returns 503 — tell the user to set up Twilio in Settings > Integrations.
 
+White-label branding: each company can set logo, colors, tagline in Settings > Branding.
+  CSS variables update live. "Powered by TradeOffice AI" footer is visible by default.
+  Storage bucket: company-assets (public, for logos/favicons).
+  Columns on companies table: brand_logo_url, brand_color_primary, brand_color_accent,
+  brand_color_bg, brand_favicon_url, brand_tagline, powered_by_visible, powered_by_text.
+
 Gusto Payroll: connected via OAuth. Syncs employees + pay periods.
   DELEGATE: sync-to-gusto { pay_period_id? } → { employees_synced, payroll_synced, errors }
   Use when: admin asks "send payroll to Gusto" or "sync employees to Gusto"
