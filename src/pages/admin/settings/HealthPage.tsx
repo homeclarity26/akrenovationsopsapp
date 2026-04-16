@@ -213,6 +213,47 @@ export function HealthPage() {
         </div>
       </div>
 
+      {/* Deployment summary */}
+      <div>
+        <SectionHeader title="Deployment Overview" />
+        <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+          <MetricCard
+            label="Edge functions deployed"
+            value={79}
+            subtitle="from supabase/functions"
+          />
+          <MetricCard
+            label="Cron jobs scheduled"
+            value={23}
+            subtitle="via pg_cron"
+          />
+          <MetricCard
+            label="Last agent run"
+            value={
+              agentRuns && agentRuns.length > 0
+                ? timeAgo(agentRuns[0].started_at)
+                : '--'
+            }
+            subtitle={
+              agentRuns && agentRuns.length > 0
+                ? agentRuns[0].agent_name
+                : 'no recent runs'
+            }
+          />
+          <MetricCard
+            label="Open errors (24h)"
+            value={errors == null ? '--' : errors.length}
+            subtitle={
+              errors == null
+                ? 'error_log unavailable'
+                : errors.length === 0
+                  ? 'all clear'
+                  : `${errorCountBySeverity.fatal + errorCountBySeverity.error} critical`
+            }
+          />
+        </div>
+      </div>
+
       {/* Header metric cards (last 24h) */}
       <div>
         <SectionHeader title="Last 24 hours" />

@@ -15,6 +15,7 @@ import { z } from 'npm:zod@3'
 import { verifyAuth } from '../_shared/auth.ts'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { captureException } from '../_shared/sentry.ts'
 
 // Tables the apply function is allowed to mutate. Anything else → 400.
 const ALLOWED_TABLES = new Set([
@@ -193,6 +194,7 @@ serve(async (req) => {
     )
   } catch (err) {
     console.error('apply-project-suggestion error:', err)
+    captureException(err, { function: 'apply-project-suggestion' })
     return new Response(
       JSON.stringify({ error: String(err) }),
       { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },

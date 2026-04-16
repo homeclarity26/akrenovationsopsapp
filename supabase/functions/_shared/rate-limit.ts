@@ -116,6 +116,12 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
   // ─── Wave D / PR 23: QuickBooks Online ───
   'sync-quickbooks':                 { maxRequests: 10,  windowSeconds: 3600 },
   'quickbooks-auth':                 { maxRequests: 10,  windowSeconds: 3600 },
+
+  // ─── Uncategorized / webhooks / utilities ───
+  'get-usage-stats':                 { maxRequests: 60,  windowSeconds: 3600 },
+  'invite-client-to-portal':        { maxRequests: 30,  windowSeconds: 3600 },
+  'notify-inventory-alerts':        { maxRequests: 5,   windowSeconds: 86400 },
+  'stripe-webhook':                 { maxRequests: 500, windowSeconds: 3600 },
 }
 
 const DEFAULT_LIMIT = { maxRequests: 60, windowSeconds: 3600 }
