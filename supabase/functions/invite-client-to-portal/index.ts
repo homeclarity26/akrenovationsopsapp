@@ -33,6 +33,7 @@ const InputSchema = z.object({
   project_id: z.string().uuid('project_id must be a valid UUID'),
   client_email: z.string().email(),
   client_full_name: z.string().min(1).max(200),
+  client_phone: z.string().optional(),
   method: z.enum(['email', 'sms']).default('email'),
 })
 
@@ -67,7 +68,7 @@ serve(async (req) => {
         { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
-    const { project_id, client_email, client_full_name, method } = parsed.data
+    const { project_id, client_email, client_full_name, client_phone, method } = parsed.data
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? ''
     const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -226,8 +227,35 @@ serve(async (req) => {
         sentVia = 'manual'
       }
     } else if (method === 'sms') {
-      // SMS to be wired via Twilio in a later PR; return link for manual send.
-      sentVia = 'manual'
+      // Wire to Twilio send-sms if configured, otherwise fall back to manual
+      const twilioPhone = Deno.env.get('TWILIO_PHONE_NUMBER') ?? ''
+      if (twilioPhone && client_phone) {
+        try {
+          const smsBody = `Hi ${client_full_name}, your AK Renovations project portal is ready. Open it here: ${link}`
+          const authHeader = req.headers.get('Authorization') ?? `Bearer ${anonKey}`
+          const smsRes = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': authHeader,
+            },
+            body: JSON.stringify({ to: client_phone, body: smsBody }),
+          })
+          if (smsRes.ok) {
+            sentVia = 'sms'
+          } else {
+            const errBody = await smsRes.text().catch(() => '')
+            console.warn('send-sms failed:', smsRes.status, errBody)
+            sentVia = 'manual'
+          }
+        } catch (err) {
+          console.warn('send-sms fetch error:', err)
+          sentVia = 'manual'
+        }
+      } else {
+        // Twilio not configured — fall back to manual
+        sentVia = 'manual'
+      }
     }
 
     // Track usage (non-blocking)
