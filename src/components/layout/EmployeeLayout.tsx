@@ -1,10 +1,9 @@
-import { useState } from 'react'
 import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import {
   Home, ShoppingCart, Clock, Calendar,
-  MessageCircle, Sparkles, FolderOpen, Package
+  MessageCircle, FolderOpen, Package
 } from 'lucide-react'
-import { AIBar } from '@/components/ui/AIBar'
+import { AgentBar } from '@/components/ui/AgentBar'
 import { Badge } from '@/components/ui/Badge'
 import { ModeToggle } from '@/components/ui/ModeToggle'
 import { useAuth } from '@/context/AuthContext'
@@ -24,7 +23,6 @@ const NAV = [
 ]
 
 export function EmployeeLayout() {
-  const [aiOpen, setAiOpen] = useState(false)
   const { user } = useAuth()
   const { data: company } = useCompanyProfile()
 
@@ -43,15 +41,10 @@ export function EmployeeLayout() {
             <span className="text-xs font-medium text-[var(--text-secondary)] truncate max-w-[140px]">{company.name}</span>
           )}
         </div>
-        <button
-          onClick={() => setAiOpen(true)}
-          className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-white transition-colors"
-        >
-          <Sparkles size={18} />
-        </button>
       </header>
 
       <main className="flex-1 pt-11 pb-20 overflow-x-hidden">
+        <AgentBar />
         <Outlet />
       </main>
 
@@ -82,7 +75,6 @@ export function EmployeeLayout() {
         </div>
       </nav>
 
-      {aiOpen && <AIBar onClose={() => setAiOpen(false)} placeholder="Ask about today's job, materials, or schedule..." />}
     </div>
   )
 }
