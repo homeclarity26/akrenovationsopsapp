@@ -78,11 +78,11 @@ export function ClientDocs() {
       {isLoading ? (
         <Card padding="none"><SkeletonRow count={3} /></Card>
       ) : docs.length === 0 ? (
-        <Card>
-          <p className="text-sm text-[var(--text-secondary)]">
-            No documents shared yet. Your contractor will upload contracts, proposals, and other files here.
-          </p>
-        </Card>
+        <div className="text-center py-12 px-4">
+          <FileText size={40} className="mx-auto text-[var(--text-tertiary)] mb-3" />
+          <p className="font-medium text-sm text-[var(--text)]">No documents yet</p>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1 max-w-xs mx-auto">Your contractor will upload contracts, proposals, and other files here.</p>
+        </div>
       ) : (
         <Card padding="none">
           {docs.map((doc) => {

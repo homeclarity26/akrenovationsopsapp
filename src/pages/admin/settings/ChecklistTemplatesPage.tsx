@@ -45,8 +45,18 @@ export function ChecklistTemplatesPage() {
   if (isLoading) {
     return (
       <div className="space-y-5 pb-10">
-        <PageHeader title="Checklist Templates" subtitle="Loading..." />
-        <div className="text-sm text-[var(--text-secondary)] text-center py-8">Loading checklist templates...</div>
+        <PageHeader title="Checklist Templates" subtitle="Master definitions of every checklist. Triggers determine when they auto-generate." />
+        <div className="space-y-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <Card key={i}>
+              <div className="animate-pulse space-y-3">
+                <div className="h-4 w-1/3 rounded bg-[var(--border)]" />
+                <div className="h-3 w-full rounded bg-[var(--border-light)]" />
+                <div className="h-3 w-2/3 rounded bg-[var(--border-light)]" />
+              </div>
+            </Card>
+          ))}
+        </div>
       </div>
     )
   }

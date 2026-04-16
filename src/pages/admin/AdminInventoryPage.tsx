@@ -134,11 +134,11 @@ export function AdminInventoryPage() {
 
       <div className="p-4 space-y-4 lg:px-8 lg:py-6">
         {!companyId && (
-          <Card>
-            <p className="text-sm text-[var(--text-secondary)] text-center py-4">
-              No company loaded. Inventory is scoped to your company.
-            </p>
-          </Card>
+          <div className="text-center py-12 px-4">
+            <Package size={40} className="mx-auto text-[var(--text-tertiary)] mb-3" />
+            <p className="font-medium text-sm text-[var(--text)]">No inventory yet</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1 max-w-xs mx-auto">Set up your company profile to start tracking materials, tools, and stock across locations.</p>
+          </div>
         )}
 
         {companyId && tab === 'alerts' && (

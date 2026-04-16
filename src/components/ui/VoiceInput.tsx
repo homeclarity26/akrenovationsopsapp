@@ -49,6 +49,8 @@ export function VoiceInput({ onResult, active: controlledActive, className }: Vo
   const animFrameRef = useRef<number>(0)
   const analyserRef = useRef<AnalyserNode | null>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const audioCtxRef = useRef<AudioContext | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const active = controlledActive ?? isListening
 
@@ -99,10 +101,14 @@ export function VoiceInput({ onResult, active: controlledActive, className }: Vo
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       streamRef.current = stream
 
-      // Waveform
-      const audioCtx = new AudioContext()
-      const source = audioCtx.createMediaStreamSource(stream)
-      const analyser = audioCtx.createAnalyser()
+      // Waveform — reuse AudioContext across taps
+      if (!audioCtxRef.current || audioCtxRef.current.state === 'closed') {
+        audioCtxRef.current = new AudioContext()
+      } else if (audioCtxRef.current.state === 'suspended') {
+        await audioCtxRef.current.resume()
+      }
+      const source = audioCtxRef.current.createMediaStreamSource(stream)
+      const analyser = audioCtxRef.current.createAnalyser()
       analyser.fftSize = 256
       source.connect(analyser)
       analyserRef.current = analyser
@@ -118,6 +124,7 @@ export function VoiceInput({ onResult, active: controlledActive, className }: Vo
     recognition.lang = 'en-US'
 
     recognition.onresult = (event: { results: SpeechRecognitionResultList }) => {
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
       let interim = ''
       for (let i = 0; i < event.results.length; i++) {
         const result = event.results[i]
@@ -133,10 +140,12 @@ export function VoiceInput({ onResult, active: controlledActive, className }: Vo
     }
 
     recognition.onerror = () => {
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
       setIsListening(false)
     }
 
     recognition.onend = () => {
+      if (timeoutRef.current) { clearTimeout(timeoutRef.current); timeoutRef.current = null }
       setIsListening(false)
     }
 
@@ -144,6 +153,13 @@ export function VoiceInput({ onResult, active: controlledActive, className }: Vo
     recognitionRef.current = recognition
     setIsListening(true)
     setTranscript('')
+
+    // 30s safety timeout
+    timeoutRef.current = setTimeout(() => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (recognitionRef.current as any)?.stop?.()
+      timeoutRef.current = null
+    }, 30_000)
   }, [onResult, drawWaveform])
 
   // ---- Stop listening ----
@@ -169,6 +185,8 @@ export function VoiceInput({ onResult, active: controlledActive, className }: Vo
       (recognitionRef.current as any)?.stop?.()
       cancelAnimationFrame(animFrameRef.current)
       streamRef.current?.getTracks().forEach((t) => t.stop())
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      audioCtxRef.current?.close()
     }
   }, [])
 

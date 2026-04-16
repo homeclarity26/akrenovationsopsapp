@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send } from 'lucide-react'
+import { Send, MessageSquare } from 'lucide-react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
@@ -162,7 +162,11 @@ export function ClientMessages() {
 
       <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
-          <p className="text-sm text-[var(--text-tertiary)] text-center py-8">No messages yet.</p>
+          <div className="text-center py-12 px-4">
+            <MessageSquare size={40} className="mx-auto text-[var(--text-tertiary)] mb-3" />
+            <p className="font-medium text-sm text-[var(--text)]">No messages yet</p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1 max-w-xs mx-auto">Send a message to start a conversation with your contractor.</p>
+          </div>
         )}
         {messages.map((m) => {
           const mine = isMine(m)

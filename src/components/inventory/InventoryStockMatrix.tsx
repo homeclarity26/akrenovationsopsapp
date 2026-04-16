@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { AlertCircle, Check, Search, X } from 'lucide-react'
+import { AlertCircle, Check, Search, X, Package } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
@@ -335,13 +335,23 @@ export function InventoryStockMatrix({
     commitEditor(itemId, locationId)
   }
 
+  if (locations.length === 0 && items.length === 0) {
+    return (
+      <div className="text-center py-12 px-4">
+        <Package size={40} className="mx-auto text-[var(--text-tertiary)] mb-3" />
+        <p className="font-medium text-sm text-[var(--text)]">No stock data yet</p>
+        <p className="text-xs text-[var(--text-tertiary)] mt-1 max-w-xs mx-auto">Add your first items and locations to start tracking inventory across your trucks, shop, and job sites.</p>
+      </div>
+    )
+  }
+
   if (locations.length === 0) {
     return (
-      <Card>
-        <p className="text-sm text-[var(--text-secondary)] text-center py-4">
-          No active locations yet. Add locations first so you can track stock against them.
-        </p>
-      </Card>
+      <div className="text-center py-12 px-4">
+        <Package size={40} className="mx-auto text-[var(--text-tertiary)] mb-3" />
+        <p className="font-medium text-sm text-[var(--text)]">No active locations</p>
+        <p className="text-xs text-[var(--text-tertiary)] mt-1 max-w-xs mx-auto">Add locations first so you can track stock against them.</p>
+      </div>
     )
   }
 
