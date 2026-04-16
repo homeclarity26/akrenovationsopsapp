@@ -5,6 +5,7 @@ import { FirstVisitWizard } from '@/components/onboarding/FirstVisitWizard'
 import { CheckCircle, Circle, Loader } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useClientProject } from '@/hooks/useClientProject'
+import { SkeletonCard, SkeletonText } from '@/components/ui/Skeleton'
 
 interface Phase {
   id: string
@@ -79,8 +80,14 @@ export function ClientProgress() {
 
   if (projectLoading) {
     return (
-      <div className="p-4 max-w-lg mx-auto">
-        <p className="text-sm text-[var(--text-tertiary)]">Loading your project...</p>
+      <div className="p-4 space-y-5 max-w-lg mx-auto">
+        <div className="bg-[var(--border)] rounded-xl p-4 animate-pulse h-24" />
+        <div className="grid grid-cols-3 gap-3">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
+        <SkeletonText lines={3} />
       </div>
     )
   }

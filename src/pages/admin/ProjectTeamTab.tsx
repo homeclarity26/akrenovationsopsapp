@@ -6,6 +6,7 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
+import { useToast } from '@/hooks/useToast'
 
 interface Props {
   projectId: string
@@ -42,6 +43,7 @@ const ROLE_META: Record<AssignmentRole, { label: string; Icon: typeof Shield; de
 export function ProjectTeamTab({ projectId }: Props) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   const [pickerOpen, setPickerOpen] = useState(false)
   const [pickerRole, setPickerRole] = useState<AssignmentRole>('worker')
   const [pickerEmployee, setPickerEmployee] = useState<string>('')
@@ -101,6 +103,7 @@ export function ProjectTeamTab({ projectId }: Props) {
     setSubmitting(false)
     if (!error) {
       queryClient.invalidateQueries({ queryKey: ['project_assignments', projectId] })
+      toast.success('Team member added')
       setPickerOpen(false)
       setPickerEmployee('')
       setPickerRole('worker')
@@ -121,7 +124,10 @@ export function ProjectTeamTab({ projectId }: Props) {
       .from('project_assignments')
       .update({ active: false })
       .eq('id', assignmentId)
-    if (!error) queryClient.invalidateQueries({ queryKey: ['project_assignments', projectId] })
+    if (!error) {
+      queryClient.invalidateQueries({ queryKey: ['project_assignments', projectId] })
+      toast.info('Team member removed')
+    }
   }
 
   if (assignmentsError) {

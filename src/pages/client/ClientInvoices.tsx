@@ -4,6 +4,7 @@ import { StatusPill } from '@/components/ui/StatusPill'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { supabase } from '@/lib/supabase'
 import { useClientProject } from '@/hooks/useClientProject'
+import { SkeletonCard } from '@/components/ui/Skeleton'
 
 interface Invoice {
   id: string
@@ -76,9 +77,7 @@ export function ClientInvoices() {
       <div>
         <SectionHeader title="All Invoices" />
         {isLoading ? (
-          <Card>
-            <p className="text-sm text-[var(--text-tertiary)]">Loading...</p>
-          </Card>
+          <div className="space-y-3"><SkeletonCard /><SkeletonCard /></div>
         ) : invoices.length === 0 ? (
           <Card>
             <p className="text-sm text-[var(--text-secondary)]">

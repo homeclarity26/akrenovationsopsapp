@@ -7,6 +7,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
+import { SkeletonCard } from '@/components/ui/Skeleton'
 
 interface ProjectRow {
   id: string
@@ -67,9 +68,11 @@ export function EmployeeProjectsPage() {
       </div>
 
       {isLoading ? (
-        <Card>
-          <p className="text-center text-sm text-[var(--text-tertiary)] py-6">Loading projects…</p>
-        </Card>
+        <div className="space-y-2">
+          <SkeletonCard />
+          <SkeletonCard />
+          <SkeletonCard />
+        </div>
       ) : error ? (
         <Card>
           <p className="text-sm text-[var(--text-secondary)] mb-3 text-center">

@@ -13,6 +13,7 @@ import { useAuth } from '@/context/AuthContext'
 import { useInventoryRealtime } from '@/hooks/useInventoryRealtime'
 import { cn } from '@/lib/utils'
 import { PhotoStocktakeModal } from '@/components/inventory/PhotoStocktakeModal'
+import { useToast } from '@/hooks/useToast'
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Types — mirror PR 7 schema (see 20260415000600_inventory_schema.sql)
@@ -147,6 +148,7 @@ function clampQty(n: number): number {
 export function EmployeeStocktakePage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const { toast: globalToast } = useToast()
 
   // Subscribe to realtime inventory changes so live admin edits & peer submissions
   // propagate automatically.
@@ -490,13 +492,11 @@ export function EmployeeStocktakePage() {
       setPending({})
       queryClient.invalidateQueries({ queryKey: ['inventory_location_items'] })
       queryClient.invalidateQueries({ queryKey: ['inventory_stock'] })
-      setToast(`Submitted ${res.inserted} count${res.inserted === 1 ? '' : 's'}`)
-      setTimeout(() => setToast(null), 3500)
+      globalToast.success(`Submitted ${res.inserted} count${res.inserted === 1 ? '' : 's'}`)
     },
     onError: (err: unknown) => {
       const msg = err instanceof Error ? err.message : 'Submit failed'
-      setToast(`Error: ${msg}`)
-      setTimeout(() => setToast(null), 5000)
+      globalToast.error(msg)
     },
   })
 
@@ -778,8 +778,7 @@ export function EmployeeStocktakePage() {
         locationName={pickedLocation.name}
         knownItems={knownItemsForPhoto}
         onSubmitted={(count) => {
-          setToast(`Submitted ${count} count${count === 1 ? '' : 's'} from photo`)
-          setTimeout(() => setToast(null), 3500)
+          globalToast.success(`Submitted ${count} count${count === 1 ? '' : 's'} from photo`)
         }}
       />
     </div>

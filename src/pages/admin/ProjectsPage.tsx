@@ -8,11 +8,14 @@ import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
+import { useToast } from '@/hooks/useToast'
+import { SkeletonRow } from '@/components/ui/Skeleton'
 
 export function ProjectsPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const { toast } = useToast()
 
   const [showNew, setShowNew] = useState(false)
   const [form, setForm] = useState({ title: '', client_name: '' })
@@ -58,6 +61,7 @@ export function ProjectsPage() {
     setShowNew(false)
     resetForm()
     queryClient.invalidateQueries({ queryKey: ['projects', user?.company_id] })
+    toast.success('Project created')
   }
 
   if (error) return (
@@ -126,9 +130,7 @@ export function ProjectsPage() {
       )}
 
       {isLoading ? (
-        <div className="py-8 text-center">
-          <p className="text-sm text-[var(--text-tertiary)]">Loading...</p>
-        </div>
+        <Card padding="none"><SkeletonRow count={4} /></Card>
       ) : projects.length === 0 ? (
         <div className="text-center py-12 px-4">
           <p className="font-medium text-sm text-[var(--text)]">No projects yet</p>

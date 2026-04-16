@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, ArrowLeft } from 'lucide-react'
+import { Send, ArrowLeft, MessageSquare } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
@@ -98,8 +98,10 @@ export function MessagesPage() {
             <p className="text-sm text-[var(--text-tertiary)]">Loading messages...</p>
           </div>
         ) : messages.length === 0 ? (
-          <div className="text-center py-8">
-            <p className="text-sm text-[var(--text-tertiary)]">No messages yet. Send the first one.</p>
+          <div className="flex flex-col items-center gap-2 py-12 text-center">
+            <MessageSquare size={28} className="text-[var(--text-tertiary)]" />
+            <p className="text-sm text-[var(--text-secondary)]">No messages yet</p>
+            <p className="text-xs text-[var(--text-tertiary)]">Send the first message to your team.</p>
           </div>
         ) : (
           messages.map(m => (

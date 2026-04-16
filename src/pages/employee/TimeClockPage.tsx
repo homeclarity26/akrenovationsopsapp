@@ -5,6 +5,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
+import { useToast } from '@/hooks/useToast'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -87,6 +88,7 @@ export function TimeClockPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   const TODAY = new Date().toISOString().slice(0, 10)
 
   const { data: dbEntries = [], error, refetch } = useQuery({
@@ -205,6 +207,7 @@ export function TimeClockPage() {
         notes: null,
       })
       queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
+      toast.success('Clocked in')
     }
 
     setShowClockIn(false)
@@ -234,6 +237,7 @@ export function TimeClockPage() {
         notes: clockOutNote || null,
       }).eq('id', openEntry.id)
       queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
+      toast.success('Clock out saved')
     }
 
     setClockOutNote('')
@@ -274,6 +278,7 @@ export function TimeClockPage() {
       notes: manualReason,
     })
     queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
+    toast.success('Manual entry saved')
 
     setShowManual(false)
     setManualReason('')
