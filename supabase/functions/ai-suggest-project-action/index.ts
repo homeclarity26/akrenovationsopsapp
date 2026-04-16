@@ -14,6 +14,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { z } from 'npm:zod@3'
 import { verifyAuth } from '../_shared/auth.ts'
+import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
 
 const ProposedActionSchema = z.object({
@@ -53,6 +54,9 @@ serve(async (req) => {
       )
     }
 
+    const rl = await checkRateLimit(req, 'ai-suggest-project-action')
+    if (!rl.allowed) return rateLimitResponse(rl)
+
     const body = await req.json().catch(() => ({}))
     const parsed = InputSchema.safeParse(body)
     if (!parsed.success) {
@@ -84,6 +88,26 @@ serve(async (req) => {
         JSON.stringify({ error: 'Project not found' }),
         { status: 404, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
+    }
+
+    // Employees may only propose suggestions on projects they're assigned to.
+    // Admins + super_admins skip this check. Callers with no project-level
+    // scope (e.g. internal edge functions using service role) still get
+    // blocked here unless they come in with admin/super_admin role.
+    if (auth.role === 'employee') {
+      const { data: assignment } = await supabase
+        .from('project_assignments')
+        .select('id')
+        .eq('project_id', project_id)
+        .eq('employee_id', auth.user_id)
+        .eq('active', true)
+        .maybeSingle()
+      if (!assignment) {
+        return new Response(
+          JSON.stringify({ error: 'You are not assigned to this project' }),
+          { status: 403, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+        )
+      }
     }
 
     const expires_at = expires_in_hours

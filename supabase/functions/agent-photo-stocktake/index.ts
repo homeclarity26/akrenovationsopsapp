@@ -365,9 +365,12 @@ Return a JSON object with this exact shape:
 If the photo is too blurry or doesn't show inventory, return {"proposals": []}.`
 
     // ── Call Gemini, with one JSON-only retry on parse failure ────────────
+    // One AI-usage row per user request: log ONCE after both attempts
+    // (success or final failure), not per retry.
     const _t0 = Date.now()
-    let raw: GeminiResult
+    let raw: GeminiResult | null = null
     let parsedResp: unknown
+    let finalError: string | null = null
     try {
       raw = await callGeminiVision(
         imageBase64,
@@ -377,24 +380,10 @@ If the photo is too blurry or doesn't show inventory, return {"proposals": []}.`
         AI_CONFIG.VISION_MAX_TOKENS,
       )
       parsedResp = extractJson(raw.text)
-    } catch (firstErr) {
-      // Retry once with a JSON-only reinforcement. Log the first attempt.
-      await logAiUsage({
-        company_id: location.company_id,
-        function_name: 'agent-photo-stocktake',
-        model_provider: 'gemini',
-        model_name: AI_CONFIG.VISION_MODEL,
-        input_tokens: 0,
-        output_tokens: 0,
-        duration_ms: Date.now() - _t0,
-        status: 'error',
-        error_message: String(firstErr).slice(0, 400),
-      })
-
+    } catch (_firstErr) {
       const retryPrompt =
         userPrompt +
         `\n\nYour previous response could not be parsed as JSON. Respond with ONLY a valid JSON object. Do not include any explanation, markdown fence, or prose outside the JSON.`
-
       try {
         raw = await callGeminiVision(
           imageBase64,
@@ -405,26 +394,34 @@ If the photo is too blurry or doesn't show inventory, return {"proposals": []}.`
         )
         parsedResp = extractJson(raw.text)
       } catch (secondErr) {
-        await logAiUsage({
-          company_id: location.company_id,
-          function_name: 'agent-photo-stocktake',
-          model_provider: 'gemini',
-          model_name: AI_CONFIG.VISION_MODEL,
-          input_tokens: 0,
-          output_tokens: 0,
-          duration_ms: Date.now() - _t0,
-          status: 'error',
-          error_message: String(secondErr).slice(0, 400),
-        })
-        return new Response(
-          JSON.stringify({
-            error: 'AI response could not be parsed — fall back to manual entry.',
-            details: String(secondErr).slice(0, 400),
-          }),
-          { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
-        )
+        finalError = String(secondErr).slice(0, 400)
       }
     }
+
+    if (finalError) {
+      // Both attempts failed — log once with error status, input/output 0.
+      await logAiUsage({
+        company_id: location.company_id,
+        function_name: 'agent-photo-stocktake',
+        model_provider: 'gemini',
+        model_name: AI_CONFIG.VISION_MODEL,
+        input_tokens: 0,
+        output_tokens: 0,
+        duration_ms: Date.now() - _t0,
+        status: 'error',
+        error_message: finalError,
+      })
+      return new Response(
+        JSON.stringify({
+          error: 'AI response could not be parsed — fall back to manual entry.',
+          details: finalError,
+        }),
+        { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      )
+    }
+
+    // Success — raw is guaranteed non-null here.
+    const rawResp = raw as GeminiResult
 
     // Validate the envelope shape. If the outer wrapper is missing, try to
     // coerce: some models return a bare array.
@@ -456,8 +453,8 @@ If the photo is too blurry or doesn't show inventory, return {"proposals": []}.`
       function_name: 'agent-photo-stocktake',
       model_provider: 'gemini',
       model_name: AI_CONFIG.VISION_MODEL,
-      input_tokens: raw.usage.input_tokens,
-      output_tokens: raw.usage.output_tokens,
+      input_tokens: rawResp.usage.input_tokens,
+      output_tokens: rawResp.usage.output_tokens,
       duration_ms: Date.now() - _t0,
       status: 'success',
     })
