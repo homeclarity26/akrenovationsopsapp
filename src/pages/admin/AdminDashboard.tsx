@@ -5,6 +5,8 @@ import { Card, MetricCard } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { HealthMonitor } from '@/components/HealthMonitor'
+import { Tooltip } from '@/components/ui/Tooltip'
+import { FirstVisitWizard } from '@/components/onboarding/FirstVisitWizard'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 
@@ -116,6 +118,7 @@ export function AdminDashboard() {
 
   return (
     <div className="p-4 space-y-5 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">
+      <FirstVisitWizard persona="admin" />
       {/* Greeting */}
       <div>
         <h1 className="font-display text-3xl text-[var(--navy)] leading-tight">
@@ -166,16 +169,20 @@ export function AdminDashboard() {
 
       {/* Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-        <MetricCard
-          label="Outstanding AR"
-          value={outstandingAR > 0 ? `$${(outstandingAR / 1000).toFixed(1)}K` : '$0'}
-          subtitle={`${invoices.filter(i => ['sent','viewed','partial_paid','overdue'].includes(i.status)).length} invoice${invoices.filter(i => ['sent','viewed','partial_paid','overdue'].includes(i.status)).length === 1 ? '' : 's'}`}
-        />
-        <MetricCard
-          label="Avg Margin"
-          value={avgMargin != null ? `${(avgMargin * 100).toFixed(1)}%` : '--'}
-          subtitle="Target: 38%"
-        />
+        <Tooltip content="Total unpaid balance across sent, viewed, and overdue invoices">
+          <MetricCard
+            label="Outstanding AR"
+            value={outstandingAR > 0 ? `$${(outstandingAR / 1000).toFixed(1)}K` : '$0'}
+            subtitle={`${invoices.filter(i => ['sent','viewed','partial_paid','overdue'].includes(i.status)).length} invoice${invoices.filter(i => ['sent','viewed','partial_paid','overdue'].includes(i.status)).length === 1 ? '' : 's'}`}
+          />
+        </Tooltip>
+        <Tooltip content="Average actual margin across active projects vs. 38% target">
+          <MetricCard
+            label="Avg Margin"
+            value={avgMargin != null ? `${(avgMargin * 100).toFixed(1)}%` : '--'}
+            subtitle="Target: 38%"
+          />
+        </Tooltip>
         <MetricCard
           label="Active Projects"
           value={activeProjects.length}

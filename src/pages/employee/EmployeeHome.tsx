@@ -5,6 +5,7 @@ import {
   Gift, FileText, MessageCircle, Wallet, CheckSquare, Wrench
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
+import { FirstVisitWizard } from '@/components/onboarding/FirstVisitWizard'
 import { useAuth } from '@/context/AuthContext'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
@@ -127,6 +128,7 @@ export function EmployeeHome() {
 
   return (
     <div className="p-4 space-y-5">
+      <FirstVisitWizard persona="field" />
       {/* Greeting */}
       <div className="pt-2">
         <h1 className="font-display text-3xl text-[var(--navy)] leading-tight">

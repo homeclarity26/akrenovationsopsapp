@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { Card, MetricCard } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
+import { FirstVisitWizard } from '@/components/onboarding/FirstVisitWizard'
 import { CheckCircle, Circle, Loader } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useClientProject } from '@/hooks/useClientProject'
@@ -105,6 +106,7 @@ export function ClientProgress() {
 
   return (
     <div className="p-4 space-y-5 max-w-lg mx-auto">
+      <FirstVisitWizard persona="client" />
       {/* Welcome */}
       <div className="bg-[var(--navy)] rounded-xl p-4">
         <p className="text-white/60 text-xs mb-1">Your Project</p>
