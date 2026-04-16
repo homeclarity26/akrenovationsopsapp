@@ -31,6 +31,7 @@ const WalkthroughPage = lazy(() => import('./pages/admin/WalkthroughPage').then(
 const AdminInventoryPage = lazy(() => import('./pages/admin/AdminInventoryPage').then(m => ({ default: m.AdminInventoryPage })))
 const SubcontractorsPage = lazy(() => import('./pages/admin/SubcontractorsPage').then(m => ({ default: m.SubcontractorsPage })))
 const SettingsPage = lazy(() => import('./pages/admin/SettingsPage').then(m => ({ default: m.SettingsPage })))
+const SettingsLayout = lazy(() => import('./pages/admin/settings/SettingsLayout').then(m => ({ default: m.SettingsLayout })))
 const MemoryInspectorPage = lazy(() => import('./pages/admin/settings/MemoryInspectorPage').then(m => ({ default: m.MemoryInspectorPage })))
 const AgentsPage = lazy(() => import('./pages/admin/settings/AgentsPage').then(m => ({ default: m.AgentsPage })))
 const ApprovalsPage = lazy(() => import('./pages/admin/settings/ApprovalsPage').then(m => ({ default: m.ApprovalsPage })))
@@ -271,15 +272,27 @@ function AppRoutes() {
           <Route path="inventory" element={<AdminInventoryPage />} />
           <Route path="subs" element={<SubcontractorsPage />} />
           <Route path="ai" element={<MetaAgentPage />} />
-          <Route path="settings" element={<SettingsPage />} />
-          <Route path="settings/memory" element={<MemoryInspectorPage />} />
-          <Route path="settings/agents" element={<AgentsPage />} />
-          <Route path="settings/approvals" element={<ApprovalsPage />} />
+          {/* Settings — nested under SettingsLayout with sidebar/tabs */}
+          <Route path="settings" element={<SettingsLayout />}>
+            <Route index element={<SettingsPage />} />
+            <Route path="context" element={<BusinessContextPage />} />
+            <Route path="rates" element={<WorkTypeRatesPage />} />
+            <Route path="approvals" element={<ApprovalsPage />} />
+            <Route path="templates" element={<TemplatesPage />} />
+            <Route path="estimate-templates" element={<EstimateTemplatesPage />} />
+            <Route path="checklists" element={<ChecklistTemplatesPage />} />
+            <Route path="materials" element={<MaterialsPage />} />
+            <Route path="tool-requests" element={<ToolRequestsAdminPage />} />
+            <Route path="agents" element={<AgentsPage />} />
+            <Route path="memory" element={<MemoryInspectorPage />} />
+            <Route path="health" element={<HealthPage />} />
+            <Route path="backups" element={<BackupsPage />} />
+            <Route path="security" element={<SecurityPage />} />
+          </Route>
           <Route path="ai/improvements" element={<ImprovementQueuePage />} />
           <Route path="field" element={<FieldLaunchpadPage />} />
           <Route path="time" element={<TimeClockPage />} />
           <Route path="time/pending" element={<PendingTimeEntriesPage />} />
-          <Route path="settings/rates" element={<WorkTypeRatesPage />} />
           {/* Payroll (Phase I) */}
           <Route path="payroll" element={<PayrollDashboardPage />} />
           <Route path="payroll/workers" element={<PayrollWorkersPage />} />
@@ -290,21 +303,9 @@ function AppRoutes() {
           <Route path="payroll/:periodId" element={<PayPeriodDetailPage />} />
           {/* Phase J — Checklists & Estimate Templates */}
           <Route path="checklists" element={<ChecklistsPage />} />
-          <Route path="settings/estimate-templates" element={<EstimateTemplatesPage />} />
-          <Route path="settings/checklists" element={<ChecklistTemplatesPage />} />
           {/* Phase K — sub-routes (no new top-level nav) */}
           <Route path="portfolio" element={<PortfolioPage />} />
           <Route path="warranty" element={<WarrantyPage />} />
-          <Route path="settings/materials" element={<MaterialsPage />} />
-          <Route path="settings/tool-requests" element={<ToolRequestsAdminPage />} />
-          {/* Phase N — Template Library */}
-          <Route path="settings/templates" element={<TemplatesPage />} />
-          {/* Phase M — Backups & Security */}
-          <Route path="settings/backups" element={<BackupsPage />} />
-          <Route path="settings/security" element={<SecurityPage />} />
-          <Route path="settings/health" element={<HealthPage />} />
-          {/* Business context editor + onboarding */}
-          <Route path="settings/context" element={<BusinessContextPage />} />
           <Route path="onboard" element={<OnboardingPage />} />
         </Route>
 
