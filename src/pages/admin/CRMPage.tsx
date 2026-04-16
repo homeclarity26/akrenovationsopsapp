@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, Phone, Mail, ArrowLeft, Calendar, MessageSquare, Sparkles, X } from 'lucide-react'
+import { Plus, Phone, Mail, ArrowLeft, Calendar, MessageSquare, Sparkles, X, Users } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { DndContext, DragOverlay, PointerSensor, useSensor, useSensors, useDraggable, useDroppable, type DragEndEvent } from '@dnd-kit/core'
 import { Card } from '@/components/ui/Card'
@@ -408,8 +408,12 @@ export function CRMPage() {
         <Card padding="none"><SkeletonRow count={4} /></Card>
       ) : leads.length === 0 ? (
         <div className="text-center py-12 px-4">
+          <Users size={40} className="mx-auto text-[var(--text-tertiary)] mb-3" />
           <p className="font-medium text-sm text-[var(--text)]">No leads yet</p>
-          <p className="text-xs text-[var(--text-tertiary)] mt-1">Add your first lead to get started.</p>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1 max-w-xs mx-auto">Start tracking prospects and move them through your sales pipeline.</p>
+          <button onClick={() => setShowAddLead(true)} className="mt-4 text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-4 py-2 rounded-xl hover:bg-[var(--navy)]/5 transition-colors">
+            <Plus size={13} className="inline -mt-0.5 mr-1" />Add Lead
+          </button>
         </div>
       ) : view === 'list' ? (
         <Card padding="none">

@@ -308,7 +308,17 @@ export function HealthPage() {
         />
         <Card padding="none">
           {errorsLoading ? (
-            <div className="py-6 px-4 text-center text-sm text-[var(--text-tertiary)]">Loading...</div>
+            <div className="py-4 px-4 space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 animate-pulse">
+                  <div className="w-14 h-5 rounded-full bg-[var(--border)]" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3.5 bg-[var(--border)] rounded w-2/3" />
+                    <div className="h-3 bg-[var(--border-light)] rounded w-1/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : errors === null ? (
             <div className="py-6 px-4 text-center">
               <p className="text-sm text-[var(--text-tertiary)]">
@@ -371,7 +381,17 @@ export function HealthPage() {
         />
         <Card padding="none">
           {agentsLoading ? (
-            <div className="py-6 px-4 text-center text-sm text-[var(--text-tertiary)]">Loading...</div>
+            <div className="py-4 px-4 space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 animate-pulse">
+                  <div className="w-14 h-5 rounded-full bg-[var(--border)]" />
+                  <div className="flex-1 space-y-1.5">
+                    <div className="h-3.5 bg-[var(--border)] rounded w-2/3" />
+                    <div className="h-3 bg-[var(--border-light)] rounded w-1/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
           ) : agentRuns === null ? (
             <div className="py-6 px-4 text-center">
               <p className="text-sm text-[var(--text-tertiary)]">
@@ -421,7 +441,15 @@ export function HealthPage() {
         <SectionHeader title="Backups" />
         <Card padding="none">
           {backupsLoading ? (
-            <div className="py-6 px-4 text-center text-sm text-[var(--text-tertiary)]">Loading...</div>
+            <div className="py-4 px-4 space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 animate-pulse">
+                  <div className="w-20 h-4 rounded bg-[var(--border)]" />
+                  <div className="flex-1 h-4 rounded bg-[var(--border-light)]" />
+                  <div className="w-12 h-4 rounded bg-[var(--border-light)]" />
+                </div>
+              ))}
+            </div>
           ) : backups.length === 0 ? (
             <div className="py-6 px-4 text-center text-sm text-[var(--text-tertiary)]">No backup records found.</div>
           ) : (

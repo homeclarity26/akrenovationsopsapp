@@ -70,14 +70,14 @@ export function AgentBar({
           <span className="flex items-center gap-1">
             {showMic && (
               <span
-                className="p-1.5 rounded-full hover:bg-white/20 transition-colors"
+                className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full hover:bg-white/20 transition-colors"
                 aria-hidden="true"
               >
                 <Mic size={16} />
               </span>
             )}
             <span
-              className="p-1.5 rounded-full hover:bg-white/20 transition-colors"
+              className="min-w-[44px] min-h-[44px] flex items-center justify-center rounded-full hover:bg-white/20 transition-colors"
               aria-hidden="true"
             >
               <Paperclip size={16} />

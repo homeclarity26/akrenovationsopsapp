@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
-import { Plus, Trash2, ChevronUp, ChevronDown, Pencil, Check, X } from 'lucide-react'
+import { Plus, Trash2, ChevronUp, ChevronDown, Pencil, Check, X, Tag } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { supabase } from '@/lib/supabase'
@@ -186,11 +186,14 @@ export function InventoryCategoryList() {
       )}
 
       {categories.length === 0 ? (
-        <Card>
-          <p className="text-sm text-[var(--text-secondary)] text-center py-4">
-            No categories yet. Add one to start grouping items.
-          </p>
-        </Card>
+        <div className="text-center py-12 px-4">
+          <Tag size={40} className="mx-auto text-[var(--text-tertiary)] mb-3" />
+          <p className="font-medium text-sm text-[var(--text)]">No categories yet</p>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1 max-w-xs mx-auto">Categories help you group and organize your inventory items.</p>
+          <button onClick={() => setAdding(true)} className="mt-4 text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-4 py-2 rounded-xl hover:bg-[var(--navy)]/5 transition-colors">
+            <Plus size={13} className="inline -mt-0.5 mr-1" />Add your first category
+          </button>
+        </div>
       ) : (
         <Card padding="none">
           {categories.map((c, i) => {

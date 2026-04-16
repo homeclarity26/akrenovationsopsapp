@@ -11,7 +11,7 @@
  * Focus input on open.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Send, Loader2, Paperclip, X, AlertTriangle, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -92,41 +92,11 @@ export function AgentOverlay({ overlay }: AgentOverlayProps) {
   }, [navigate, overlay])
 
   // ---- Build command context ----
-  const cmdCtx: CommandContext = {
+  const cmdCtx = useMemo<CommandContext>(() => ({
     pathname,
     user,
     params: params as Record<string, string | undefined>,
-  }
-
-  // ---- Execute a command by id ----
-  const executeCommand = useCallback(
-    async (commandId: string, args: Record<string, unknown> = {}) => {
-      const cmd = findCommand(commandId)
-      if (!cmd) return
-
-      setMessages((m) => [...m, { role: 'user', text: cmd.label }])
-      setIsLoading(true)
-
-      try {
-        const result = await cmd.execute(args, cmdCtx)
-        // Special: __agent_query__ means the command wants the AI to answer
-        if (result.message === '__agent_query__' && result.data?.query) {
-          await sendToAgent(result.data.query as string)
-          return
-        }
-        setMessages((m) => [...m, { role: 'ai', text: result.message }])
-      } catch (err) {
-        setMessages((m) => [
-          ...m,
-          { role: 'ai', text: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` },
-        ])
-      } finally {
-        setIsLoading(false)
-      }
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [cmdCtx],
-  )
+  }), [pathname, user, params])
 
   // ---- Send text to meta-agent-chat ----
   const sendToAgent = useCallback(
@@ -175,6 +145,35 @@ export function AgentOverlay({ overlay }: AgentOverlayProps) {
       }
     },
     [sessionId],
+  )
+
+  // ---- Execute a command by id ----
+  const executeCommand = useCallback(
+    async (commandId: string, args: Record<string, unknown> = {}) => {
+      const cmd = findCommand(commandId)
+      if (!cmd) return
+
+      setMessages((m) => [...m, { role: 'user', text: cmd.label }])
+      setIsLoading(true)
+
+      try {
+        const result = await cmd.execute(args, cmdCtx)
+        // Special: __agent_query__ means the command wants the AI to answer
+        if (result.message === '__agent_query__' && result.data?.query) {
+          await sendToAgent(result.data.query as string)
+          return
+        }
+        setMessages((m) => [...m, { role: 'ai', text: result.message }])
+      } catch (err) {
+        setMessages((m) => [
+          ...m,
+          { role: 'ai', text: `Error: ${err instanceof Error ? err.message : 'Unknown error'}` },
+        ])
+      } finally {
+        setIsLoading(false)
+      }
+    },
+    [cmdCtx, sendToAgent],
   )
 
   // ---- Handle send (text path) ----

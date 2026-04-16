@@ -216,8 +216,11 @@ function ColorField({ label, value, onChange }: { label: string; value: string; 
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          className="flex-1 rounded-lg border border-[var(--border-light)] px-3 py-2 text-sm font-mono text-[var(--text)] bg-white focus:outline-none focus:ring-2 focus:ring-[var(--rust)]/30"
+          className="w-28 rounded-lg border border-[var(--border-light)] px-3 py-2 text-sm font-mono text-[var(--text)] bg-white focus:outline-none focus:ring-2 focus:ring-[var(--rust)]/30"
         />
+        <div className="flex-1 h-10 rounded-lg border border-[var(--border-light)]" style={{ backgroundColor: value }}>
+          <span className="text-white text-xs px-3 leading-10 drop-shadow-sm">Sample</span>
+        </div>
       </div>
     </div>
   )

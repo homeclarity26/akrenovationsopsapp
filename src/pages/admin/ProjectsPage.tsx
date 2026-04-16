@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Plus, X } from 'lucide-react'
+import { Plus, X, FolderOpen } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
@@ -133,8 +133,12 @@ export function ProjectsPage() {
         <Card padding="none"><SkeletonRow count={4} /></Card>
       ) : projects.length === 0 ? (
         <div className="text-center py-12 px-4">
+          <FolderOpen size={40} className="mx-auto text-[var(--text-tertiary)] mb-3" />
           <p className="font-medium text-sm text-[var(--text)]">No projects yet</p>
-          <p className="text-xs text-[var(--text-tertiary)] mt-1">Use the AI site walk to create your first estimate.</p>
+          <p className="text-xs text-[var(--text-tertiary)] mt-1 max-w-xs mx-auto">Use the AI site walk to create your first estimate, or add a project manually.</p>
+          <button onClick={() => setShowNew(true)} className="mt-4 text-xs font-semibold text-[var(--navy)] border border-[var(--navy)] px-4 py-2 rounded-xl hover:bg-[var(--navy)]/5 transition-colors">
+            <Plus size={13} className="inline -mt-0.5 mr-1" />Create Project
+          </button>
         </div>
       ) : (
         <Card padding="none">
