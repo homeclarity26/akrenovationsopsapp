@@ -10,6 +10,7 @@ import { verifyAuth } from '../_shared/auth.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { encryptToken, decryptToken } from '../_shared/tokenCrypto.ts'
 
 const gustoBase = () =>
   Deno.env.get('GUSTO_ENVIRONMENT') === 'sandbox'
@@ -103,25 +104,29 @@ export async function getGustoToken(companyId: string): Promise<{
   const expiresAt = new Date(row.token_expires_at).getTime()
   const fiveMin = 5 * 60 * 1000
 
+  const isEncrypted = (row.metadata as Record<string, unknown>)?.tokens_encrypted === true
+
   // Token still valid
   if (Date.now() + fiveMin < expiresAt) {
     return {
-      access_token: row.access_token,
+      access_token: isEncrypted ? await decryptToken(row.access_token) : row.access_token,
       company_uuid: (row.metadata as { company_uuid?: string })?.company_uuid ?? '',
     }
   }
 
   // Refresh needed
-  const refreshed = await refreshGustoToken(row.refresh_token)
+  const plainRefresh = isEncrypted ? await decryptToken(row.refresh_token) : row.refresh_token
+  const refreshed = await refreshGustoToken(plainRefresh)
   const newExpiry = new Date(Date.now() + refreshed.expires_in * 1000).toISOString()
 
   await db
     .from('integrations')
     .update({
-      access_token: refreshed.access_token,
-      refresh_token: refreshed.refresh_token,
+      access_token: await encryptToken(refreshed.access_token),
+      refresh_token: await encryptToken(refreshed.refresh_token),
       token_expires_at: newExpiry,
       updated_at: new Date().toISOString(),
+      metadata: { ...(row.metadata as Record<string, unknown>), tokens_encrypted: true },
     })
     .eq('id', row.id)
 
@@ -154,7 +159,29 @@ serve(async (req) => {
 
     const clientId = Deno.env.get('GUSTO_CLIENT_ID') ?? ''
     const redirectUri = Deno.env.get('GUSTO_REDIRECT_URI') ?? ''
-    const authorizeUrl = `${gustoAuthBase()}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code`
+
+    // Generate CSRF state
+    const csrfState = crypto.randomUUID()
+    const db = supabaseAdmin()
+    const { data: profile } = await db
+      .from('profiles')
+      .select('company_id')
+      .eq('id', auth.user_id)
+      .single()
+    const companyId = (profile?.company_id as string) ?? auth.user_id
+
+    await db
+      .from('integrations')
+      .upsert(
+        {
+          company_id: companyId,
+          provider: 'gusto',
+          metadata: { oauth_state: csrfState, oauth_state_expires: Date.now() + 10 * 60 * 1000 },
+        },
+        { onConflict: 'company_id,provider' },
+      )
+
+    const authorizeUrl = `${gustoAuthBase()}/oauth/authorize?client_id=${encodeURIComponent(clientId)}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&state=${encodeURIComponent(csrfState)}`
 
     return new Response(JSON.stringify({ authorize_url: authorizeUrl }), {
       headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
@@ -172,9 +199,40 @@ serve(async (req) => {
     }
 
     const code = url.searchParams.get('code')
+    const callbackState = url.searchParams.get('state') ?? ''
     if (!code) {
       return new Response(JSON.stringify({ error: 'Missing code parameter' }), {
         status: 400,
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+      })
+    }
+
+    // Verify CSRF state
+    const csrfDb = supabaseAdmin()
+    const { data: csrfProfile } = await csrfDb
+      .from('profiles')
+      .select('company_id')
+      .eq('id', auth.user_id)
+      .single()
+    const csrfCompanyId = (csrfProfile?.company_id as string) ?? auth.user_id
+
+    const { data: csrfRow } = await csrfDb
+      .from('integrations')
+      .select('metadata')
+      .eq('company_id', csrfCompanyId)
+      .eq('provider', 'gusto')
+      .single()
+
+    const csrfMeta = csrfRow?.metadata as { oauth_state?: string; oauth_state_expires?: number } | null
+    if (!csrfMeta?.oauth_state || csrfMeta.oauth_state !== callbackState) {
+      return new Response(JSON.stringify({ error: 'OAuth state mismatch' }), {
+        status: 403,
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+      })
+    }
+    if (csrfMeta.oauth_state_expires && Date.now() > csrfMeta.oauth_state_expires) {
+      return new Response(JSON.stringify({ error: 'OAuth state expired — please retry' }), {
+        status: 403,
         headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       })
     }
@@ -207,15 +265,15 @@ serve(async (req) => {
 
       const companyId = profile?.company_id as string | undefined
 
-      // Upsert the integration row
+      // Upsert the integration row with encrypted tokens
       await db.from('integrations').upsert(
         {
           company_id: companyId ?? auth.user_id,
           provider: 'gusto',
-          access_token: tokens.access_token,
-          refresh_token: tokens.refresh_token,
+          access_token: await encryptToken(tokens.access_token),
+          refresh_token: await encryptToken(tokens.refresh_token),
           token_expires_at: expiresAt,
-          metadata: { company_uuid: companyUuid },
+          metadata: { company_uuid: companyUuid, tokens_encrypted: true },
           is_active: true,
           updated_at: new Date().toISOString(),
         },
@@ -227,7 +285,8 @@ serve(async (req) => {
         { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     } catch (e) {
-      return new Response(JSON.stringify({ error: (e as Error).message }), {
+      console.error('[gusto-auth] callback error:', (e as Error).message)
+      return new Response(JSON.stringify({ error: 'OAuth flow failed' }), {
         status: 500,
         headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
       })

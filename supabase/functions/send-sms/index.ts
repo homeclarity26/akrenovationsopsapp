@@ -14,7 +14,7 @@ import { getCorsHeaders } from '../_shared/cors.ts'
 import { logUsage } from '../_shared/usage-logger.ts'
 
 const InputSchema = z.object({
-  to: z.string().min(1, 'to is required'),
+  to: z.string().regex(/^\+?[1-9]\d{1,14}$/, 'E.164 format required'),
   body: z.string().min(1, 'body is required').max(1600, 'body exceeds 1600 chars'),
 })
 

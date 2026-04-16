@@ -8,6 +8,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { verifyAuth } from '../_shared/auth.ts'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { decryptToken, encryptToken } from '../_shared/tokenCrypto.ts'
 
 const QBO_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
 
@@ -116,22 +117,27 @@ interface Integration {
   refresh_token: string | null
   token_expires_at: string | null
   realm_id: string | null
+  metadata?: Record<string, unknown>
+  last_synced_at?: string
 }
 
 async function getValidToken(
   supabase: ReturnType<typeof createClient>,
   integration: Integration,
 ): Promise<string | null> {
+  const isEncrypted = (integration.metadata as Record<string, unknown>)?.tokens_encrypted === true
+
   // Check if current token is still valid (with 5 min buffer)
   if (integration.token_expires_at) {
     const expiresAt = new Date(integration.token_expires_at)
     if (expiresAt.getTime() > Date.now() + 5 * 60 * 1000) {
-      return integration.access_token
+      return isEncrypted ? await decryptToken(integration.access_token) : integration.access_token
     }
   }
 
   // Token expired — refresh
   if (!integration.refresh_token) return null
+  const plainRefresh = isEncrypted ? await decryptToken(integration.refresh_token) : integration.refresh_token
 
   const clientId = Deno.env.get('QBO_CLIENT_ID') ?? ''
   const clientSecret = Deno.env.get('QBO_CLIENT_SECRET') ?? ''
@@ -144,7 +150,7 @@ async function getValidToken(
     },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
-      refresh_token: integration.refresh_token,
+      refresh_token: plainRefresh,
     }),
   })
 
@@ -157,9 +163,10 @@ async function getValidToken(
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
   await supabase.from('integrations').update({
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
+    access_token: await encryptToken(tokens.access_token),
+    refresh_token: await encryptToken(tokens.refresh_token),
     token_expires_at: expiresAt,
+    metadata: { ...((integration.metadata as Record<string, unknown>) ?? {}), tokens_encrypted: true },
   }).eq('id', integration.id)
 
   return tokens.access_token

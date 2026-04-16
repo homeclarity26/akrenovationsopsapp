@@ -7,6 +7,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { verifyAuth } from '../_shared/auth.ts'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { encryptToken } from '../_shared/tokenCrypto.ts'
 
 const QBO_AUTH_URL = 'https://appcenter.intuit.com/connect/oauth2'
 const QBO_TOKEN_URL = 'https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer'
@@ -48,7 +49,7 @@ serve(async (req: Request) => {
 // Connect: redirect to Intuit OAuth
 // ---------------------------------------------------------------------------
 
-function handleConnect(req: Request, url: URL, cors: Record<string, string>): Response {
+async function handleConnect(req: Request, url: URL, cors: Record<string, string>): Promise<Response> {
   const clientId = Deno.env.get('QBO_CLIENT_ID') ?? ''
   const redirectUri = Deno.env.get('QBO_REDIRECT_URI') ?? ''
 
@@ -59,15 +60,39 @@ function handleConnect(req: Request, url: URL, cors: Record<string, string>): Re
     )
   }
 
-  // Pass company_id + user JWT through state for the callback
-  const state = url.searchParams.get('state') ?? ''
+  // Generate CSRF state: random UUID + timestamp, store in integrations metadata
+  const csrfState = crypto.randomUUID()
+  const companyState = url.searchParams.get('state') ?? ''
+  let parsedCompanyId: string | undefined
+  try {
+    parsedCompanyId = JSON.parse(atob(companyState)).company_id
+  } catch { /* will be validated on callback */ }
+
+  if (parsedCompanyId) {
+    const db = createClient(
+      Deno.env.get('SUPABASE_URL') ?? '',
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+    )
+    await db
+      .from('integrations')
+      .upsert(
+        {
+          company_id: parsedCompanyId,
+          provider: 'quickbooks',
+          metadata: { oauth_state: csrfState, oauth_state_expires: Date.now() + 10 * 60 * 1000, company_state: companyState },
+        },
+        { onConflict: 'company_id,provider' },
+      )
+  }
+
+  const combinedState = btoa(JSON.stringify({ orig: companyState, csrf: csrfState }))
 
   const params = new URLSearchParams({
     client_id: clientId,
     redirect_uri: redirectUri,
     response_type: 'code',
     scope: 'com.intuit.quickbooks.accounting',
-    state,
+    state: combinedState,
   })
 
   const authorizeUrl = `${QBO_AUTH_URL}?${params.toString()}`
@@ -97,16 +122,46 @@ async function handleCallback(
     )
   }
 
-  // Parse state: JSON { company_id, user_id }
+  // Parse combined state: { orig, csrf }
   let companyId: string
+  let csrfToken: string
   try {
-    const parsed = JSON.parse(atob(state ?? ''))
+    const outer = JSON.parse(atob(state ?? ''))
+    csrfToken = outer.csrf
+    const parsed = JSON.parse(atob(outer.orig))
     companyId = parsed.company_id
     if (!companyId) throw new Error('no company_id')
+    if (!csrfToken) throw new Error('no csrf token')
   } catch {
     return new Response(
       JSON.stringify({ error: 'Invalid state parameter' }),
       { status: 400, headers: { ...cors, 'Content-Type': 'application/json' } },
+    )
+  }
+
+  // Verify CSRF state against stored value
+  const csrfDb = createClient(
+    Deno.env.get('SUPABASE_URL') ?? '',
+    Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
+  )
+  const { data: existing } = await csrfDb
+    .from('integrations')
+    .select('metadata')
+    .eq('company_id', companyId)
+    .eq('provider', 'quickbooks')
+    .single()
+
+  const meta = existing?.metadata as { oauth_state?: string; oauth_state_expires?: number } | null
+  if (!meta?.oauth_state || meta.oauth_state !== csrfToken) {
+    return new Response(
+      JSON.stringify({ error: 'OAuth state mismatch — possible CSRF attack' }),
+      { status: 403, headers: { ...cors, 'Content-Type': 'application/json' } },
+    )
+  }
+  if (meta.oauth_state_expires && Date.now() > meta.oauth_state_expires) {
+    return new Response(
+      JSON.stringify({ error: 'OAuth state expired — please retry' }),
+      { status: 403, headers: { ...cors, 'Content-Type': 'application/json' } },
     )
   }
 
@@ -132,7 +187,7 @@ async function handleCallback(
     const errText = await tokenRes.text()
     console.error('[quickbooks-auth] Token exchange failed:', errText)
     return new Response(
-      JSON.stringify({ error: 'Failed to exchange authorization code', details: errText }),
+      JSON.stringify({ error: 'OAuth flow failed' }),
       { status: 502, headers: { ...cors, 'Content-Type': 'application/json' } },
     )
   }
@@ -152,12 +207,12 @@ async function handleCallback(
       {
         company_id: companyId,
         provider: 'quickbooks',
-        access_token: tokens.access_token,
-        refresh_token: tokens.refresh_token,
+        access_token: await encryptToken(tokens.access_token),
+        refresh_token: await encryptToken(tokens.refresh_token),
         token_expires_at: expiresAt,
         realm_id: realmId,
         is_active: true,
-        metadata: { x_refresh_token_expires_in: tokens.x_refresh_token_expires_in },
+        metadata: { x_refresh_token_expires_in: tokens.x_refresh_token_expires_in, tokens_encrypted: true },
       },
       { onConflict: 'company_id,provider' },
     )
@@ -165,7 +220,7 @@ async function handleCallback(
   if (upsertError) {
     console.error('[quickbooks-auth] Upsert failed:', upsertError)
     return new Response(
-      JSON.stringify({ error: 'Failed to store tokens', details: upsertError.message }),
+      JSON.stringify({ error: 'OAuth flow failed' }),
       { status: 500, headers: { ...cors, 'Content-Type': 'application/json' } },
     )
   }
@@ -182,12 +237,17 @@ async function handleCallback(
 
 export async function refreshQBOToken(
   supabase: ReturnType<typeof createClient>,
-  integration: { id: string; refresh_token: string | null },
+  integration: { id: string; refresh_token: string | null; metadata?: Record<string, unknown> },
 ): Promise<{ access_token: string } | null> {
   if (!integration.refresh_token) return null
 
   const clientId = Deno.env.get('QBO_CLIENT_ID') ?? ''
   const clientSecret = Deno.env.get('QBO_CLIENT_SECRET') ?? ''
+
+  // Decrypt refresh token if encrypted
+  const { decryptToken } = await import('../_shared/tokenCrypto.ts')
+  const isEncrypted = (integration.metadata as Record<string, unknown>)?.tokens_encrypted === true
+  const plainRefresh = isEncrypted ? await decryptToken(integration.refresh_token) : integration.refresh_token
 
   const tokenRes = await fetch(QBO_TOKEN_URL, {
     method: 'POST',
@@ -197,7 +257,7 @@ export async function refreshQBOToken(
     },
     body: new URLSearchParams({
       grant_type: 'refresh_token',
-      refresh_token: integration.refresh_token,
+      refresh_token: plainRefresh,
     }),
   })
 
@@ -210,9 +270,10 @@ export async function refreshQBOToken(
   const expiresAt = new Date(Date.now() + tokens.expires_in * 1000).toISOString()
 
   await supabase.from('integrations').update({
-    access_token: tokens.access_token,
-    refresh_token: tokens.refresh_token,
+    access_token: await encryptToken(tokens.access_token),
+    refresh_token: await encryptToken(tokens.refresh_token),
     token_expires_at: expiresAt,
+    metadata: { ...((integration.metadata as Record<string, unknown>) ?? {}), tokens_encrypted: true },
   }).eq('id', integration.id)
 
   return { access_token: tokens.access_token }
