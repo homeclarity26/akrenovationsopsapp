@@ -62,7 +62,7 @@ const SECTIONS: SettingsSection[] = [
     tooltip: 'Third-party connections and APIs',
     icon: Plug,
     links: [
-      // Coming soon placeholder — no existing page
+      { label: 'Integrations', desc: 'QuickBooks, Gusto, Stripe, Twilio', to: 'integrations', icon: Plug },
     ],
   },
   {

@@ -68,6 +68,8 @@ const SecurityPage = lazy(() => import('./pages/admin/settings/SecurityPage').th
 const BusinessContextPage = lazy(() => import('./pages/admin/settings/BusinessContextPage').then(m => ({ default: m.BusinessContextPage })))
 // Phase O
 const HealthPage = lazy(() => import('./pages/admin/settings/HealthPage').then(m => ({ default: m.HealthPage })))
+// Wave D — QuickBooks
+const IntegrationsPage = lazy(() => import('./pages/admin/settings/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
 const OnboardingPage = lazy(() => import('./pages/admin/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const CompanyOnboardingWizard = lazy(() => import('./pages/onboarding/CompanyOnboardingWizard').then(m => ({ default: m.CompanyOnboardingWizard })))
 const PlatformOnboarding = lazy(() => import('./pages/onboarding/PlatformOnboarding').then(m => ({ default: m.PlatformOnboarding })))
@@ -289,6 +291,7 @@ function AppRoutes() {
             <Route path="health" element={<HealthPage />} />
             <Route path="backups" element={<BackupsPage />} />
             <Route path="security" element={<SecurityPage />} />
+            <Route path="integrations" element={<IntegrationsPage />} />
           </Route>
           <Route path="ai/improvements" element={<ImprovementQueuePage />} />
           <Route path="field" element={<FieldLaunchpadPage />} />

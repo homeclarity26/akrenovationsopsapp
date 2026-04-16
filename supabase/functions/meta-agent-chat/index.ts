@@ -349,6 +349,14 @@ OBSERVABILITY & COMMS TABLES (PR 17):
 - communication_log: project-scoped comms timeline. Write when you hear about a call/email/meeting. Columns: project_id, direction (inbound/outbound/internal), channel (email/sms/phone/in_app/meeting/other), party_name, party_type (client/subcontractor/supplier/inspector/team/other), summary, body, logged_by, logged_via (manual/ai/import), occurred_at. Use logged_via='ai' when you insert rows yourself.
 - improvement_suggestions: company-scoped "what to improve" queue. Driven by agent-improvement-analysis weekly. Columns: company_id, category (free text), title, description, rationale, priority, status (open/acknowledged/in_progress/done/dismissed).
 - error_log / agent_execution_log: observability. Admins view in /admin/settings/health. Do not write to these directly from chat — the _shared/logError.ts helper and agent runners handle them.
+
+QUICKBOOKS ONLINE (PR 23):
+  Connected via OAuth. Syncs invoices + expenses (push) and payments (pull).
+  Integration stored in integrations table (provider='quickbooks'). Admin manages
+  in Settings → Integrations page. Auto-syncs daily at 6:00 AM Eastern.
+  DELEGATE: sync-quickbooks {} → { invoices_synced, expenses_synced, payments_pulled, errors }
+    Use when: admin asks "sync to QuickBooks", "push invoices to QBO",
+    "sync expenses", or "update QuickBooks"
 `
 
 // ---------------------------------------------------------------------------
