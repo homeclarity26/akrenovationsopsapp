@@ -4,6 +4,7 @@ import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { supabase } from '@/lib/supabase'
 import { useClientProject } from '@/hooks/useClientProject'
+import { SkeletonRow } from '@/components/ui/Skeleton'
 
 interface ProjectFile {
   id: string
@@ -75,9 +76,7 @@ export function ClientDocs() {
       <SectionHeader title="Your Files" />
 
       {isLoading ? (
-        <Card>
-          <p className="text-sm text-[var(--text-tertiary)]">Loading...</p>
-        </Card>
+        <Card padding="none"><SkeletonRow count={3} /></Card>
       ) : docs.length === 0 ? (
         <Card>
           <p className="text-sm text-[var(--text-secondary)]">

@@ -5,6 +5,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { AuthProvider, useAuth } from '@/context/AuthContext'
 import { ModeProvider } from '@/context/ModeContext'
 import { LoadingSpinner } from '@/components/ui/LoadingSpinner'
+import { ToastProvider } from '@/components/ui/Toast'
 import { supabase } from '@/lib/supabase'
 
 // Layouts — lazy-loaded so only the layout for the user's role is fetched
@@ -390,6 +391,7 @@ export default function App() {
               )}
             >
               <AppRoutes />
+              <ToastProvider />
             </Sentry.ErrorBoundary>
           </ModeProvider>
         </BrowserRouter>

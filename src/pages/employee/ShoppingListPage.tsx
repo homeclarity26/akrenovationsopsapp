@@ -7,6 +7,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { InventoryItemPicker } from '@/components/inventory/InventoryItemPicker'
+import { useToast } from '@/hooks/useToast'
 
 interface InventoryItemRef {
   id: string
@@ -46,6 +47,7 @@ export function ShoppingListPage() {
   const navigate = useNavigate()
   const { user } = useAuth()
   const queryClient = useQueryClient()
+  const { toast } = useToast()
   const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
 
   // ── add-item sheet state ──────────────────────────────────────────
@@ -120,18 +122,10 @@ export function ShoppingListPage() {
   const [localOverrides, setLocalOverrides] = useState<Record<string, string>>({})
   const [busyIds, setBusyIds] = useState<Record<string, boolean>>({})
 
-  // Inline banner for deduct errors/warnings. Auto-dismisses after 4s.
-  // Replaces window.alert for mobile-friendliness and consistency with the
-  // rest of the app (UX review flagged the alert pattern).
+  // Inline banner — kept for backwards compat; new deduct feedback uses toast.
   const [banner, setBanner] = useState<
     { kind: 'error' | 'warning' | 'success'; text: string } | null
   >(null)
-  const showBanner = (kind: 'error' | 'warning' | 'success', text: string) => {
-    setBanner({ kind, text })
-    setTimeout(() => {
-      setBanner((b) => (b && b.text === text ? null : b))
-    }, 4000)
-  }
 
   const items: ShoppingItem[] = rawItems.map(i => ({
     ...i,
@@ -183,11 +177,11 @@ export function ShoppingListPage() {
         body: { shopping_list_item_id: id },
       })
       if (error) {
-        showBanner('error', `Could not deduct: ${error.message}`)
+        toast.error(`Could not deduct: ${error.message}`)
         return
       }
       if (data?.warning) {
-        showBanner('warning', `Deducted with a warning: ${data.warning}`)
+        toast.warning(`Deducted with a warning: ${data.warning}`)
       }
       queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
     } finally {
@@ -250,6 +244,7 @@ export function ShoppingListPage() {
     setSubmitting(false)
     if (error) { setFormError('Failed to add item. Try again.'); return }
     queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
+    toast.success('Item added to list')
     // reset form
     setNewName('')
     setNewQty(1)
