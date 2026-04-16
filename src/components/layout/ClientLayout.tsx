@@ -3,6 +3,7 @@ import {
   BarChart2, Image, DollarSign,
   MessageCircle, FileText, ShoppingBag, Calendar, ClipboardList, Heart
 } from 'lucide-react'
+import { AgentBar } from '@/components/ui/AgentBar'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 import { cn } from '@/lib/utils'
 
@@ -52,6 +53,7 @@ export function ClientLayout() {
       </header>
 
       <main className="flex-1 pt-28 pb-6 overflow-x-hidden">
+        <AgentBar pillLabel="Ask about your project" />
         <Outlet />
       </main>
     </div>

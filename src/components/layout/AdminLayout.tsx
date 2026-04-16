@@ -5,7 +5,7 @@ import {
   Calendar, Sparkles, Settings, Menu, X, FileText,
   Receipt, ClipboardList, HardHat, Shield, Wallet, ArrowLeft, Package
 } from 'lucide-react'
-import { AIBar } from '@/components/ui/AIBar'
+import { AgentBar } from '@/components/ui/AgentBar'
 import { APIUsageBar } from '@/components/ui/APIUsageBar'
 import { BrandLogo } from '@/components/ui/BrandLogo'
 import { ModeToggle } from '@/components/ui/ModeToggle'
@@ -29,7 +29,6 @@ const NAV = [
 ]
 
 export function AdminLayout() {
-  const [aiOpen, setAiOpen] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const { user } = useAuth()
   const { data: company } = useCompanyProfile()
@@ -124,12 +123,6 @@ export function AdminLayout() {
         <div className="flex items-center gap-1">
         <APIUsageBar className="mr-1" />
         <button
-          onClick={() => setAiOpen(true)}
-          className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-white transition-colors"
-        >
-          <Sparkles size={18} />
-        </button>
-        <button
           onClick={() => setMenuOpen(v => !v)}
           className="p-2 rounded-lg text-[var(--text-tertiary)] hover:text-[var(--navy)] hover:bg-white transition-colors"
         >
@@ -165,6 +158,7 @@ export function AdminLayout() {
 
       {/* Main content */}
       <main className="flex-1 lg:ml-60 pt-11 lg:pt-0 pb-20 lg:pb-0 overflow-x-hidden">
+        <AgentBar />
         <Outlet />
       </main>
 
@@ -190,7 +184,6 @@ export function AdminLayout() {
         </div>
       </nav>
 
-      {aiOpen && <AIBar onClose={() => setAiOpen(false)} />}
     </div>
   )
 }
