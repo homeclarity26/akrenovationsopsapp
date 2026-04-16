@@ -47,6 +47,13 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       link.rel = 'icon'
       document.head.appendChild(link)
     }
+    // Validate favicon URL — only allow http(s) to prevent javascript: / data: injection
+    try {
+      const parsed = new URL(company.brand_favicon_url)
+      if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') return
+    } catch {
+      return // malformed URL — skip
+    }
     link.href = company.brand_favicon_url
   }, [company?.brand_favicon_url])
 

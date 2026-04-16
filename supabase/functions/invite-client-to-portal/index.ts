@@ -110,7 +110,34 @@ serve(async (req) => {
       })
     }
 
+    // C4: Verify project belongs to admin's company
+    const { data: project, error: projErr } = await admin
+      .from('projects')
+      .select('id, company_id')
+      .eq('id', project_id)
+      .single()
+    if (projErr || !project) {
+      return new Response(JSON.stringify({ error: 'Project not found' }), {
+        status: 404,
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+      })
+    }
+    if (project.company_id !== companyId) {
+      return new Response(JSON.stringify({ error: 'Project does not belong to your company' }), {
+        status: 403,
+        headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
+      })
+    }
+
     let clientProfileId: string | null = existingProfile?.id ?? null
+
+    // Reject if existing client profile belongs to a different company
+    if (existingProfile && existingProfile.company_id && existingProfile.company_id !== companyId) {
+      return new Response(
+        JSON.stringify({ error: 'Client profile belongs to a different company' }),
+        { status: 403, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      )
+    }
 
     if (!clientProfileId) {
       // Create an auth user first so a real profile row is keyed to a real auth id.

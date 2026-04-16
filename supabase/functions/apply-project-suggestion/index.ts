@@ -92,6 +92,25 @@ serve(async (req) => {
       )
     }
 
+    // M2: Verify admin's company owns the project
+    const { data: adminProfile } = await supabase
+      .from('profiles')
+      .select('company_id')
+      .eq('id', auth.user_id)
+      .single()
+    const { data: suggestionProject } = await supabase
+      .from('projects')
+      .select('company_id')
+      .eq('id', suggestion.project_id)
+      .single()
+    if (!adminProfile?.company_id || !suggestionProject?.company_id ||
+        adminProfile.company_id !== suggestionProject.company_id) {
+      return new Response(
+        JSON.stringify({ error: 'Project does not belong to your company' }),
+        { status: 403, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      )
+    }
+
     if (suggestion.status !== 'pending') {
       return new Response(
         JSON.stringify({ error: `Suggestion is already ${suggestion.status}` }),
