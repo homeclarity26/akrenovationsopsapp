@@ -364,9 +364,34 @@ export function IntegrationsPage() {
         </div>
       </div>
 
+      {/* Stripe Payments Card */}
+      <div className="bg-white rounded-xl border border-[var(--border-light)] px-5 py-4">
+        <div className="flex items-start gap-4">
+          <div className="w-10 h-10 rounded-xl bg-[#635BFF]/10 flex items-center justify-center flex-shrink-0">
+            <span className="text-lg font-bold text-[#635BFF]">S</span>
+          </div>
+          <div className="flex-1">
+            <h3 className="font-semibold text-sm text-[var(--text)]">Stripe Payments</h3>
+            <p className="text-xs text-[var(--text-secondary)] mt-0.5">
+              Clients pay invoices online via Stripe Checkout. Webhook auto-marks invoices as paid.
+            </p>
+            <p className="text-xs text-[var(--text-tertiary)] mt-1">
+              Configure via env vars: <code className="bg-gray-100 px-1 rounded text-[11px]">STRIPE_SECRET_KEY</code>,{' '}
+              <code className="bg-gray-100 px-1 rounded text-[11px]">STRIPE_WEBHOOK_SECRET</code>
+            </p>
+            <div className="mt-2">
+              <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[var(--text-tertiary)]">
+                <CheckCircle2 size={13} className="text-[#635BFF]" />
+                Active — configured via Supabase secrets
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Future integrations placeholder */}
       <div className="space-y-3">
-        {['Stripe Payments', 'Twilio SMS'].map((name) => (
+        {['Twilio SMS'].map((name) => (
           <div
             key={name}
             className="bg-white rounded-xl border border-[var(--border-light)] px-5 py-4 flex items-center gap-4 opacity-60"

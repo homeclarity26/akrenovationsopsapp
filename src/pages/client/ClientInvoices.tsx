@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
@@ -34,6 +35,7 @@ function dollars(n: number | null | undefined): string {
 export function ClientInvoices() {
   const { data: project } = useClientProject()
   const projectId = project?.id ?? null
+  const [payingInvoiceId, setPayingInvoiceId] = useState<string | null>(null)
 
   const { data: invoices = [], isLoading } = useQuery<Invoice[]>({
     queryKey: ['client-invoices', projectId],
@@ -51,6 +53,41 @@ export function ClientInvoices() {
       return (data ?? []) as Invoice[]
     },
   })
+
+  const handlePayNow = async (invoiceId: string) => {
+    setPayingInvoiceId(invoiceId)
+    try {
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) ?? ''
+      const session = await supabase.auth.getSession()
+      const token = session.data.session?.access_token ?? ''
+
+      const res = await fetch(`${supabaseUrl}/functions/v1/create-checkout-session`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ invoice_id: invoiceId }),
+      })
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({ error: 'Payment failed' }))
+        throw new Error(err.error ?? `Error ${res.status}`)
+      }
+
+      const { url } = await res.json()
+      if (url) {
+        window.location.href = url
+      } else {
+        throw new Error('No checkout URL returned')
+      }
+    } catch (err) {
+      console.error('[ClientInvoices] pay error:', err)
+      alert(err instanceof Error ? err.message : 'Failed to start payment. Please try again.')
+    } finally {
+      setPayingInvoiceId(null)
+    }
+  }
 
   const totalPaid = invoices.reduce((s, i) => s + (i.paid_amount ?? 0), 0)
   const totalOutstanding = invoices
@@ -105,6 +142,25 @@ export function ClientInvoices() {
                       <p className="text-xs text-[var(--text-tertiary)]">{formatDate(inv.sent_at ?? inv.created_at)}</p>
                     )}
                   </div>
+                  {inv.status !== 'paid' && inv.status !== 'voided' && (
+                    <button
+                      onClick={() => handlePayNow(inv.id)}
+                      disabled={payingInvoiceId === inv.id}
+                      className="inline-flex items-center gap-2 px-4 py-2 bg-[var(--navy)] text-white rounded-lg text-sm font-medium hover:opacity-90 transition-opacity disabled:opacity-50"
+                    >
+                      {payingInvoiceId === inv.id ? (
+                        <>
+                          <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                          </svg>
+                          Processing...
+                        </>
+                      ) : (
+                        'Pay Now'
+                      )}
+                    </button>
+                  )}
                 </div>
               </Card>
             ))}
