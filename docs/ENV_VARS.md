@@ -83,6 +83,16 @@ or via `supabase secrets set KEY=VALUE`.
 
 > Gusto integration is a placeholder for future work.
 
+### Twilio SMS
+
+| Variable | Required | Source | Used by |
+|----------|----------|--------|---------|
+| `TWILIO_ACCOUNT_SID` | Optional | [Twilio Console](https://console.twilio.com/) > Account Info | send-sms, twilio-webhook, invite-client-to-portal |
+| `TWILIO_AUTH_TOKEN` | Optional | [Twilio Console](https://console.twilio.com/) > Account Info | send-sms, twilio-webhook (HMAC validation) |
+| `TWILIO_PHONE_NUMBER` | Optional | [Twilio Console](https://console.twilio.com/) > Phone Numbers | send-sms, invite-client-to-portal (gate for SMS path) |
+
+> All three must be set together. If any is missing, SMS features fall back to manual.
+
 ### Client Portal
 
 | Variable | Required | Source | Used by |
@@ -104,7 +114,7 @@ Set these in **GitHub > Repo > Settings > Secrets and variables > Actions**.
 ## Summary
 
 - **Frontend**: 3 env vars (2 Supabase + 1 Sentry)
-- **Edge functions**: 22 unique env vars across 79 functions
+- **Edge functions**: 25 unique env vars across 81 functions
 - **GitHub Actions**: 1 secret
 
 > Regenerate by grepping: `grep -rn "Deno.env.get" supabase/functions/` and `grep -rn "import.meta.env" src/`

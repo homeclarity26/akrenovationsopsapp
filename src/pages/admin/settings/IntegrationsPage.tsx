@@ -4,7 +4,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
-import { RefreshCw, Plug, Unplug, Loader2, CheckCircle2, AlertCircle } from 'lucide-react'
+import { RefreshCw, Plug, Unplug, Loader2, CheckCircle2, AlertCircle, MessageSquare, Phone } from 'lucide-react'
 
 interface Integration {
   id: string
@@ -20,6 +20,97 @@ interface SyncResult {
   expenses_synced: number
   payments_pulled: number
   errors: string[]
+}
+
+function TwilioSmsCard() {
+  const [status, setStatus] = useState<'loading' | 'configured' | 'not_configured'>('loading')
+
+  useEffect(() => {
+    // Check if Twilio is configured by making a lightweight call
+    async function checkTwilio() {
+      try {
+        const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) ?? ''
+        const res = await fetch(`${supabaseUrl}/functions/v1/send-sms`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${(await supabase.auth.getSession()).data.session?.access_token ?? ''}`,
+          },
+          body: JSON.stringify({ to: '', body: '' }),
+        })
+        // 503 = Twilio not configured, 400 = configured but invalid input
+        if (res.status === 503) {
+          setStatus('not_configured')
+        } else {
+          setStatus('configured')
+        }
+      } catch {
+        setStatus('not_configured')
+      }
+    }
+    checkTwilio()
+  }, [])
+
+  const isConfigured = status === 'configured'
+
+  return (
+    <div className="bg-white rounded-xl border border-[var(--border-light)] overflow-hidden">
+      <div className="px-5 py-4 flex items-center gap-4 border-b border-[var(--border-light)]">
+        <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center flex-shrink-0">
+          <Phone size={17} className="text-red-600" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="font-semibold text-sm text-[var(--text)]">Twilio SMS</h3>
+          <p className="text-xs text-[var(--text-tertiary)] mt-0.5">
+            Send and receive SMS messages with clients
+          </p>
+        </div>
+        <span
+          className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+            status === 'loading'
+              ? 'bg-gray-100 text-gray-500'
+              : isConfigured
+                ? 'bg-green-50 text-green-700'
+                : 'bg-amber-50 text-amber-700'
+          }`}
+        >
+          <span className={`w-1.5 h-1.5 rounded-full ${
+            status === 'loading'
+              ? 'bg-gray-400'
+              : isConfigured ? 'bg-green-500' : 'bg-amber-500'
+          }`} />
+          {status === 'loading' ? 'Checking...' : isConfigured ? 'Active' : 'Not configured'}
+        </span>
+      </div>
+
+      <div className="px-5 py-4 space-y-3">
+        <div className="flex items-start gap-2">
+          <MessageSquare size={14} className="text-[var(--text-tertiary)] mt-0.5 flex-shrink-0" />
+          <div className="text-xs text-[var(--text-secondary)] space-y-1">
+            <p>Enables outbound SMS from portal invites, invoice reminders, and the AI meta-agent.</p>
+            <p>Inbound SMS auto-routes to the correct project and drafts an AI reply for review.</p>
+          </div>
+        </div>
+
+        {!isConfigured && status !== 'loading' && (
+          <div className="rounded-lg p-3 bg-amber-50 border border-amber-200 text-xs text-amber-800">
+            <p className="font-semibold mb-1">Configure via Supabase Edge Function Secrets:</p>
+            <ul className="space-y-0.5 font-mono text-[11px]">
+              <li>TWILIO_ACCOUNT_SID</li>
+              <li>TWILIO_AUTH_TOKEN</li>
+              <li>TWILIO_PHONE_NUMBER</li>
+            </ul>
+          </div>
+        )}
+      </div>
+
+      <div className="px-5 py-3 bg-[var(--bg)] border-t border-[var(--border-light)]">
+        <p className="text-xs text-[var(--text-tertiary)]">
+          Set webhook URL in Twilio console to your Supabase project's <code className="text-[11px] bg-gray-100 px-1 rounded">twilio-webhook</code> function.
+        </p>
+      </div>
+    </div>
+  )
 }
 
 export function IntegrationsPage() {
@@ -389,9 +480,12 @@ export function IntegrationsPage() {
         </div>
       </div>
 
-      {/* Future integrations placeholder */}
+      {/* Twilio SMS Card */}
+      <TwilioSmsCard />
+
+      {/* No more placeholders — all integrations are real now */}
       <div className="space-y-3">
-        {['Twilio SMS'].map((name) => (
+        {([] as string[]).map((name) => (
           <div
             key={name}
             className="bg-white rounded-xl border border-[var(--border-light)] px-5 py-4 flex items-center gap-4 opacity-60"

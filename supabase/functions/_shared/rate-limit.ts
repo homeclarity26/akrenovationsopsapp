@@ -120,6 +120,10 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
   // ─── Stripe payments ───
   'create-checkout-session':         { maxRequests: 30,  windowSeconds: 3600 },
 
+  // ─── Twilio SMS ───
+  'send-sms':                        { maxRequests: 100, windowSeconds: 3600 },
+  'twilio-webhook':                  { maxRequests: 500, windowSeconds: 3600 },
+
   // ─── Uncategorized / webhooks / utilities ───
   'get-usage-stats':                 { maxRequests: 60,  windowSeconds: 3600 },
   'invite-client-to-portal':        { maxRequests: 30,  windowSeconds: 3600 },

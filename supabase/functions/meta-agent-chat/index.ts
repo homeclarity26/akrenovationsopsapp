@@ -321,6 +321,13 @@ INVENTORY DELEGATES:
   deduct-shopping-item-from-stock { shopping_list_item_id } → { ok, previous_qty, new_qty, stocktake_id }
     Pulls a linked shopping item off its source_location via a stocktake row. Idempotent.
 
+send-sms { to, body } → Send real SMS to any phone via Twilio
+  Use when: User asks to text a client, send an SMS reminder, or any SMS outreach
+  Input: { to (phone number with country code, e.g. "+16145551234"), body (message text, max 1600 chars) }
+  Returns: { ok, sid } — the Twilio message SID
+  Note: Requires TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN, TWILIO_PHONE_NUMBER env vars.
+  If Twilio is not configured, returns 503 — tell the user to set up Twilio in Settings > Integrations.
+
 Gusto Payroll: connected via OAuth. Syncs employees + pay periods.
   DELEGATE: sync-to-gusto { pay_period_id? } → { employees_synced, payroll_synced, errors }
   Use when: admin asks "send payroll to Gusto" or "sync employees to Gusto"
