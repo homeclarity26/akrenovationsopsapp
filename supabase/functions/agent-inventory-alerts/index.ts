@@ -2,6 +2,7 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { checkRateLimit, rateLimitResponse } from '../_shared/rate-limit.ts'
 import { getCorsHeaders } from '../_shared/cors.ts'
+import { captureException } from '../_shared/sentry.ts'
 
 // ──────────────────────────────────────────────────────────────────────────
 // agent-inventory-alerts
@@ -284,6 +285,7 @@ serve(async (req) => {
     )
   } catch (err) {
     console.error('agent-inventory-alerts error:', err)
+    captureException(err, { function: 'agent-inventory-alerts' })
     return new Response(
       JSON.stringify({ error: err instanceof Error ? err.message : String(err) }),
       { status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },

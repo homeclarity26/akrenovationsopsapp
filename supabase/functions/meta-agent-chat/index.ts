@@ -13,6 +13,7 @@ import { AI_CONFIG } from '../_shared/aiConfig.ts'
 import { z } from 'npm:zod@3'
 import { getCorsHeaders } from '../_shared/cors.ts'
 import { logAiUsage } from '../_shared/ai_usage.ts'
+import { captureException } from '../_shared/sentry.ts'
 
 const InputSchema = z.object({
   message: z.string(),
@@ -1008,6 +1009,7 @@ serve(async (req) => {
     )
   } catch (err) {
     console.error('meta-agent-chat error:', err)
+    captureException(err, { function: 'meta-agent-chat' })
     return new Response(JSON.stringify({ error: String(err) }), {
       status: 500, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' }
     })
