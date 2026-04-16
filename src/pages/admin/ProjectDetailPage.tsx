@@ -19,6 +19,7 @@ import { ProjectActivityFeed } from '@/components/project/ProjectActivityFeed'
 import { ProjectPresenceBar } from '@/components/project/ProjectPresenceBar'
 import { ClientShareToggle } from '@/components/project/ClientShareToggle'
 import { ProjectSuggestionInbox } from '@/components/project/ProjectSuggestionInbox'
+import { InviteClientToPortal } from '@/components/project/InviteClientToPortal'
 
 type Tab = 'overview' | 'activity' | 'financials' | 'budget' | 'subs' | 'team' | 'tasks' | 'logs' | 'changes' | 'punch' | 'warranty' | 'comms' | 'photos'
 
@@ -286,7 +287,18 @@ export function ProjectDetailPage() {
           <>
             {/* Client */}
             <Card>
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-3">Client</p>
+              <div className="flex items-start justify-between gap-2 mb-3">
+                <p className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Client</p>
+                {canShareWithClient && id && (
+                  <InviteClientToPortal
+                    projectId={id}
+                    clientUserId={project.client_user_id ?? null}
+                    clientName={project.client_name ?? null}
+                    clientEmail={project.client_email ?? null}
+                    onInvited={() => projectRefetch()}
+                  />
+                )}
+              </div>
               <p className="font-semibold text-[var(--text)]">{project.client_name}</p>
               <div className="space-y-2 mt-3">
                 <div className="flex items-center gap-2">

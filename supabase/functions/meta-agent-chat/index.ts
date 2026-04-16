@@ -243,6 +243,10 @@ send-email → Transactional emails via Resend
   Use when: User asks to email a client, send an invoice, or send any communication
   Input: { to, subject, html, from_name?, reply_to? }
 
+invite-client-to-portal → Send a magic-link invite to a project's client via email or SMS
+  Input: { project_id, client_email, client_full_name, method: 'email' | 'sms' }
+  Use when: admin asks "invite the client" or sets up a new project and wants the client in the portal
+
 agent-proposal-writer → AI-generated proposal content
   Use when: User wants a full proposal written from project/estimate data
   Input: { project_id?, estimate_id? }
