@@ -49,6 +49,16 @@ export function useInventoryRealtime() {
         },
         () => {
           for (const prefix of keyPrefixes) {
+            // NOTE (PR 15): React Query's `invalidateQueries({ queryKey })`
+            // defaults to `exact: false`, which does PREFIX matching. Passing
+            // `[prefix]` here matches every cache key that starts with
+            // `[prefix]` — e.g. `['inventory_stock', companyId]`,
+            // `['inventory_location_items', companyId, locationId]`. That's
+            // exactly what every consumer in the app uses (verified during
+            // the Wave A review). Do NOT split this into per-scope
+            // invalidations unless a NEW consumer's cache key shape changes
+            // how it's rooted, in which case add a new prefix to
+            // TABLE_TO_QUERY_KEYS above.
             queryClient.invalidateQueries({ queryKey: [prefix] })
           }
         },

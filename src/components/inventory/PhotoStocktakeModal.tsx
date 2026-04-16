@@ -227,39 +227,67 @@ export function PhotoStocktakeModal({
       })
     if (upErr) throw new Error(`Upload failed: ${upErr.message}`)
 
-    // Sign a URL so the review step can render the photo.
-    const { data: signed, error: signErr } = await supabase.storage
-      .from(bucket)
-      .createSignedUrl(path, 60 * 10) // 10 minutes — plenty for review
-    if (signErr || !signed?.signedUrl) {
-      throw new Error(`Couldn't create signed URL: ${signErr?.message ?? 'unknown'}`)
+    // Local helper — any post-upload failure below should remove the storage
+    // object so we don't leave orphans. Best-effort: if the deletion itself
+    // fails, swallow & log — at that point the stocktake flow is already
+    // aborting and a stray object is lower priority than the original error.
+    const cleanupUploadedPhoto = async (reason: string) => {
+      try {
+        const { error: delErr } = await supabase.storage.from(bucket).remove([path])
+        if (delErr) {
+          // eslint-disable-next-line no-console
+          console.warn('[PhotoStocktake] cleanup delete failed', { reason, path, delErr })
+        } else {
+          // eslint-disable-next-line no-console
+          console.log('[PhotoStocktake] cleaned up orphan photo', { reason, path })
+        }
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.warn('[PhotoStocktake] cleanup threw', { reason, path, err })
+      }
     }
 
-    // Call the edge function with the signed URL so it doesn't need to
-    // re-sign the storage path itself.
-    const { data, error: fnErr } = await supabase.functions.invoke(
-      'agent-photo-stocktake',
-      {
-        body: {
-          photo_url: signed.signedUrl,
-          location_id: locationId,
-          expected_items: knownItems.map((i) => ({
-            item_id: i.item_id,
-            name: i.name,
-            unit: i.unit,
-            pack_size: i.pack_size ?? undefined,
-          })),
+    try {
+      // Sign a URL so the review step can render the photo.
+      const { data: signed, error: signErr } = await supabase.storage
+        .from(bucket)
+        .createSignedUrl(path, 60 * 10) // 10 minutes — plenty for review
+      if (signErr || !signed?.signedUrl) {
+        throw new Error(`Couldn't create signed URL: ${signErr?.message ?? 'unknown'}`)
+      }
+
+      // Call the edge function with the signed URL so it doesn't need to
+      // re-sign the storage path itself.
+      const { data, error: fnErr } = await supabase.functions.invoke(
+        'agent-photo-stocktake',
+        {
+          body: {
+            photo_url: signed.signedUrl,
+            location_id: locationId,
+            expected_items: knownItems.map((i) => ({
+              item_id: i.item_id,
+              name: i.name,
+              unit: i.unit,
+              pack_size: i.pack_size ?? undefined,
+            })),
+          },
         },
-      },
-    )
-    if (fnErr) throw fnErr
-    const proposals = ((data?.proposals ?? []) as Proposal[]).filter(
-      (p) =>
-        p.item_id &&
-        typeof p.estimated_quantity === 'number' &&
-        (p.confidence === 'low' || p.confidence === 'medium' || p.confidence === 'high'),
-    )
-    return { proposals, storagePath: `${bucket}/${path}`, signedUrl: signed.signedUrl }
+      )
+      if (fnErr) throw fnErr
+      const proposals = ((data?.proposals ?? []) as Proposal[]).filter(
+        (p) =>
+          p.item_id &&
+          typeof p.estimated_quantity === 'number' &&
+          (p.confidence === 'low' || p.confidence === 'medium' || p.confidence === 'high'),
+      )
+      return { proposals, storagePath: `${bucket}/${path}`, signedUrl: signed.signedUrl }
+    } catch (err) {
+      // Edge function (or signed-URL creation) failed — the photo we just
+      // uploaded is now orphaned since the user will retake or abandon. Clean
+      // it up so we don't accumulate garbage in the bucket.
+      await cleanupUploadedPhoto(err instanceof Error ? err.message : 'unknown')
+      throw err
+    }
   }
 
   const analyzeMutation = useMutation({
