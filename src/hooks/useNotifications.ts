@@ -10,7 +10,7 @@
 //   markAllRead()        — bulk read-marker
 //   unreadCount          — derived count for the bell badge
 
-import { useCallback, useEffect, useRef } from 'react'
+import { useCallback, useEffect, useId, useRef } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
@@ -63,6 +63,12 @@ function playChime() {
 export function useNotifications() {
   const { user } = useAuth()
   const qc = useQueryClient()
+  // Unique id per hook invocation. Used in the realtime channel name so that
+  // mounting this hook in multiple places (mobile + desktop header, etc.)
+  // does not collide on a shared channel — the Supabase realtime API throws
+  // `cannot add postgres_changes callbacks after subscribe()` when two
+  // components subscribe to the same channel name.
+  const instanceId = useId()
   // Track the newest created_at we've rendered so realtime inserts can decide
   // whether to chime. Guards against re-chiming on cache refetches.
   const lastSeenRef = useRef<string | null>(null)
@@ -123,7 +129,7 @@ export function useNotifications() {
     if (!user?.id) return
     let channel: ReturnType<typeof supabase.channel> | null = null
     try {
-      channel = supabase.channel(`notifications:${user.id}`)
+      channel = supabase.channel(`notifications:${user.id}:${instanceId}`)
       channel.on(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         'postgres_changes' as any,
@@ -154,7 +160,7 @@ export function useNotifications() {
         // ignore
       }
     }
-  }, [user?.id, qc, prefsQuery.data?.sound])
+  }, [user?.id, qc, prefsQuery.data?.sound, instanceId])
 
   const markRead = useCallback(
     async (id: string) => {

@@ -4,7 +4,7 @@
 // by user_id) so the list updates live when the dispatcher flips a row from
 // 'pending' to 'sent', or when the meta-agent schedules a new one.
 
-import { useEffect } from 'react'
+import { useEffect, useId } from 'react'
 import { useQuery, useQueryClient, useMutation } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
@@ -41,6 +41,8 @@ export interface ScheduleReminderInput {
 export function useReminders() {
   const { user } = useAuth()
   const qc = useQueryClient()
+  // Unique id per hook invocation — see useNotifications for the same reason.
+  const instanceId = useId()
 
   const query = useQuery<ReminderRow[]>({
     queryKey: ['reminders', user?.id ?? 'anon'],
@@ -71,7 +73,7 @@ export function useReminders() {
     if (!user?.id) return
     let channel: ReturnType<typeof supabase.channel> | null = null
     try {
-      channel = supabase.channel(`reminders:${user.id}`)
+      channel = supabase.channel(`reminders:${user.id}:${instanceId}`)
       channel.on(
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         'postgres_changes' as any,
@@ -95,7 +97,7 @@ export function useReminders() {
         // ignore
       }
     }
-  }, [user?.id, qc])
+  }, [user?.id, qc, instanceId])
 
   return query
 }
