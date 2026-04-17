@@ -3,7 +3,7 @@ import {
   Building2, Users, Workflow, Plug, Activity, Database,
   BookOpen, Brain, Zap, AlertTriangle, Layers, Wrench,
   LayoutTemplate, DollarSign, ClipboardList, Shield,
-  HardDrive, Stethoscope, ChevronRight, Palette,
+  HardDrive, Stethoscope, ChevronRight, Palette, Bell,
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { Tooltip } from '@/components/ui/Tooltip'
@@ -44,6 +44,7 @@ const SECTIONS: SettingsSection[] = [
     icon: Users,
     links: [
       { label: 'Pending Approvals', desc: 'Review AI actions before they execute', to: 'approvals', icon: AlertTriangle },
+      { label: 'Notifications', desc: 'Channels, sound, and time zone', to: 'notifications', icon: Bell },
     ],
   },
   {

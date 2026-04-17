@@ -976,6 +976,41 @@ export const COMMANDS: Command[] = [
     when: () => true,
     execute: agentQuery('Show me all pending suggestions and change orders.'),
   },
+
+  // =========================================================================
+  // REMINDERS (all authenticated roles)
+  // =========================================================================
+
+  {
+    id: 'view_reminders',
+    label: 'View reminders',
+    icon: '🔔',
+    description: 'Open your reminders list',
+    roles: ADMINS_EMP,
+    when: () => true,
+    execute: navigateTo(
+      (_, ctx) => (ctx.user?.role === 'employee' ? '/employee/reminders' : '/admin/reminders'),
+      'view_reminders',
+    ),
+  },
+  {
+    id: 'set_reminder',
+    label: 'Set a reminder',
+    icon: '⏰',
+    description: 'Tell the AI: "remind me at 8am to grab the lights"',
+    roles: ADMINS_EMP,
+    when: () => true,
+    execute: agentQuery('I want to set a reminder — ask me what it is and when.'),
+  },
+  {
+    id: 'notification_settings',
+    label: 'Notification settings',
+    icon: '⚙️',
+    description: 'Channels, sound, and time zone preferences',
+    roles: ADMINS,
+    when: () => true,
+    execute: navigateTo('/admin/settings/notifications', 'notification_settings'),
+  },
 ]
 
 // ---------------------------------------------------------------------------

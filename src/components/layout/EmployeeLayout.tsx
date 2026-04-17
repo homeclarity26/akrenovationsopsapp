@@ -6,6 +6,7 @@ import {
 import { AgentBar } from '@/components/ui/AgentBar'
 import { Badge } from '@/components/ui/Badge'
 import { ModeToggle } from '@/components/ui/ModeToggle'
+import { NotificationBell } from '@/components/ui/NotificationBell'
 import { PoweredByFooter } from '@/components/ui/PoweredByFooter'
 import { useAuth } from '@/context/AuthContext'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
@@ -42,6 +43,7 @@ export function EmployeeLayout() {
             <span className="text-xs font-medium text-[var(--text-secondary)] truncate max-w-[140px]">{company.name}</span>
           )}
         </div>
+        <NotificationBell viewAllHref="/employee/reminders" />
       </header>
 
       <main className="flex-1 pt-11 pb-20 overflow-x-hidden">

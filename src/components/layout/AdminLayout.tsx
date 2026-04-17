@@ -9,6 +9,7 @@ import { AgentBar } from '@/components/ui/AgentBar'
 import { APIUsageBar } from '@/components/ui/APIUsageBar'
 import { BrandLogo } from '@/components/ui/BrandLogo'
 import { ModeToggle } from '@/components/ui/ModeToggle'
+import { NotificationBell } from '@/components/ui/NotificationBell'
 import { PoweredByFooter } from '@/components/ui/PoweredByFooter'
 import { useAuth } from '@/context/AuthContext'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
@@ -88,8 +89,9 @@ export function AdminLayout() {
           ))}
         </nav>
         <div className="p-3 border-t border-white/10 space-y-0.5">
-          <div className="px-3 py-2">
-            <APIUsageBar className="w-full justify-center" />
+          <div className="px-3 py-2 flex items-center justify-between gap-2">
+            <APIUsageBar className="justify-center" />
+            <NotificationBell viewAllHref="/admin/reminders" />
           </div>
           <NavLink
             to="/admin/ai"
@@ -122,6 +124,7 @@ export function AdminLayout() {
       <header className="lg:hidden fixed top-0 left-0 right-0 h-11 bg-[var(--bg)] border-b border-[var(--border-light)] flex items-center justify-between px-3 z-40 gap-1">
         <ModeToggle />
         <div className="flex items-center gap-1">
+        <NotificationBell viewAllHref="/admin/reminders" />
         <APIUsageBar className="mr-1" />
         <button
           onClick={() => setMenuOpen(v => !v)}
