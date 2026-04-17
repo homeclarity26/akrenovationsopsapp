@@ -46,32 +46,54 @@ export function useReminders() {
     queryKey: ['reminders', user?.id ?? 'anon'],
     queryFn: async () => {
       if (!user) return []
-      const { data, error } = await supabase
-        .from('reminders')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('remind_at', { ascending: true })
-      if (error) throw error
-      return (data ?? []) as ReminderRow[]
+      try {
+        const { data, error } = await supabase
+          .from('reminders')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('remind_at', { ascending: true })
+        if (error) {
+          console.warn('[useReminders] select failed:', error.message)
+          return []
+        }
+        return (data ?? []) as ReminderRow[]
+      } catch (e) {
+        console.warn('[useReminders] select threw:', e)
+        return []
+      }
     },
     enabled: !!user,
+    retry: 0,
   })
 
   // Realtime — mirror useProjectRealtime shape
   useEffect(() => {
     if (!user?.id) return
-    const channel = supabase.channel(`reminders:${user.id}`)
-    channel.on(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      'postgres_changes' as any,
-      { event: '*', schema: 'public', table: 'reminders', filter: `user_id=eq.${user.id}` },
-      () => {
-        qc.invalidateQueries({ queryKey: ['reminders', user.id] })
-      },
-    )
-    channel.subscribe()
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase.channel(`reminders:${user.id}`)
+      channel.on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: 'reminders', filter: `user_id=eq.${user.id}` },
+        () => {
+          try {
+            qc.invalidateQueries({ queryKey: ['reminders', user.id] })
+          } catch {
+            // ignore
+          }
+        },
+      )
+      channel.subscribe()
+    } catch (e) {
+      console.warn('[useReminders] channel setup threw:', e)
+    }
     return () => {
-      supabase.removeChannel(channel)
+      try {
+        if (channel) supabase.removeChannel(channel)
+      } catch {
+        // ignore
+      }
     }
   }, [user?.id, qc])
 

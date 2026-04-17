@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/Badge'
 import { ModeToggle } from '@/components/ui/ModeToggle'
 import { NotificationBell } from '@/components/ui/NotificationBell'
 import { PoweredByFooter } from '@/components/ui/PoweredByFooter'
+import { SafeBoundary } from '@/components/ui/SafeBoundary'
 import { useAuth } from '@/context/AuthContext'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 import { cn } from '@/lib/utils'
@@ -43,7 +44,7 @@ export function EmployeeLayout() {
             <span className="text-xs font-medium text-[var(--text-secondary)] truncate max-w-[140px]">{company.name}</span>
           )}
         </div>
-        <NotificationBell viewAllHref="/employee/reminders" />
+        <SafeBoundary label="NotificationBell.employee"><NotificationBell viewAllHref="/employee/reminders" /></SafeBoundary>
       </header>
 
       <main className="flex-1 pt-11 pb-20 overflow-x-hidden">

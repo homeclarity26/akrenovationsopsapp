@@ -6,6 +6,7 @@ import {
 import { AgentBar } from '@/components/ui/AgentBar'
 import { NotificationBell } from '@/components/ui/NotificationBell'
 import { PoweredByFooter } from '@/components/ui/PoweredByFooter'
+import { SafeBoundary } from '@/components/ui/SafeBoundary'
 import { useCompanyProfile } from '@/hooks/useCompanyProfile'
 import { cn } from '@/lib/utils'
 
@@ -33,7 +34,7 @@ export function ClientLayout() {
             <span className="font-display text-white text-base">{company?.name ?? 'Your Contractor'}</span>
             <p className="text-white/60 text-xs">Your Project Portal</p>
           </div>
-          <NotificationBell viewAllHref="" className="text-white" />
+          <SafeBoundary label="NotificationBell.client"><NotificationBell viewAllHref="" className="text-white" /></SafeBoundary>
         </div>
         {/* Inline tab nav on mobile */}
         <div className="flex overflow-x-auto border-t border-white/10 hide-scrollbar">
