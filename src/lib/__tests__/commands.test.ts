@@ -86,8 +86,11 @@ describe('when() predicates', () => {
     expect(cmd.when(makeCtx({ pathname: '/employee/projects/xyz-456' }))).toBe(true);
   });
 
-  it('daily_log is only visible to employees', () => {
-    const cmd = findCommand('daily_log')!;
+  it('log_daily is only visible to employees', () => {
+    // Registry uses `log_daily` (voiceIntents maps here too); there is no
+    // `daily_log` command — renaming this assertion instead of touching the
+    // registry keeps voice + test + app in sync.
+    const cmd = findCommand('log_daily')!;
     expect(cmd.when(makeCtx({ user: makeUser('employee') }))).toBe(true);
     expect(cmd.when(makeCtx({ user: makeUser('admin') }))).toBe(false);
   });
@@ -162,11 +165,17 @@ describe('searchCommands', () => {
   });
 });
 
-describe('execute stubs', () => {
-  it('stub commands return ok:false with "coming soon"', async () => {
+describe('execute', () => {
+  // All commands have been promoted past the "stub / coming soon" phase —
+  // they either navigate via the agent:navigate event or call a real Supabase
+  // function. The old test that asserted a coming-soon stub on
+  // `generate_invoice` is obsolete: generate_invoice is now a real navigation
+  // to /admin/invoices?action=new.
+  it('generate_invoice navigates instead of returning a stub', async () => {
     const cmd = findCommand('generate_invoice')!;
     const result = await cmd.execute({}, makeCtx());
-    expect(result.ok).toBe(false);
-    expect(result.message).toContain('coming soon');
+    expect(result.ok).toBe(true);
+    expect(result.message).toBe('__navigate__');
+    expect((result.data as { path: string }).path).toBe('/admin/invoices?action=new');
   });
 });
