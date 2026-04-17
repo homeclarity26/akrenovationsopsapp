@@ -29,8 +29,10 @@ export function EmployeeLayout() {
   const { user } = useAuth()
   const { data: company } = useCompanyProfile()
 
-  // Onboarding guard — redirect to field wizard if incomplete
-  if (user && !user.field_onboarding_complete) {
+  // Onboarding guard — only force the field wizard for actual employees.
+  // Admins/super_admins previewing the field view (via ModeToggle) don't
+  // need to complete an employee-specific onboarding.
+  if (user && user.role === 'employee' && !user.field_onboarding_complete) {
     return <Navigate to="/onboard/field" replace />
   }
 
