@@ -865,6 +865,7 @@ async function executeActions(
   actions: ActionBlock[],
   supabase: ReturnType<typeof createClient>,
   role: UserRole,
+  userJwt?: string,
 ): Promise<{ executed: string[]; errors: string[] }> {
   const executed: string[] = []
   const errors: string[] = []
@@ -876,6 +877,14 @@ async function executeActions(
     }
     return { executed, errors }
   }
+
+  // Delegated edge functions (schedule-reminder, send-email, etc.) verify
+  // via _shared/auth.ts which expects a USER JWT — not the service role
+  // key. Forward the caller's JWT when we have it so the downstream
+  // function can derive user_id / company_id correctly. Fall back to the
+  // service key only for back-compat (rare edge case where no caller
+  // JWT was present).
+  const delegateAuthToken = userJwt && userJwt.length > 0 ? userJwt : serviceKey()
 
   for (const action of actions) {
     try {
@@ -904,7 +913,7 @@ async function executeActions(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${serviceKey()}`,
+            'Authorization': `Bearer ${delegateAuthToken}`,
           },
           body: JSON.stringify(action.payload),
         })
@@ -926,7 +935,7 @@ async function executeActions(
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${serviceKey()}`,
+            'Authorization': `Bearer ${delegateAuthToken}`,
           },
           body: JSON.stringify(proposePayload),
         })
@@ -958,6 +967,12 @@ serve(async (req) => {
   }
 
   const userRole = (auth.role ?? 'employee') as UserRole
+
+  // Capture the caller's JWT so we can forward it to any delegated edge
+  // function (schedule-reminder, send-email, ai-suggest-project-action)
+  // which verify the user via _shared/auth.ts. Using service_role here
+  // would return 401 because those functions expect a user token.
+  const userJwt = (req.headers.get('Authorization') ?? '').replace(/^Bearer\s+/i, '').trim()
 
   const rl = await checkRateLimit(req, 'meta-agent-chat')
   if (!rl.allowed) return rateLimitResponse(rl)
@@ -1018,7 +1033,7 @@ serve(async (req) => {
     const actionBlocks = parseActionBlocks(reply)
     let actionsResult: { executed: string[]; errors: string[] } = { executed: [], errors: [] }
     if (actionBlocks.length > 0) {
-      actionsResult = await executeActions(actionBlocks, supabase, userRole)
+      actionsResult = await executeActions(actionBlocks, supabase, userRole, userJwt)
     }
 
     // Log usage (fire and forget)
