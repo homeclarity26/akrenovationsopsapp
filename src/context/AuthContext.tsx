@@ -164,24 +164,40 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (userId) {
         // Stash the session immediately. We defer setUser until after
         // fetchProfile returns the real role — setting an optimistic
-        // role='client' placeholder here made ProtectedRoute mis-route
-        // super_admins to /client/progress on hard-reload. Instead we keep
-        // loading=true while the profile fetch resolves, and flip user +
-        // loading together once we know the real role.
+        // role='client' placeholder made ProtectedRoute mis-route
+        // super_admins to /client/progress on hard-reload. Keep loading=true
+        // while we resolve the real profile, then flip user + loading
+        // together with the correct role.
         setSession(storedSession as unknown as Session)
 
-        void fetchProfile(userId, emailFromJwt).then((profile) => {
-          if (!mounted) return
-          setUser(profile)
-          clearTimeout(timeout)
-          setLoading(false)
-        })
+        // Adopt the session in supabase-js FIRST so the subsequent
+        // fetchProfile uses the authenticated token, not the anon key.
+        // Without this the profiles SELECT was racing and sometimes coming
+        // back null from RLS, causing setUser(null) → /login redirect.
         void supabase.auth.setSession({
           access_token: storedSession.access_token,
           refresh_token: storedSession.refresh_token ?? '',
+        }).then(async () => {
+          if (!mounted) return
+          try {
+            const profile = await fetchProfile(userId, emailFromJwt)
+            if (!mounted) return
+            if (profile) {
+              setUser(profile)
+            }
+            // If profile somehow came back null, leave user=null but still
+            // stop loading; ProtectedRoute will kick to /login which is
+            // correct (no real profile row).
+          } finally {
+            clearTimeout(timeout)
+            setLoading(false)
+          }
         }).catch(() => {
-          // If setSession fails (bad token), onAuthStateChange will receive
-          // SIGNED_OUT and clear state.
+          // setSession failed (malformed/rejected token) — fall through to
+          // the normal loading-false path so /login can render.
+          if (!mounted) return
+          clearTimeout(timeout)
+          setLoading(false)
         })
       }
     }
