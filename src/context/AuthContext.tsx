@@ -44,6 +44,54 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
+// ── Storage helpers ─────────────────────────────────────────────────────────
+// Read whatever Supabase persisted (key pattern: `sb-<project-ref>-auth-token`)
+// and return the parsed session object or null if nothing usable is present.
+
+interface StoredSession {
+  access_token: string
+  refresh_token?: string
+  expires_at: number
+  user?: { id?: string; email?: string }
+}
+
+function readStoredSession(): StoredSession | null {
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i) ?? ''
+      if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
+        const raw = localStorage.getItem(key)
+        if (!raw) continue
+        try {
+          const parsed = JSON.parse(raw) as StoredSession
+          if (parsed?.access_token) return parsed
+        } catch {
+          // Legacy string-token format — can't parse, skip.
+        }
+      }
+    }
+  } catch {
+    // localStorage unavailable (private mode, etc.) — no stored session.
+  }
+  return null
+}
+
+/** Decode a JWT payload without validating the signature. Safe: we only read
+ *  claims the client already trusts Supabase to have issued. */
+function decodeJwt(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const payload = parts[1]
+    // base64url → base64
+    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/')
+    const json = atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '='))
+    return JSON.parse(decodeURIComponent(escape(json))) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
 async function fetchProfile(userId: string, fallbackEmail?: string): Promise<AppUser | null> {
   const { data, error } = await supabase
     .from('profiles')
@@ -93,39 +141,106 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true
 
-    // Safety net: if auth hasn't resolved in 8 seconds, unblock the UI
+    // ── Step 1: try to restore the session directly from localStorage ──────
+    // The Supabase JS client's own async hydration races badly with React on
+    // a hard page-load: INITIAL_SESSION can fire with a null session before
+    // the stored token is parsed, or getSession() can resolve null during
+    // refresh, and the old handler in this file interpreted null as "logged
+    // out" → ProtectedRoute → /login.
+    //
+    // Skip the race entirely: parse the stored JWT ourselves, set the user
+    // optimistically, then in the background ask supabase-js to adopt the
+    // same session via setSession() and fetch the real profile. If the
+    // token is expired or malformed we fall through to the normal
+    // getSession + onAuthStateChange path.
+    const storedSession = readStoredSession()
+    const now = Math.floor(Date.now() / 1000)
+
+    if (storedSession && storedSession.access_token && storedSession.expires_at > now) {
+      const jwt = decodeJwt(storedSession.access_token)
+      const userId = typeof jwt?.sub === 'string' ? jwt.sub : null
+      const emailFromJwt = typeof jwt?.email === 'string' ? jwt.email : ''
+
+      if (userId) {
+        // Optimistic user so ProtectedRoute can render immediately. Real
+        // profile + role come in a moment.
+        setSession(storedSession as unknown as Session)
+        setUser({
+          id: userId,
+          email: emailFromJwt,
+          role: 'client', // temporary; overwritten once fetchProfile returns
+          full_name: emailFromJwt.split('@')[0] || 'User',
+          avatar_url: null,
+          company_id: null,
+          platform_onboarding_complete: false,
+          company_onboarding_complete: false,
+          field_onboarding_complete: false,
+        })
+        setLoading(false)
+
+        // Fetch the real profile and tell supabase-js about the session in
+        // parallel. Never await these on the critical render path.
+        void fetchProfile(userId, emailFromJwt).then((profile) => {
+          if (mounted && profile) setUser(profile)
+        })
+        void supabase.auth.setSession({
+          access_token: storedSession.access_token,
+          refresh_token: storedSession.refresh_token ?? '',
+        }).catch(() => {
+          // If setSession fails (bad token), the onAuthStateChange handler
+          // below will receive SIGNED_OUT and clear state.
+        })
+      }
+    }
+
+    // Safety net: if the optimistic path above doesn't fire and nothing else
+    // resolves in 12 seconds, unblock the UI so /login can render.
     const timeout = setTimeout(() => {
       if (mounted) setLoading(false)
-    }, 8000)
+    }, 12000)
 
-    // Initial session check — race against timeout so a stuck token-refresh
-    // never blocks the UI indefinitely.
-    const sessionPromise = supabase.auth.getSession()
-    const sessionTimeout = new Promise<{ data: { session: null } }>(r =>
-      setTimeout(() => r({ data: { session: null } }), 6000)
-    )
-    Promise.race([sessionPromise, sessionTimeout]).then(async ({ data }) => {
+    // ── Step 2: still run getSession() so supabase-js has a chance to catch
+    //    up. If no stored token existed we rely on this path.
+    supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return
-      setSession(data.session)
       if (data.session?.user) {
+        setSession(data.session)
         const profile = await fetchProfile(data.session.user.id, data.session.user.email)
-        if (mounted) setUser(profile)
+        if (mounted && profile) setUser(profile)
+        clearTimeout(timeout)
+        setLoading(false)
+      } else if (!storedSession) {
+        // Truly no session anywhere — allow /login to render.
+        clearTimeout(timeout)
+        setLoading(false)
       }
-      if (mounted) { clearTimeout(timeout); setLoading(false) }
+      // else: stored token exists, optimistic user already set — nothing to do.
     })
 
-    // Subscribe to auth changes (sign in, sign out, token refresh)
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
+    // ── Step 3: react to explicit state changes.
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return
-      setSession(newSession)
-      if (newSession?.user) {
-        const profile = await fetchProfile(newSession.user.id, newSession.user.email)
-        if (mounted) setUser(profile)
-      } else {
+
+      if (event === 'SIGNED_OUT') {
+        setSession(null)
         setUser(null)
+        clearTimeout(timeout)
+        setLoading(false)
+        return
       }
-      clearTimeout(timeout)
-      setLoading(false)
+
+      if (newSession?.user) {
+        setSession(newSession)
+        const profile = await fetchProfile(newSession.user.id, newSession.user.email)
+        if (mounted && profile) setUser(profile)
+        clearTimeout(timeout)
+        setLoading(false)
+        return
+      }
+
+      // Null session on any other event (INITIAL_SESSION, TOKEN_REFRESHED) —
+      // do NOT clear the optimistic user. Wait for either a real session or
+      // an explicit SIGNED_OUT.
     })
 
     return () => {
