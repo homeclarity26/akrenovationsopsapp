@@ -32,17 +32,22 @@ export function NotificationBell({ viewAllHref = '/admin/reminders', className }
   const popoverRef = useRef<HTMLDivElement | null>(null)
   const buttonRef = useRef<HTMLButtonElement | null>(null)
 
-  // Close on outside click.
+  // Close on outside click/touch. Listening on both 'mousedown' and
+  // 'touchstart' so the popover closes reliably on touch devices.
   useEffect(() => {
     if (!open) return
-    const handler = (e: MouseEvent) => {
+    const handler = (e: MouseEvent | TouchEvent) => {
       const target = e.target as Node
       if (popoverRef.current?.contains(target)) return
       if (buttonRef.current?.contains(target)) return
       setOpen(false)
     }
     window.addEventListener('mousedown', handler)
-    return () => window.removeEventListener('mousedown', handler)
+    window.addEventListener('touchstart', handler)
+    return () => {
+      window.removeEventListener('mousedown', handler)
+      window.removeEventListener('touchstart', handler)
+    }
   }, [open])
 
   const recent = notifications.slice(0, 8)
