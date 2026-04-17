@@ -166,12 +166,11 @@ function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'clie
   // before the session restores.
   if (loading) return <AuthLoadingScreen />
   if (!user) return <Navigate to="/login" replace />
-  // Super-admins can access /platform AND /admin routes (platform owners
-  // can enter the company admin view via "Enter as Admin").
-  if (user.role === 'super_admin') {
-    if (role === 'super_admin' || role === 'admin') return <>{children}</>
-    return <Navigate to="/platform" replace />
-  }
+  // Super-admins can access any area — platform admin, company admin, field
+  // mode (for previewing employee screens), client portal (for previewing
+  // what clients see). Previously they were blocked from /employee, which
+  // silently broke the Admin/Field ModeToggle.
+  if (user.role === 'super_admin') return <>{children}</>
   // Admins can access all routes (field mode lets admins use employee screens)
   if (user.role === 'admin') return <>{children}</>
   if (user.role !== role) {
