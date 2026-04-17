@@ -67,22 +67,35 @@ export function useNotifications() {
   // whether to chime. Guards against re-chiming on cache refetches.
   const lastSeenRef = useRef<string | null>(null)
 
+  // Notifications list. Never throws from queryFn — a 4xx/5xx from Supabase
+  // is logged and an empty list is returned so the consumer can render a
+  // harmless empty bell instead of propagating the error up to the app's
+  // top-level Sentry ErrorBoundary.
   const query = useQuery<NotificationRow[]>({
     queryKey: ['notifications', user?.id ?? 'anon'],
     queryFn: async () => {
       if (!user) return []
-      const { data, error } = await supabase
-        .from('notifications')
-        .select('*')
-        .eq('user_id', user.id)
-        .order('created_at', { ascending: false })
-        .limit(100)
-      if (error) throw error
-      const rows = (data ?? []) as NotificationRow[]
-      if (rows[0]) lastSeenRef.current = rows[0].created_at
-      return rows
+      try {
+        const { data, error } = await supabase
+          .from('notifications')
+          .select('*')
+          .eq('user_id', user.id)
+          .order('created_at', { ascending: false })
+          .limit(100)
+        if (error) {
+          console.warn('[useNotifications] select failed:', error.message)
+          return []
+        }
+        const rows = (data ?? []) as NotificationRow[]
+        if (rows[0]) lastSeenRef.current = rows[0].created_at
+        return rows
+      } catch (e) {
+        console.warn('[useNotifications] select threw:', e)
+        return []
+      }
     },
     enabled: !!user,
+    retry: 0,
   })
 
   // Fetch prefs separately so we can gate the chime without coupling.
@@ -90,37 +103,56 @@ export function useNotifications() {
     queryKey: ['notification-preferences', user?.id ?? 'anon'],
     queryFn: async () => {
       if (!user) return {}
-      const { data } = await supabase
-        .from('profiles')
-        .select('notification_preferences')
-        .eq('id', user.id)
-        .maybeSingle()
-      return (data?.notification_preferences as NotificationPreferences) ?? {}
+      try {
+        const { data } = await supabase
+          .from('profiles')
+          .select('notification_preferences')
+          .eq('id', user.id)
+          .maybeSingle()
+        return (data?.notification_preferences as NotificationPreferences) ?? {}
+      } catch (e) {
+        console.warn('[useNotifications] prefs fetch threw:', e)
+        return {}
+      }
     },
     enabled: !!user,
+    retry: 0,
   })
 
   useEffect(() => {
     if (!user?.id) return
-    const channel = supabase.channel(`notifications:${user.id}`)
-    channel.on(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      'postgres_changes' as any,
-      { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
-      (payload: { eventType: string; new?: NotificationRow }) => {
-        if (payload.eventType === 'INSERT' && payload.new) {
-          const row = payload.new
-          if (!lastSeenRef.current || row.created_at > lastSeenRef.current) {
-            lastSeenRef.current = row.created_at
-            if (prefsQuery.data?.sound !== false) playChime()
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase.channel(`notifications:${user.id}`)
+      channel.on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        { event: '*', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` },
+        (payload: { eventType?: string; new?: NotificationRow }) => {
+          try {
+            if (payload?.eventType === 'INSERT' && payload.new) {
+              const row = payload.new
+              if (!lastSeenRef.current || row.created_at > lastSeenRef.current) {
+                lastSeenRef.current = row.created_at
+                if (prefsQuery.data?.sound !== false) playChime()
+              }
+            }
+            qc.invalidateQueries({ queryKey: ['notifications', user.id] })
+          } catch (e) {
+            console.warn('[useNotifications] realtime callback threw:', e)
           }
-        }
-        qc.invalidateQueries({ queryKey: ['notifications', user.id] })
-      },
-    )
-    channel.subscribe()
+        },
+      )
+      channel.subscribe()
+    } catch (e) {
+      console.warn('[useNotifications] channel setup threw:', e)
+    }
     return () => {
-      supabase.removeChannel(channel)
+      try {
+        if (channel) supabase.removeChannel(channel)
+      } catch {
+        // ignore
+      }
     }
   }, [user?.id, qc, prefsQuery.data?.sound])
 
