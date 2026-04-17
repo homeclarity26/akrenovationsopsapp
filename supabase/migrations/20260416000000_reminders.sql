@@ -228,7 +228,14 @@ CREATE TRIGGER trg_reminders_updated_at
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 8. Dispatcher cron — every minute, POST to process-due-reminders
 -- ─────────────────────────────────────────────────────────────────────────────
--- Pattern mirrors inventory-alerts-digest (20260415001200). Idempotent.
+-- Edge functions deploy with --no-verify-jwt so the cron does not need an
+-- Authorization header; the dispatcher runs with service role internally and
+-- the claim-UPDATE is idempotent, so extra external invocations are harmless.
+--
+-- URL is hardcoded because ALTER DATABASE ... SET requires superuser, which
+-- the Management API connection is not. The project ref is stable.
+--
+-- Idempotent — safe to run multiple times.
 
 DO $$
 BEGIN
@@ -238,11 +245,8 @@ END $$;
 
 SELECT cron.schedule('reminders-dispatch-every-minute', '* * * * *',
   $$ SELECT net.http_post(
-    url := current_setting('app.supabase_url', true) || '/functions/v1/process-due-reminders',
-    headers := jsonb_build_object(
-      'Authorization', 'Bearer ' || current_setting('app.service_role_key', true),
-      'Content-Type', 'application/json'
-    ),
+    url := 'https://mebzqfeeiciayxdetteb.supabase.co/functions/v1/process-due-reminders',
+    headers := jsonb_build_object('Content-Type', 'application/json'),
     body := '{}'::jsonb
   ) $$
 );
