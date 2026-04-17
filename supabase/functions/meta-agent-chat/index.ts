@@ -338,6 +338,31 @@ Gusto Payroll: connected via OAuth. Syncs employees + pay periods.
   DELEGATE: sync-to-gusto { pay_period_id? } → { employees_synced, payroll_synced, errors }
   Use when: admin asks "send payroll to Gusto" or "sync employees to Gusto"
 
+schedule-reminder { title, body?, remind_at, timezone?, recurrence?, channels?, project_id? } → Schedule a reminder for the CALLING user
+  Use when: The user asks you to remind them of something — "remind me at 8am to
+    grab extra lights from the shop", "remind me tomorrow to call the inspector",
+    "every weekday at 7am tell me to check the job sites".
+  Input:
+    - title (required, ≤200 chars) — the short reminder text
+    - body (optional, ≤2000 chars) — any extra detail
+    - remind_at (required) — ISO 8601 UTC timestamp. You MUST convert the
+      user's local time into UTC using the user's timezone. Today's date is
+      available in the system context; do not guess. If the user said "8am"
+      and it's already past 8am today, schedule for tomorrow 8am.
+    - timezone (optional) — IANA tz like "America/New_York"; falls back to
+      the user's profile.timezone or the company timezone.
+    - recurrence (optional) — 'daily' | 'weekly' | null. Only use when the
+      user explicitly asked for a recurring reminder.
+    - channels (optional) — subset of ["in_app","email","sms"]. Default is
+      ["in_app","email"]. Only add "sms" if the user explicitly said "text me".
+    - project_id (optional) — set only if the user tied the reminder to a
+      specific project.
+  Returns: { ok, reminder: { id, title, remind_at, ... } }
+  Decision: This is always DIRECT-EXECUTE when the user asked to remind
+    THEMSELVES in this turn. Only PROPOSE if they're asking you to remind
+    a DIFFERENT user (use ai-suggest-project-action instead).
+  Include created_by_agent: true in the payload so the UI can badge it.
+
 ═══ ACTION DECISION HEURISTIC ═══
 For every project-scoped action, decide DIRECT-EXECUTE vs PROPOSE:
 

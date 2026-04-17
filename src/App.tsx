@@ -72,6 +72,8 @@ const HealthPage = lazy(() => import('./pages/admin/settings/HealthPage').then(m
 // Wave D — QuickBooks + Gusto
 const IntegrationsPage = lazy(() => import('./pages/admin/settings/IntegrationsPage').then(m => ({ default: m.IntegrationsPage })))
 const BrandingPage = lazy(() => import('./pages/admin/settings/BrandingPage').then(m => ({ default: m.BrandingPage })))
+const NotificationsPage = lazy(() => import('./pages/admin/settings/NotificationsPage').then(m => ({ default: m.NotificationsPage })))
+const RemindersPage = lazy(() => import('./pages/RemindersPage').then(m => ({ default: m.RemindersPage })))
 const OnboardingPage = lazy(() => import('./pages/admin/OnboardingPage').then(m => ({ default: m.OnboardingPage })))
 const CompanyOnboardingWizard = lazy(() => import('./pages/onboarding/CompanyOnboardingWizard').then(m => ({ default: m.CompanyOnboardingWizard })))
 const PlatformOnboarding = lazy(() => import('./pages/onboarding/PlatformOnboarding').then(m => ({ default: m.PlatformOnboarding })))
@@ -295,7 +297,9 @@ function AppRoutes() {
             <Route path="backups" element={<BackupsPage />} />
             <Route path="security" element={<SecurityPage />} />
             <Route path="integrations" element={<IntegrationsPage />} />
+            <Route path="notifications" element={<NotificationsPage />} />
           </Route>
+          <Route path="reminders" element={<RemindersPage />} />
           <Route path="ai/improvements" element={<ImprovementQueuePage />} />
           <Route path="field" element={<FieldLaunchpadPage />} />
           <Route path="time" element={<TimeClockPage />} />
@@ -337,6 +341,7 @@ function AppRoutes() {
           <Route path="projects/:id" element={<EmployeeProjectDetailPage />} />
           {/* PR 9 — employee stocktake */}
           <Route path="stocktake" element={<EmployeeStocktakePage />} />
+          <Route path="reminders" element={<RemindersPage />} />
         </Route>
 
         {/* Client */}
