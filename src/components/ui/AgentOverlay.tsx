@@ -15,7 +15,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Send, Loader2, Paperclip, X, AlertTriangle, Clock } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { supabase } from '@/lib/supabase'
+import { resolveAuthToken } from '@/lib/authToken'
 import { useAuth } from '@/context/AuthContext'
 import { useContextChips } from '@/hooks/useContextChips'
 import { usePendingItems } from '@/hooks/usePendingItems'
@@ -105,10 +105,11 @@ export function AgentOverlay({ overlay }: AgentOverlayProps) {
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
         const supabaseKey = import.meta.env.VITE_SUPABASE_ANON_KEY as string
-        const {
-          data: { session },
-        } = await supabase.auth.getSession()
-        const token = session?.access_token ?? supabaseKey
+        // Pull the user's token from localStorage directly — awaiting
+        // supabase.auth.getSession() can hang in a wedged hydration state
+        // and prevent the fetch from ever firing.
+        const { accessToken, userId } = await resolveAuthToken()
+        const token = accessToken ?? supabaseKey
 
         const res = await fetch(`${supabaseUrl}/functions/v1/meta-agent-chat`, {
           method: 'POST',
@@ -119,7 +120,7 @@ export function AgentOverlay({ overlay }: AgentOverlayProps) {
           body: JSON.stringify({
             message: text,
             session_id: sessionId,
-            user_id: session?.user?.id ?? 'admin-1',
+            user_id: userId ?? 'admin-1',
           }),
         })
 
