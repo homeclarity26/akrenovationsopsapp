@@ -44,18 +44,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-// ── Storage helpers ─────────────────────────────────────────────────────────
-// Read whatever Supabase persisted (key pattern: `sb-<project-ref>-auth-token`)
-// and return the parsed session object or null if nothing usable is present.
-
-interface StoredSession {
-  access_token: string
-  refresh_token?: string
-  expires_at: number
-  user?: { id?: string; email?: string }
-}
-
-function readStoredSession(): StoredSession | null {
+function hasStoredSession(): boolean {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i) ?? ''
@@ -63,33 +52,20 @@ function readStoredSession(): StoredSession | null {
         const raw = localStorage.getItem(key)
         if (!raw) continue
         try {
-          const parsed = JSON.parse(raw) as StoredSession
-          if (parsed?.access_token) return parsed
+          const parsed = JSON.parse(raw) as { access_token?: string; expires_at?: number }
+          if (parsed?.access_token && (parsed.expires_at ?? 0) > Math.floor(Date.now() / 1000)) {
+            return true
+          }
         } catch {
-          // Legacy string-token format — can't parse, skip.
+          // Legacy string-token format: presence counts.
+          return true
         }
       }
     }
   } catch {
-    // localStorage unavailable (private mode, etc.) — no stored session.
+    // localStorage unavailable.
   }
-  return null
-}
-
-/** Decode a JWT payload without validating the signature. Safe: we only read
- *  claims the client already trusts Supabase to have issued. */
-function decodeJwt(token: string): Record<string, unknown> | null {
-  try {
-    const parts = token.split('.')
-    if (parts.length !== 3) return null
-    const payload = parts[1]
-    // base64url → base64
-    const b64 = payload.replace(/-/g, '+').replace(/_/g, '/')
-    const json = atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '='))
-    return JSON.parse(decodeURIComponent(escape(json))) as Record<string, unknown>
-  } catch {
-    return null
-  }
+  return false
 }
 
 async function fetchProfile(userId: string, fallbackEmail?: string): Promise<AppUser | null> {
@@ -118,19 +94,7 @@ async function fetchProfile(userId: string, fallbackEmail?: string): Promise<App
     }
   }
 
-  // Profile row doesn't exist yet — should be created by the
-  // on_auth_user_created trigger but race-condition safe fallback:
-  return {
-    id: userId,
-    email: fallbackEmail ?? '',
-    role: 'client',
-    full_name: fallbackEmail?.split('@')[0] ?? 'User',
-    avatar_url: null,
-    company_id: null,
-    platform_onboarding_complete: false,
-    company_onboarding_complete: false,
-    field_onboarding_complete: false,
-  }
+  return null
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -140,93 +104,62 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true
+    // Capture whether storage says we should be signed in. Used below to
+    // decide whether a null auth event is "really signed out" vs "hydration
+    // hasn't finished yet".
+    const storedAtMount = hasStoredSession()
 
-    // ── Step 1: try to restore the session directly from localStorage ──────
-    // The Supabase JS client's own async hydration races badly with React on
-    // a hard page-load: INITIAL_SESSION can fire with a null session before
-    // the stored token is parsed, or getSession() can resolve null during
-    // refresh, and the old handler in this file interpreted null as "logged
-    // out" → ProtectedRoute → /login.
-    //
-    // Skip the race entirely: parse the stored JWT ourselves, set the user
-    // optimistically, then in the background ask supabase-js to adopt the
-    // same session via setSession() and fetch the real profile. If the
-    // token is expired or malformed we fall through to the normal
-    // getSession + onAuthStateChange path.
-    const storedSession = readStoredSession()
-    const now = Math.floor(Date.now() / 1000)
-
-    if (storedSession && storedSession.access_token && storedSession.expires_at > now) {
-      const jwt = decodeJwt(storedSession.access_token)
-      const userId = typeof jwt?.sub === 'string' ? jwt.sub : null
-      const emailFromJwt = typeof jwt?.email === 'string' ? jwt.email : ''
-
-      if (userId) {
-        // Stash session synchronously so anything reading session has it.
-        setSession(storedSession as unknown as Session)
-
-        // IMPORTANT: do NOT call supabase.auth.setSession({access_token,
-        // refresh_token}) here — that triggers an internal token refresh,
-        // and if the stored refresh_token has already been rotated (normal
-        // on tabs that auto-refresh in the background), the refresh fails,
-        // supabase-js emits SIGNED_OUT, and ProtectedRoute kicks us to
-        // /login *after* we had successfully rendered the protected page.
-        //
-        // supabase-js reads the SAME localStorage key on init via its
-        // persistSession option. It hydrates on its own without our help.
-        // We just need a real profile so ProtectedRoute knows the role.
-        // Fire fetchProfile directly with the stored access_token (the
-        // Supabase REST client will include the Authorization header from
-        // its own session state once it hydrates — if there's a race we
-        // retry once below).
-        const tryFetch = async (): Promise<void> => {
-          const profile = await fetchProfile(userId, emailFromJwt)
-          if (!mounted) return
-          if (profile && profile.id === userId) {
-            setUser(profile)
-          } else {
-            // Could be an RLS miss during supabase-js hydration window —
-            // try again after a short delay.
-            setTimeout(async () => {
-              if (!mounted) return
-              const second = await fetchProfile(userId, emailFromJwt)
-              if (mounted && second) setUser(second)
-            }, 500)
-          }
-          clearTimeout(timeout)
-          setLoading(false)
-        }
-        void tryFetch()
-      }
-    }
-
-    // Safety net: if the optimistic path above doesn't fire and nothing else
-    // resolves in 12 seconds, unblock the UI so /login can render.
+    // Safety net: if nothing resolves in 12s, allow /login to render rather
+    // than spinning forever.
     const timeout = setTimeout(() => {
       if (mounted) setLoading(false)
     }, 12000)
 
-    // ── Step 2: still run getSession() so supabase-js has a chance to catch
-    //    up. If no stored token existed we rely on this path.
+    // Primary path: getSession() returns the session supabase-js hydrated
+    // from localStorage. Profile is fetched with that session's user id.
     supabase.auth.getSession().then(async ({ data }) => {
       if (!mounted) return
       if (data.session?.user) {
         setSession(data.session)
         const profile = await fetchProfile(data.session.user.id, data.session.user.email)
-        if (mounted && profile) setUser(profile)
+        if (!mounted) return
+        if (profile) setUser(profile)
         clearTimeout(timeout)
         setLoading(false)
-      } else if (!storedSession) {
-        // Truly no session anywhere — allow /login to render.
+      } else if (!storedAtMount) {
+        // No stored session and getSession agrees — /login should render.
         clearTimeout(timeout)
         setLoading(false)
       }
-      // else: stored token exists, optimistic user already set — nothing to do.
+      // else: storage says we're signed in but supabase-js hasn't surfaced
+      // it yet. Wait for onAuthStateChange; do NOT flip loading=false (that
+      // would cause ProtectedRoute to redirect to /login).
+    }).catch(() => {
+      if (!mounted) return
+      if (!storedAtMount) {
+        clearTimeout(timeout)
+        setLoading(false)
+      }
     })
 
-    // ── Step 3: react to explicit state changes.
+    // React to state changes. The key insight for the hard-reload bug:
+    // during supabase-js hydration on page load, an INITIAL_SESSION event
+    // can fire with a null session BEFORE the stored token is actually
+    // parsed. The pre-#70 code treated that as "signed out" and cleared the
+    // user, triggering ProtectedRoute → /login. Now we only clear on an
+    // explicit SIGNED_OUT event.
     const { data: subscription } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return
+
+      if (newSession?.user) {
+        setSession(newSession)
+        const profile = await fetchProfile(newSession.user.id, newSession.user.email)
+        if (!mounted) return
+        if (profile) setUser(profile)
+        clearTimeout(timeout)
+        setLoading(false)
+        return
+      }
 
       if (event === 'SIGNED_OUT') {
         setSession(null)
@@ -236,18 +169,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return
       }
 
-      if (newSession?.user) {
-        setSession(newSession)
-        const profile = await fetchProfile(newSession.user.id, newSession.user.email)
-        if (mounted && profile) setUser(profile)
-        clearTimeout(timeout)
-        setLoading(false)
-        return
-      }
-
-      // Null session on any other event (INITIAL_SESSION, TOKEN_REFRESHED) —
-      // do NOT clear the optimistic user. Wait for either a real session or
-      // an explicit SIGNED_OUT.
+      // Any other null-session event — swallow. Don't clear user, don't
+      // flip loading. If the hydration never completes we'll still stop
+      // loading via the 12s safety-net timeout.
     })
 
     return () => {
