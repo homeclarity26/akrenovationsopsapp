@@ -124,6 +124,11 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
   'send-sms':                        { maxRequests: 100, windowSeconds: 3600 },
   'twilio-webhook':                  { maxRequests: 500, windowSeconds: 3600 },
 
+  // ─── Reminders ───
+  'schedule-reminder':               { maxRequests: 120, windowSeconds: 3600 },
+  'dismiss-reminder':                { maxRequests: 300, windowSeconds: 3600 },
+  'process-due-reminders':           { maxRequests: 120, windowSeconds: 3600 },
+
   // ─── Uncategorized / webhooks / utilities ───
   'get-usage-stats':                 { maxRequests: 60,  windowSeconds: 3600 },
   'invite-client-to-portal':        { maxRequests: 30,  windowSeconds: 3600 },
