@@ -3,6 +3,7 @@ import { Send, Sparkles, ChevronRight, AlertCircle, Layers } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
+import { resolveAuthToken } from '@/lib/authToken'
 
 interface Message {
   id: string
@@ -83,8 +84,10 @@ export function MetaAgentPage() {
 
     try {
       const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-      const { data: { session } } = await supabase.auth.getSession()
-      const token = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY as string
+      // Don't await supabase.auth.getSession() — it can hang in a wedged
+      // hydration state. Pull the token directly from localStorage instead.
+      const { accessToken, userId } = await resolveAuthToken()
+      const token = accessToken ?? (import.meta.env.VITE_SUPABASE_ANON_KEY as string)
 
       const res = await fetch(`${supabaseUrl}/functions/v1/meta-agent-chat`, {
         method: 'POST',
@@ -95,7 +98,7 @@ export function MetaAgentPage() {
         body: JSON.stringify({
           message: messageText,
           session_id: sessionId,
-          user_id: session?.user?.id ?? 'unknown',
+          user_id: userId ?? 'unknown',
         }),
       })
 

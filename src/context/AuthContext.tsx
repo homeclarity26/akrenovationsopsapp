@@ -44,7 +44,13 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | null>(null)
 
-function hasStoredSession(): boolean {
+interface StoredAccessToken {
+  access_token: string
+  refresh_token?: string
+  expires_at: number
+}
+
+function readStoredAccessToken(): StoredAccessToken | null {
   try {
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i) ?? ''
@@ -52,20 +58,72 @@ function hasStoredSession(): boolean {
         const raw = localStorage.getItem(key)
         if (!raw) continue
         try {
-          const parsed = JSON.parse(raw) as { access_token?: string; expires_at?: number }
+          const parsed = JSON.parse(raw) as { access_token?: string; refresh_token?: string; expires_at?: number }
           if (parsed?.access_token && (parsed.expires_at ?? 0) > Math.floor(Date.now() / 1000)) {
-            return true
+            return { access_token: parsed.access_token, refresh_token: parsed.refresh_token, expires_at: parsed.expires_at ?? 0 }
           }
         } catch {
-          // Legacy string-token format: presence counts.
-          return true
+          // Legacy string-token format — can't parse.
         }
       }
     }
   } catch {
     // localStorage unavailable.
   }
-  return false
+  return null
+}
+
+function decodeJwtPayload(token: string): Record<string, unknown> | null {
+  try {
+    const parts = token.split('.')
+    if (parts.length !== 3) return null
+    const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/')
+    const json = atob(b64.padEnd(b64.length + ((4 - (b64.length % 4)) % 4), '='))
+    return JSON.parse(decodeURIComponent(escape(json))) as Record<string, unknown>
+  } catch {
+    return null
+  }
+}
+
+// Raw REST call that doesn't go through the supabase-js client — the
+// client can hang in a broken hydration state. Reads the profile row using
+// the stored access_token as a Bearer.
+async function fetchProfileWithToken(userId: string, accessToken: string, fallbackEmail?: string): Promise<AppUser | null> {
+  const url = (import.meta.env.VITE_SUPABASE_URL as string) ?? ''
+  const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ?? ''
+  try {
+    const res = await fetch(
+      `${url}/rest/v1/profiles?select=id,role,full_name,email,avatar_url,company_id,platform_onboarding_complete,company_onboarding_complete,field_onboarding_complete&id=eq.${encodeURIComponent(userId)}&limit=1`,
+      {
+        headers: {
+          apikey: anon,
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+      },
+    )
+    if (!res.ok) {
+      console.warn('[auth] fetchProfileWithToken HTTP', res.status)
+      return null
+    }
+    const rows = (await res.json()) as Array<Record<string, unknown>>
+    const data = rows?.[0]
+    if (!data) return null
+    return {
+      id: String(data.id),
+      email: (data.email as string | null) ?? fallbackEmail ?? '',
+      role: ((data.role as Role) ?? 'client'),
+      full_name: (data.full_name as string | null) ?? fallbackEmail?.split('@')[0] ?? 'User',
+      avatar_url: (data.avatar_url as string | null) ?? null,
+      company_id: (data.company_id as string | null) ?? null,
+      platform_onboarding_complete: Boolean(data.platform_onboarding_complete),
+      company_onboarding_complete: Boolean(data.company_onboarding_complete),
+      field_onboarding_complete: Boolean(data.field_onboarding_complete),
+    }
+  } catch (e) {
+    console.warn('[auth] fetchProfileWithToken threw:', e)
+    return null
+  }
 }
 
 async function fetchProfile(userId: string, fallbackEmail?: string): Promise<AppUser | null> {
@@ -104,50 +162,79 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let mounted = true
-    // Capture whether storage says we should be signed in. Used below to
-    // decide whether a null auth event is "really signed out" vs "hydration
-    // hasn't finished yet".
-    const storedAtMount = hasStoredSession()
 
-    // Safety net: if nothing resolves in 12s, allow /login to render rather
-    // than spinning forever.
+    // NEW STRATEGY — stop depending on supabase-js's async hydration.
+    //
+    // Read the stored session from localStorage SYNCHRONOUSLY. If it has a
+    // non-expired access_token, decode the JWT to get the user id, fetch
+    // the profile with a raw fetch that passes the stored token as bearer
+    // (sidesteps supabase-js's internal _useSession wedge), then set user.
+    //
+    // Only AFTER we have a working user do we hand off to supabase-js's
+    // auth state machine via getSession() in the background, so sign-in /
+    // sign-out events still flow through onAuthStateChange as before.
+    //
+    // Five previous AuthContext iterations (#70 #72 #73 #74 #75 #76) tried
+    // to reconcile with supabase-js's hydration and each hit a different
+    // edge. This version simply doesn't wait on it.
+
+    const storedAtMount = readStoredAccessToken()
+
+    // Safety net — unblock /login if literally nothing resolves.
     const timeout = setTimeout(() => {
       if (mounted) setLoading(false)
     }, 12000)
 
-    // Primary path: getSession() returns the session supabase-js hydrated
-    // from localStorage. Profile is fetched with that session's user id.
-    supabase.auth.getSession().then(async ({ data }) => {
-      if (!mounted) return
-      if (data.session?.user) {
-        setSession(data.session)
-        const profile = await fetchProfile(data.session.user.id, data.session.user.email)
-        if (!mounted) return
-        if (profile) setUser(profile)
-        clearTimeout(timeout)
-        setLoading(false)
-      } else if (!storedAtMount) {
-        // No stored session and getSession agrees — /login should render.
-        clearTimeout(timeout)
-        setLoading(false)
-      }
-      // else: storage says we're signed in but supabase-js hasn't surfaced
-      // it yet. Wait for onAuthStateChange; do NOT flip loading=false (that
-      // would cause ProtectedRoute to redirect to /login).
-    }).catch(() => {
-      if (!mounted) return
+    const hydrate = async () => {
+      // ── No stored token → let supabase-js handle the cold-start flow.
       if (!storedAtMount) {
+        try {
+          const { data } = await supabase.auth.getSession()
+          if (!mounted) return
+          if (data.session?.user) {
+            setSession(data.session)
+            const profile = await fetchProfile(data.session.user.id, data.session.user.email)
+            if (mounted && profile) setUser(profile)
+          }
+        } catch {
+          // ignore
+        } finally {
+          if (mounted) {
+            clearTimeout(timeout)
+            setLoading(false)
+          }
+        }
+        return
+      }
+
+      // ── Stored token exists → bypass supabase-js and hydrate the user
+      //    ourselves so the UI unblocks immediately.
+      const jwt = decodeJwtPayload(storedAtMount.access_token)
+      const userId = typeof jwt?.sub === 'string' ? jwt.sub : null
+      const emailFromJwt = typeof jwt?.email === 'string' ? jwt.email : undefined
+
+      if (!userId) {
         clearTimeout(timeout)
         setLoading(false)
+        return
       }
-    })
 
-    // React to state changes. The key insight for the hard-reload bug:
-    // during supabase-js hydration on page load, an INITIAL_SESSION event
-    // can fire with a null session BEFORE the stored token is actually
-    // parsed. The pre-#70 code treated that as "signed out" and cleared the
-    // user, triggering ProtectedRoute → /login. Now we only clear on an
-    // explicit SIGNED_OUT event.
+      // Raw REST call with the stored token — does not block on supabase-js
+      // being "ready".
+      const profile = await fetchProfileWithToken(userId, storedAtMount.access_token, emailFromJwt)
+      if (!mounted) return
+      if (profile) setUser(profile)
+      // Stash session so `useAuth().session?.access_token` reads correctly.
+      setSession({ access_token: storedAtMount.access_token, refresh_token: storedAtMount.refresh_token ?? '' } as unknown as Session)
+      clearTimeout(timeout)
+      setLoading(false)
+    }
+
+    hydrate()
+
+    // Subscribe to auth state changes so explicit sign-in / sign-out events
+    // still work. Only a genuine SIGNED_OUT clears the user — other
+    // null-session events during hydration are ignored (see history above).
     const { data: subscription } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return
 
@@ -168,10 +255,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setLoading(false)
         return
       }
-
-      // Any other null-session event — swallow. Don't clear user, don't
-      // flip loading. If the hydration never completes we'll still stop
-      // loading via the 12s safety-net timeout.
+      // swallow all other null-session events
     })
 
     return () => {
