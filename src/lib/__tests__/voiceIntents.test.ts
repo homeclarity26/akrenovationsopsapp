@@ -24,10 +24,10 @@ describe('matchVoiceIntent', () => {
   });
 
   // --- clock_out ---
-  it('"clock out" matches clock_in (same page)', () => {
+  it('"clock out" matches clock_out', () => {
     const result = matchVoiceIntent('clock out');
     expect(result).not.toBeNull();
-    expect(result!.commandId).toBe('clock_in');
+    expect(result!.commandId).toBe('clock_out');
   });
 
   // --- create_project ---
@@ -106,30 +106,38 @@ describe('matchVoiceIntent', () => {
     expect(result!.params.itemName).toBe('nails');
   });
 
-  // --- review_pending ---
-  it('"review pending" matches review_pending', () => {
+  // --- review_suggestions ---
+  // The intent regex `^(?:review|show)\s+(?:pending|suggestions)` maps these
+  // phrases to the `review_suggestions` command. A near-duplicate command
+  // `review_pending` also exists in the registry but is not reachable by
+  // voice — if we want "review pending" to hit `review_pending` we need to
+  // reshuffle the regex ordering, which is a separate decision.
+  it('"review pending" matches review_suggestions', () => {
     const result = matchVoiceIntent('review pending');
     expect(result).not.toBeNull();
-    expect(result!.commandId).toBe('review_pending');
+    expect(result!.commandId).toBe('review_suggestions');
   });
 
-  it('"show pending" matches review_pending', () => {
+  it('"show pending" matches review_suggestions', () => {
     const result = matchVoiceIntent('show pending');
     expect(result).not.toBeNull();
-    expect(result!.commandId).toBe('review_pending');
+    expect(result!.commandId).toBe('review_suggestions');
   });
 
-  // --- check_inventory ---
-  it('"check inventory" matches check_inventory', () => {
+  // --- check_stock ---
+  // Similar duplicate-command situation: `check_stock` is the voice-routed
+  // command; `check_inventory` exists in the registry but is only a
+  // keyboard/palette entry gated by pathname.
+  it('"check inventory" matches check_stock', () => {
     const result = matchVoiceIntent('check inventory');
     expect(result).not.toBeNull();
-    expect(result!.commandId).toBe('check_inventory');
+    expect(result!.commandId).toBe('check_stock');
   });
 
-  it('"check stock" matches check_inventory', () => {
+  it('"check stock" matches check_stock', () => {
     const result = matchVoiceIntent('check stock');
     expect(result).not.toBeNull();
-    expect(result!.commandId).toBe('check_inventory');
+    expect(result!.commandId).toBe('check_stock');
   });
 
   // --- No match (falls through to AI) ---
