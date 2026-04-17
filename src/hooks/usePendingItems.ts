@@ -85,19 +85,27 @@ export function usePendingItems(): PendingItems {
     enabled: !!user?.id,
     staleTime: 60_000,
     queryFn: async () => {
+      // Actual columns on public.messages: message (not content), is_read
+      // (not read), sender_id (no sender_name — would need a profiles join).
       const { data, error } = await supabase
         .from('messages')
-        .select('id, content, sender_name, created_at')
+        .select('id, message, sender_id, created_at')
         .eq('recipient_id', user!.id)
-        .eq('read', false)
+        .eq('is_read', false)
         .order('created_at', { ascending: false })
         .limit(5)
       if (error) {
-        // Table may not exist yet — graceful degradation
         console.warn('[usePendingItems] messages query failed:', error.message)
         return []
       }
-      return (data ?? []) as UnreadMessage[]
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        content: row.message ?? '',
+        // sender_name placeholder — could be enriched with a profiles lookup
+        // in a follow-up if the overlay needs a real name.
+        sender_name: row.sender_id ?? '',
+        created_at: row.created_at,
+      })) as UnreadMessage[]
     },
   })
 
