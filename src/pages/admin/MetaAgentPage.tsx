@@ -101,10 +101,14 @@ export function MetaAgentPage() {
 
       const data = await res.json().catch(() => ({}))
       if (res.ok && data.reply) {
+        // Strip machine-readable action blocks from the visible reply — the
+        // server already executed them (or the dispatcher surfaces failures
+        // in data.action_errors).
+        const cleaned = (data.reply as string).replace(/```action[\s\S]*?```/g, '').trim()
         const assistantMsg: Message = {
           id: crypto.randomUUID(),
           role: 'assistant',
-          content: data.reply,
+          content: cleaned || data.reply,
           timestamp: new Date(),
         }
         setMessages(prev => [...prev, assistantMsg])

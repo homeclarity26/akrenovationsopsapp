@@ -842,7 +842,11 @@ type ActionBlock = DbAction | DelegateAction | ProposeAction
 
 function parseActionBlocks(reply: string): ActionBlock[] {
   const actions: ActionBlock[] = []
-  const actionRegex = /```action\n([\s\S]*?)```/g
+  // Accept either a newline OR any whitespace (including a space) between
+  // ```action and the JSON body. Claude sometimes emits `\`\`\`action {json} \`\`\``
+  // on a single line. Also accept a closing fence that may or may not sit
+  // on its own line.
+  const actionRegex = /```action\s*([\s\S]*?)\s*```/g
   let match
   while ((match = actionRegex.exec(reply)) !== null) {
     try {

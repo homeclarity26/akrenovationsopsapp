@@ -125,7 +125,11 @@ export function AgentOverlay({ overlay }: AgentOverlayProps) {
 
         const data = await res.json().catch(() => ({}))
         if (res.ok && data.reply) {
-          setMessages((m) => [...m, { role: 'ai', text: data.reply }])
+          // Strip any ```action {...}``` blocks from the visible reply —
+          // those are machine-readable instructions that the server already
+          // executed; leaking them into the chat UI looks broken.
+          const cleaned = (data.reply as string).replace(/```action[\s\S]*?```/g, '').trim()
+          setMessages((m) => [...m, { role: 'ai', text: cleaned || data.reply }])
         } else {
           const errorDetail = data.error ?? data.message ?? `HTTP ${res.status}`
           console.error('[AgentOverlay] Edge function error:', res.status, data)
