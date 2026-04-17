@@ -162,33 +162,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const emailFromJwt = typeof jwt?.email === 'string' ? jwt.email : ''
 
       if (userId) {
-        // Optimistic user so ProtectedRoute can render immediately. Real
-        // profile + role come in a moment.
+        // Stash the session immediately. We defer setUser until after
+        // fetchProfile returns the real role — setting an optimistic
+        // role='client' placeholder here made ProtectedRoute mis-route
+        // super_admins to /client/progress on hard-reload. Instead we keep
+        // loading=true while the profile fetch resolves, and flip user +
+        // loading together once we know the real role.
         setSession(storedSession as unknown as Session)
-        setUser({
-          id: userId,
-          email: emailFromJwt,
-          role: 'client', // temporary; overwritten once fetchProfile returns
-          full_name: emailFromJwt.split('@')[0] || 'User',
-          avatar_url: null,
-          company_id: null,
-          platform_onboarding_complete: false,
-          company_onboarding_complete: false,
-          field_onboarding_complete: false,
-        })
-        setLoading(false)
 
-        // Fetch the real profile and tell supabase-js about the session in
-        // parallel. Never await these on the critical render path.
         void fetchProfile(userId, emailFromJwt).then((profile) => {
-          if (mounted && profile) setUser(profile)
+          if (!mounted) return
+          setUser(profile)
+          clearTimeout(timeout)
+          setLoading(false)
         })
         void supabase.auth.setSession({
           access_token: storedSession.access_token,
           refresh_token: storedSession.refresh_token ?? '',
         }).catch(() => {
-          // If setSession fails (bad token), the onAuthStateChange handler
-          // below will receive SIGNED_OUT and clear state.
+          // If setSession fails (bad token), onAuthStateChange will receive
+          // SIGNED_OUT and clear state.
         })
       }
     }
