@@ -43,11 +43,123 @@ interface ProfileRow {
   } | null
 }
 
-function nextInstance(remindAt: string, recurrence: 'daily' | 'weekly'): string {
-  const d = new Date(remindAt)
-  if (recurrence === 'daily') d.setUTCDate(d.getUTCDate() + 1)
-  else d.setUTCDate(d.getUTCDate() + 7)
-  return d.toISOString()
+/**
+ * Compute the next fire time for a recurring reminder, preserving local
+ * time-of-day across DST transitions.
+ *
+ * Without a timezone, we fall back to pure UTC math (identical to the
+ * original implementation): advance the UTC instant by 24h / 7d. This is
+ * wrong across DST boundaries — a "daily 8am" reminder scheduled in EDT
+ * (UTC-4) stores 12:00 UTC; after DST ends (EST = UTC-5), 12:00 UTC is
+ * 7am local, not 8am.
+ *
+ * With a timezone, we extract the wall-clock components at the original
+ * instant in that zone, add N days to the calendar date, then re-anchor
+ * the same wall-clock time in the (possibly new) offset for that date.
+ * Uses only the built-in Intl API — no external tz library.
+ */
+function nextInstance(
+  remindAt: string,
+  recurrence: 'daily' | 'weekly',
+  timezone: string | null | undefined,
+): string {
+  const daysToAdd = recurrence === 'daily' ? 1 : 7
+  const current = new Date(remindAt)
+
+  if (!timezone) {
+    // Backwards-compatible fallback (pre-DST-fix behavior).
+    const d = new Date(current)
+    d.setUTCDate(d.getUTCDate() + daysToAdd)
+    return d.toISOString()
+  }
+
+  try {
+    // Step 1: wall-clock components at `current` in the user's tz.
+    const wall = wallClockInZone(current, timezone)
+
+    // Step 2: advance the calendar date by N days (wall-clock calendar math).
+    const advanced = addDaysToWallClock(wall, daysToAdd)
+
+    // Step 3: convert that wall-clock + tz back to a UTC instant. Accounts
+    // for DST transitions on the new date because we read the offset at the
+    // approximate target instant.
+    return wallClockToUtc(advanced, timezone).toISOString()
+  } catch {
+    // Malformed timezone or Intl failure — fall back to UTC math rather
+    // than dropping the reminder on the floor.
+    const d = new Date(current)
+    d.setUTCDate(d.getUTCDate() + daysToAdd)
+    return d.toISOString()
+  }
+}
+
+interface WallClock {
+  year: number
+  month: number // 1-12
+  day: number
+  hour: number // 0-23
+  minute: number
+  second: number
+}
+
+function wallClockInZone(utcInstant: Date, timezone: string): WallClock {
+  const dtf = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  })
+  const parts = Object.fromEntries(
+    dtf.formatToParts(utcInstant).filter((p) => p.type !== 'literal').map((p) => [p.type, p.value]),
+  ) as Record<string, string>
+  // en-US with hour12:false can yield '24' at midnight — normalize to 0.
+  const hour = parts.hour === '24' ? 0 : parseInt(parts.hour, 10)
+  return {
+    year: parseInt(parts.year, 10),
+    month: parseInt(parts.month, 10),
+    day: parseInt(parts.day, 10),
+    hour,
+    minute: parseInt(parts.minute, 10),
+    second: parseInt(parts.second, 10),
+  }
+}
+
+function addDaysToWallClock(wc: WallClock, days: number): WallClock {
+  // Use UTC math on a Date built from the wall components — purely calendar
+  // arithmetic, independent of any zone's DST rules.
+  const d = new Date(Date.UTC(wc.year, wc.month - 1, wc.day, wc.hour, wc.minute, wc.second))
+  d.setUTCDate(d.getUTCDate() + days)
+  return {
+    year: d.getUTCFullYear(),
+    month: d.getUTCMonth() + 1,
+    day: d.getUTCDate(),
+    hour: d.getUTCHours(),
+    minute: d.getUTCMinutes(),
+    second: d.getUTCSeconds(),
+  }
+}
+
+function wallClockToUtc(wc: WallClock, timezone: string): Date {
+  // Given a wall-clock intended in `timezone`, find the UTC instant whose
+  // formatted-in-zone value matches. Two-pass: start with a naive guess
+  // (wall-clock treated as UTC), read the zone's offset at that guess,
+  // subtract it. One iteration suffices for all standard IANA zones.
+  const naive = Date.UTC(wc.year, wc.month - 1, wc.day, wc.hour, wc.minute, wc.second)
+  const guess = new Date(naive)
+  const offsetMinutes = tzOffsetMinutes(guess, timezone)
+  return new Date(naive - offsetMinutes * 60_000)
+}
+
+function tzOffsetMinutes(utcInstant: Date, timezone: string): number {
+  // Returns how many minutes `timezone` is AHEAD of UTC at `utcInstant`.
+  // Negative for zones west of UTC (America/New_York → -240 or -300).
+  const wall = wallClockInZone(utcInstant, timezone)
+  const asIfUtc = Date.UTC(wall.year, wall.month - 1, wall.day, wall.hour, wall.minute, wall.second)
+  return (asIfUtc - utcInstant.getTime()) / 60_000
 }
 
 function escapeHtml(s: string): string {
@@ -203,7 +315,7 @@ serve(async (req) => {
 
     // ─── Recurrence: queue the next instance ───
     if (r.recurrence === 'daily' || r.recurrence === 'weekly') {
-      const next = nextInstance(r.remind_at, r.recurrence)
+      const next = nextInstance(r.remind_at, r.recurrence, r.timezone)
       await admin.from('reminders').insert({
         user_id: r.user_id,
         company_id: r.company_id,
