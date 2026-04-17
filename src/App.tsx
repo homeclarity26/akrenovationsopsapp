@@ -393,15 +393,98 @@ export default function App() {
         <BrowserRouter>
           <ModeProvider>
             <Sentry.ErrorBoundary
-              fallback={({ error: _error }) => (
-                <div style={{ padding: '2rem', textAlign: 'center' }}>
-                  <h2>Something went wrong</h2>
-                  <p>Our team has been notified. Please refresh the page.</p>
-                  <button onClick={() => window.location.reload()}>
-                    Refresh Page
-                  </button>
-                </div>
-              )}
+              fallback={({ error, componentStack }) => {
+                // Diagnostic fallback — renders the real error message,
+                // component stack, and JS stack with a one-tap copy button.
+                // Replaces the bland "Something went wrong" splash so that
+                // when a user screenshots the error they can paste the
+                // actual diagnostic info to whoever's fixing the bug.
+                const err = error as Error
+                const name = err?.name ?? 'Error'
+                const message = err?.message ?? String(err ?? 'Unknown error')
+                const stack = err?.stack ?? ''
+                const payload = [
+                  `${name}: ${message}`,
+                  '',
+                  '--- component stack ---',
+                  String(componentStack ?? '(none)'),
+                  '',
+                  '--- js stack ---',
+                  stack,
+                  '',
+                  `url: ${typeof window !== 'undefined' ? window.location.href : ''}`,
+                  `ua:  ${typeof navigator !== 'undefined' ? navigator.userAgent : ''}`,
+                ].join('\n')
+                const copy = () => {
+                  try {
+                    if (navigator.clipboard?.writeText) {
+                      navigator.clipboard.writeText(payload)
+                    } else {
+                      const ta = document.createElement('textarea')
+                      ta.value = payload
+                      document.body.appendChild(ta)
+                      ta.select()
+                      document.execCommand('copy')
+                      ta.remove()
+                    }
+                    // eslint-disable-next-line no-alert
+                    alert('Error details copied. Paste them to your developer.')
+                  } catch {
+                    // ignore — user can still long-press to select the block below
+                  }
+                }
+                return (
+                  <div style={{ padding: '1rem', fontFamily: 'system-ui,-apple-system,sans-serif', maxWidth: 640, margin: '0 auto' }}>
+                    <h2 style={{ margin: '0 0 8px', color: '#b91c1c' }}>Something went wrong</h2>
+                    <p style={{ margin: '0 0 16px', color: '#444', fontSize: 14 }}>
+                      Tap <b>Copy details</b> and paste them in chat so the bug can be fixed.
+                    </p>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                      <button
+                        onClick={copy}
+                        style={{ padding: '10px 14px', background: '#1e3a5f', color: '#fff', border: 0, borderRadius: 8, fontSize: 14, fontWeight: 600 }}
+                      >
+                        Copy details
+                      </button>
+                      <button
+                        onClick={() => window.location.reload()}
+                        style={{ padding: '10px 14px', background: '#fff', color: '#1e3a5f', border: '1px solid #1e3a5f', borderRadius: 8, fontSize: 14, fontWeight: 600 }}
+                      >
+                        Refresh
+                      </button>
+                      <button
+                        onClick={() => { window.location.href = '/login' }}
+                        style={{ padding: '10px 14px', background: '#fff', color: '#444', border: '1px solid #ddd', borderRadius: 8, fontSize: 14 }}
+                      >
+                        Go to login
+                      </button>
+                    </div>
+                    <div style={{ background: '#fee', border: '1px solid #fcc', borderRadius: 8, padding: 12, marginBottom: 12 }}>
+                      <div style={{ fontWeight: 600, color: '#b91c1c', marginBottom: 4 }}>{name}</div>
+                      <div style={{ fontSize: 13, color: '#333', wordBreak: 'break-word' }}>{message}</div>
+                    </div>
+                    <details style={{ fontSize: 11, color: '#555' }}>
+                      <summary style={{ cursor: 'pointer', userSelect: 'none' }}>Show full diagnostic info</summary>
+                      <pre
+                        style={{
+                          marginTop: 8,
+                          padding: 10,
+                          background: '#f6f6f6',
+                          border: '1px solid #eee',
+                          borderRadius: 6,
+                          whiteSpace: 'pre-wrap',
+                          wordBreak: 'break-word',
+                          maxHeight: '60vh',
+                          overflow: 'auto',
+                          userSelect: 'text',
+                        }}
+                      >
+                        {payload}
+                      </pre>
+                    </details>
+                  </div>
+                )
+              }}
             >
               <AppRoutes />
               <ToastProvider />
