@@ -104,7 +104,13 @@ serve(async (req) => {
   const resendApiKey = Deno.env.get('RESEND_API_KEY')
 
   let sent = 0
+  let partial = 0
   let errored = 0
+
+  // Match the from-line the rest of the app uses (send-email edge function).
+  // Using a different local-part ('reminders@') was rejected by Resend even
+  // though the domain is the same — only specific senders are validated.
+  const FROM_LINE = 'AK Renovations <akrenovations@akrenovationsohio.com>'
 
   for (const r of due as ReminderRow[]) {
     // Claim this row: only proceed if we flip pending -> sent. If the UPDATE
@@ -124,6 +130,7 @@ serve(async (req) => {
     const channels: string[] = Array.isArray(r.channels) ? r.channels : ['in_app', 'email']
 
     const errors: string[] = []
+    let anyChannelSucceeded = false
 
     // ─── In-app ───
     if (channels.includes('in_app') && prefs.in_app !== false) {
@@ -136,6 +143,7 @@ serve(async (req) => {
         source_reminder_id: r.id,
       })
       if (notifErr) errors.push(`in_app: ${notifErr.message}`)
+      else anyChannelSucceeded = true
     }
 
     // ─── Email (via Resend directly — matches notify-inventory-alerts) ───
@@ -154,7 +162,7 @@ serve(async (req) => {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${resendApiKey}` },
           body: JSON.stringify({
-            from: 'AK Renovations <reminders@akrenovationsohio.com>',
+            from: FROM_LINE,
             to: [profile.email],
             subject: r.title,
             html,
@@ -163,6 +171,8 @@ serve(async (req) => {
         if (!resp.ok) {
           const t = await resp.text().catch(() => '')
           errors.push(`email: ${resp.status} ${t.slice(0, 200)}`)
+        } else {
+          anyChannelSucceeded = true
         }
       } catch (e) {
         errors.push(`email: ${String(e)}`)
@@ -171,14 +181,24 @@ serve(async (req) => {
 
     // ─── SMS intentionally deferred to a later PR ───
 
-    if (errors.length > 0) {
+    // Partial-success semantics: the reminder's job is to notify the user. If
+    // ANY channel succeeded, the reminder fired from the user's POV — mark it
+    // 'sent'. Only mark 'error' if every attempted channel failed. Any channel
+    // errors are recorded in error_message either way so operators can triage.
+    if (errors.length === 0) {
+      sent++
+    } else if (anyChannelSucceeded) {
+      partial++
+      await admin
+        .from('reminders')
+        .update({ error_message: `Partial delivery — ${errors.join(' | ')}` })
+        .eq('id', r.id)
+    } else {
       errored++
       await admin
         .from('reminders')
         .update({ status: 'error', error_message: errors.join(' | ') })
         .eq('id', r.id)
-    } else {
-      sent++
     }
 
     // ─── Recurrence: queue the next instance ───
@@ -199,7 +219,7 @@ serve(async (req) => {
   }
 
   return new Response(
-    JSON.stringify({ ok: true, processed: due.length, sent, errored }),
+    JSON.stringify({ ok: true, processed: due.length, sent, partial, errored }),
     { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
   )
 })
