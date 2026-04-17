@@ -162,43 +162,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const emailFromJwt = typeof jwt?.email === 'string' ? jwt.email : ''
 
       if (userId) {
-        // Stash the session immediately. We defer setUser until after
-        // fetchProfile returns the real role — setting an optimistic
-        // role='client' placeholder made ProtectedRoute mis-route
-        // super_admins to /client/progress on hard-reload. Keep loading=true
-        // while we resolve the real profile, then flip user + loading
-        // together with the correct role.
+        // Stash session synchronously so anything reading session has it.
         setSession(storedSession as unknown as Session)
 
-        // Adopt the session in supabase-js FIRST so the subsequent
-        // fetchProfile uses the authenticated token, not the anon key.
-        // Without this the profiles SELECT was racing and sometimes coming
-        // back null from RLS, causing setUser(null) → /login redirect.
-        void supabase.auth.setSession({
-          access_token: storedSession.access_token,
-          refresh_token: storedSession.refresh_token ?? '',
-        }).then(async () => {
+        // IMPORTANT: do NOT call supabase.auth.setSession({access_token,
+        // refresh_token}) here — that triggers an internal token refresh,
+        // and if the stored refresh_token has already been rotated (normal
+        // on tabs that auto-refresh in the background), the refresh fails,
+        // supabase-js emits SIGNED_OUT, and ProtectedRoute kicks us to
+        // /login *after* we had successfully rendered the protected page.
+        //
+        // supabase-js reads the SAME localStorage key on init via its
+        // persistSession option. It hydrates on its own without our help.
+        // We just need a real profile so ProtectedRoute knows the role.
+        // Fire fetchProfile directly with the stored access_token (the
+        // Supabase REST client will include the Authorization header from
+        // its own session state once it hydrates — if there's a race we
+        // retry once below).
+        const tryFetch = async (): Promise<void> => {
+          const profile = await fetchProfile(userId, emailFromJwt)
           if (!mounted) return
-          try {
-            const profile = await fetchProfile(userId, emailFromJwt)
-            if (!mounted) return
-            if (profile) {
-              setUser(profile)
-            }
-            // If profile somehow came back null, leave user=null but still
-            // stop loading; ProtectedRoute will kick to /login which is
-            // correct (no real profile row).
-          } finally {
-            clearTimeout(timeout)
-            setLoading(false)
+          if (profile && profile.id === userId) {
+            setUser(profile)
+          } else {
+            // Could be an RLS miss during supabase-js hydration window —
+            // try again after a short delay.
+            setTimeout(async () => {
+              if (!mounted) return
+              const second = await fetchProfile(userId, emailFromJwt)
+              if (mounted && second) setUser(second)
+            }, 500)
           }
-        }).catch(() => {
-          // setSession failed (malformed/rejected token) — fall through to
-          // the normal loading-false path so /login can render.
-          if (!mounted) return
           clearTimeout(timeout)
           setLoading(false)
-        })
+        }
+        void tryFetch()
       }
     }
 
