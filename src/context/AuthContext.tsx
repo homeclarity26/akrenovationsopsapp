@@ -93,111 +93,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     let mounted = true
 
-    // Does localStorage look like it already contains a signed-in session?
-    // Supabase JS persists sessions under keys like `sb-<ref>-auth-token`. If
-    // any one of those is present we should NOT clear `user` to null on an
-    // INITIAL_SESSION event with a null session — that event races with the
-    // client's async hydration on page load and can fire before the stored
-    // token is parsed. Clearing user in that case causes ProtectedRoute to
-    // bounce us to /login on every hard-refresh of an authenticated page.
-    const hasStoredSession = (() => {
-      try {
-        for (let i = 0; i < localStorage.length; i++) {
-          const key = localStorage.key(i) ?? ''
-          if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
-            const raw = localStorage.getItem(key)
-            if (!raw) continue
-            try {
-              const parsed = JSON.parse(raw) as { access_token?: string }
-              if (parsed?.access_token) return true
-            } catch {
-              // Legacy string-token format — treat presence as "yes".
-              return true
-            }
-          }
-        }
-        return false
-      } catch {
-        return false
-      }
-    })()
-
-    // Safety-net timeout: if nothing resolves in 20s, stop showing the
-    // loading spinner so the user isn't stuck indefinitely. 20s is
-    // deliberately generous — on a cold/slow network the initial session
-    // restore + refresh + profile fetch can run long, and the previous 8s
-    // fallback was firing during normal loads and forcing a logout.
+    // Safety net: if auth hasn't resolved in 8 seconds, unblock the UI
     const timeout = setTimeout(() => {
       if (mounted) setLoading(false)
-    }, 20000)
+    }, 8000)
 
-    // Initial session check. No explicit timeout race — on a page with a
-    // stored session the Supabase client restores synchronously from
-    // localStorage and this resolves immediately. If the client is wedged
-    // the safety-net timeout above still unblocks the UI.
-    supabase.auth.getSession().then(async ({ data }) => {
+    // Initial session check — race against timeout so a stuck token-refresh
+    // never blocks the UI indefinitely.
+    const sessionPromise = supabase.auth.getSession()
+    const sessionTimeout = new Promise<{ data: { session: null } }>(r =>
+      setTimeout(() => r({ data: { session: null } }), 6000)
+    )
+    Promise.race([sessionPromise, sessionTimeout]).then(async ({ data }) => {
       if (!mounted) return
+      setSession(data.session)
       if (data.session?.user) {
-        setSession(data.session)
         const profile = await fetchProfile(data.session.user.id, data.session.user.email)
         if (mounted) setUser(profile)
-        clearTimeout(timeout)
-        setLoading(false)
-      } else if (!hasStoredSession) {
-        // No session anywhere — stop loading so /login can render.
-        clearTimeout(timeout)
-        setLoading(false)
       }
-      // else: stored token exists but getSession hasn't returned it yet.
-      // Wait for onAuthStateChange to fire — don't prematurely flip loading.
-    }).catch(() => {
-      // getSession should not reject, but be defensive.
-      if (!mounted) return
-      if (!hasStoredSession) {
-        clearTimeout(timeout)
-        setLoading(false)
-      }
+      if (mounted) { clearTimeout(timeout); setLoading(false) }
     })
 
-    // Subscribe to auth changes (sign in, sign out, token refresh, initial).
-    const { data: subscription } = supabase.auth.onAuthStateChange(async (event, newSession) => {
+    // Subscribe to auth changes (sign in, sign out, token refresh)
+    const { data: subscription } = supabase.auth.onAuthStateChange(async (_event, newSession) => {
       if (!mounted) return
-
+      setSession(newSession)
       if (newSession?.user) {
-        setSession(newSession)
         const profile = await fetchProfile(newSession.user.id, newSession.user.email)
         if (mounted) setUser(profile)
-        clearTimeout(timeout)
-        setLoading(false)
-        return
-      }
-
-      // newSession is null. Decide whether this actually means "signed out".
-      //
-      // - SIGNED_OUT is unambiguous: user deliberately logged out, or the
-      //   refresh token expired.
-      // - USER_DELETED: treat as signed out.
-      // - INITIAL_SESSION with null session: can fire during the async
-      //   hydration window even when a valid token is in localStorage.
-      //   If storage says we're signed in, wait for the real session to
-      //   arrive (a subsequent TOKEN_REFRESHED / SIGNED_IN event) instead
-      //   of flipping the user to null and triggering a redirect.
-      if (event === 'SIGNED_OUT') {
-        setSession(null)
+      } else {
         setUser(null)
-        clearTimeout(timeout)
-        setLoading(false)
-        return
       }
-
-      if (event === 'INITIAL_SESSION' && hasStoredSession) {
-        // Session in storage but client didn't surface it yet — keep waiting.
-        return
-      }
-
-      // Any other case with a null session and no stored token: log out.
-      setSession(null)
-      setUser(null)
       clearTimeout(timeout)
       setLoading(false)
     })
