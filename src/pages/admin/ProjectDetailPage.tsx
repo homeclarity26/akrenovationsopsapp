@@ -1450,6 +1450,7 @@ function InspectionForm({
               const { error: insertErr } = await supabase.from('inspection_reports').insert({
                 project_id: projectId,
                 inspection_type: finalType,
+                areas: [],
                 inspector_name: (fd.get('inspector_name') as string)?.trim() || null,
                 inspector_org: (fd.get('inspector_org') as string)?.trim() || null,
                 inspection_date: inspectionDate,
