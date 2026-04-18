@@ -7,19 +7,19 @@ import { PageHeader } from '@/components/ui/PageHeader'
 
 interface TimeEntry {
   id: string
-  employee_id: string
+  user_id: string
   project_id: string | null
   clock_in: string
   clock_out: string | null
-  total_hours: number | null
+  total_minutes: number | null
   entry_method: string
   approved_at: string | null
-  notes: string | null
+  manual_reason: string | null
 }
 
-function fmtDuration(hours: number | null) {
-  if (!hours) return '—'
-  const h = Math.floor(hours), m = Math.round((hours - h) * 60)
+function fmtDuration(minutes: number | null) {
+  if (!minutes) return '—'
+  const h = Math.floor(minutes / 60), m = minutes % 60
   return h > 0 ? `${h}h ${m}m` : `${m}m`
 }
 
@@ -96,17 +96,17 @@ export function PendingTimeEntriesPage() {
               <div className="flex-1 min-w-0">
                 <div className="flex items-start justify-between gap-2">
                   <div>
-                    <p className="text-sm font-semibold text-[var(--text)]">{e.employee_id}</p>
+                    <p className="text-sm font-semibold text-[var(--text)]">{e.user_id}</p>
                     <p className="text-xs text-[var(--text-secondary)]">{e.project_id ?? 'Overhead'}</p>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <p className="font-mono text-sm font-bold text-[var(--text)]">{fmtDuration(e.total_hours)}</p>
+                    <p className="font-mono text-sm font-bold text-[var(--text)]">{fmtDuration(e.total_minutes)}</p>
                     <p className="text-xs text-[var(--text-tertiary)]">{new Date(e.clock_in).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</p>
                   </div>
                 </div>
-                {e.notes && (
+                {e.manual_reason && (
                   <div className="mt-2 bg-[var(--bg)] rounded-lg px-3 py-2">
-                    <p className="text-xs text-[var(--text-secondary)]"><span className="font-semibold">Notes:</span> {e.notes}</p>
+                    <p className="text-xs text-[var(--text-secondary)]"><span className="font-semibold">Reason:</span> {e.manual_reason}</p>
                   </div>
                 )}
                 <div className="flex gap-2 mt-3">

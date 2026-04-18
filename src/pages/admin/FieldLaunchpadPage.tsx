@@ -58,7 +58,7 @@ export function FieldLaunchpadPage() {
       const { data } = await supabase
         .from('time_entries')
         .select('id')
-        .eq('employee_id', user!.id)
+        .eq('user_id', user!.id)
         .is('clock_out', null)
         .limit(1)
       return (data?.length ?? 0) > 0

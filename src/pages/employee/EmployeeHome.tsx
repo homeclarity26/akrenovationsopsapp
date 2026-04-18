@@ -72,7 +72,7 @@ export function EmployeeHome() {
       const { data } = await supabase
         .from('time_entries')
         .select('*')
-        .eq('employee_id', user!.id)
+        .eq('user_id', user!.id)
         .gte('clock_in', `${todayStr}T00:00:00`)
         .lte('clock_in', `${todayStr}T23:59:59`)
       return data ?? []
@@ -100,7 +100,7 @@ export function EmployeeHome() {
       return `Clocked in · ${fmtDuration(elapsed)}`
     }
     if (todayEntries.length > 0) {
-      const totalMins = todayEntries.reduce((sum: number, e: any) => sum + (e.total_hours ? Math.round(e.total_hours * 60) : 0), 0)
+      const totalMins = todayEntries.reduce((sum: number, e: any) => sum + (e.total_minutes ?? 0), 0)
       return `${todayEntries.length} segment${todayEntries.length > 1 ? 's' : ''} · ${fmtDuration(totalMins)} total`
     }
     return 'Not clocked in'

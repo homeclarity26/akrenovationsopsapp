@@ -58,7 +58,7 @@ export function WorkerSetupPage() {
     queryKey: ['compensation_components', workerId],
     enabled: !!workerId,
     queryFn: async () => {
-      const { data } = await supabase.from('compensation_components').select('*').eq('employee_id', workerId)
+      const { data } = await supabase.from('compensation_components').select('*').eq('profile_id', workerId)
       return (data ?? []) as CompensationComponent[]
     },
   })
@@ -76,7 +76,7 @@ export function WorkerSetupPage() {
     queryKey: ['worker_payroll_records', workerId],
     enabled: !!workerId,
     queryFn: async () => {
-      const { data } = await supabase.from('payroll_records').select('*').eq('employee_id', workerId).order('created_at', { ascending: false })
+      const { data } = await supabase.from('payroll_records').select('*').eq('profile_id', workerId).order('created_at', { ascending: false })
       return (data ?? []) as PayrollRecordRow[]
     },
   })

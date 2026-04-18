@@ -33,7 +33,7 @@ export function PaystubsPage() {
       const { data } = await supabase
         .from('payroll_records')
         .select('*')
-        .eq('employee_id', user!.id)
+        .eq('profile_id', user!.id)
         .order('created_at', { ascending: false })
       return (data ?? []) as PayrollRecord[]
     },

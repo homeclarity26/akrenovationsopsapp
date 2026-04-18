@@ -39,7 +39,7 @@ function fmtCurrency(n: number): string {
 
 type PayrollRecordRow = { id: string; employee_id?: string; profile_id?: string; pay_period_id: string; gross_pay: number; total_hours: number; total_deductions: number; est_net_pay: number; contractor_payment: number; employer_health_cost: number; employer_retirement_cost: number; employer_ss_tax: number; employer_medicare_tax: number; employer_futa: number; employer_suta: number; total_employer_cost: number; est_federal_withholding: number; est_state_withholding: number; bonus_amount: number }
 type WorkerRow = { id: string; full_name: string }
-type TimeEntryRow = { id: string; project_id?: string; total_hours?: number; is_billable?: boolean }
+type TimeEntryRow = { id: string; project_id?: string; total_minutes?: number; is_billable?: boolean }
 type ProjectRow = { id: string; title: string }
 
 export function PayrollReportsPage() {
@@ -64,7 +64,7 @@ export function PayrollReportsPage() {
   const { data: timeEntries = [] } = useQuery({
     queryKey: ['all_time_entries'],
     queryFn: async () => {
-      const { data } = await supabase.from('time_entries').select('id, project_id, total_hours, is_billable').not('clock_out', 'is', null)
+      const { data } = await supabase.from('time_entries').select('id, project_id, total_minutes, is_billable').not('clock_out', 'is', null)
       return (data ?? []) as TimeEntryRow[]
     },
   })
@@ -167,7 +167,7 @@ function LaborByProjectReport({ timeEntries, projects }: { timeEntries: TimeEntr
       if (!byProject[key]) {
         byProject[key] = { project_id: key, project_title: proj?.title ?? 'Unknown', hours: 0 }
       }
-      byProject[key].hours += t.total_hours ?? 0
+      byProject[key].hours += (t.total_minutes ?? 0) / 60
     }
     return Object.values(byProject)
   }, [timeEntries, projects])

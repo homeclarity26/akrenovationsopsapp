@@ -61,7 +61,7 @@ export function PayrollDashboardPage() {
   const { data: pendingApprovals = 0 } = useQuery({
     queryKey: ['pending_manual_time_entries'],
     queryFn: async () => {
-      const { count } = await supabase.from('time_entries').select('id', { count: 'exact', head: true }).eq('entry_type', 'manual')
+      const { count } = await supabase.from('time_entries').select('id', { count: 'exact', head: true }).eq('entry_method', 'manual')
       return count ?? 0
     },
   })
