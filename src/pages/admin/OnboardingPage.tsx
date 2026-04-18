@@ -262,53 +262,60 @@ function ClientWizard({ onDone }: { onDone: () => void }) {
   async function handleCreate() {
     setLoading(true)
     try {
-      // Insert profile
-      const { data: profile, error: profileErr } = await supabase
-        .from('profiles')
-        .insert({
-          role: 'client',
-          full_name: form.fullName.trim(),
-          email: form.email.trim() || null,
-          phone: form.phone.trim() || null,
-        })
-        .select('id')
-        .single()
-
-      if (profileErr) throw profileErr
-
-      // Create new project if needed
+      if (!form.email.trim()) {
+        alert('Email is required so we can send a magic-link invite.')
+        setLoading(false)
+        return
+      }
+      // Create the target project first so the invite can link against it.
+      let targetProjectId = form.linkedProjectId
       if (form.projectMode === 'new') {
-        await supabase.from('projects').insert({
-          title: `${form.fullName.trim()} - ${form.newProjectType}`,
-          project_type: form.newProjectType,
-          client_name: form.fullName.trim(),
-          client_email: form.email.trim() || null,
-          client_phone: form.phone.trim() || null,
-          client_user_id: profile.id,
-          address: form.newProjectAddress.trim(),
-          contract_value: form.newProjectContractValue
-            ? parseFloat(form.newProjectContractValue)
-            : 0,
-          status: 'pending',
-          company_id: user?.company_id ?? null,
-        })
-      } else if (form.projectMode === 'link' && form.linkedProjectId) {
-        await supabase
+        const { data: newProj, error: newProjErr } = await supabase
           .from('projects')
-          .update({
-            client_user_id: profile.id,
+          .insert({
+            title: `${form.fullName.trim()} - ${form.newProjectType}`,
+            project_type: form.newProjectType,
             client_name: form.fullName.trim(),
             client_email: form.email.trim() || null,
             client_phone: form.phone.trim() || null,
+            address: form.newProjectAddress.trim(),
+            contract_value: form.newProjectContractValue
+              ? parseFloat(form.newProjectContractValue)
+              : 0,
+            status: 'pending',
+            company_id: user?.company_id ?? null,
           })
-          .eq('id', form.linkedProjectId)
+          .select('id')
+          .single()
+        if (newProjErr) throw newProjErr
+        targetProjectId = newProj!.id
       }
 
-      setSuccessData({ profileId: profile.id })
+      if (!targetProjectId) throw new Error('No project selected')
+      // Delegate auth + profile + project link to the edge function. Direct
+      // INSERTs into profiles fail because profiles.id must equal an
+      // auth.users.id, so the UI must never touch profiles directly.
+      const { data: inviteData, error: inviteErr } = await supabase.functions.invoke(
+        'invite-client-to-portal',
+        {
+          body: {
+            project_id: targetProjectId,
+            client_email: form.email.trim(),
+            client_full_name: form.fullName.trim(),
+            client_phone: form.phone.trim() || undefined,
+            method: 'email',
+          },
+        },
+      )
+      if (inviteErr) throw inviteErr
+      const result = inviteData as { ok?: boolean; profile_id?: string; error?: string } | null
+      if (!result || result.ok === false) throw new Error(result?.error ?? 'Invite failed')
+
+      setSuccessData({ profileId: result.profile_id ?? '' })
       setStep(4)
     } catch (err) {
       console.error(err)
-      alert('Something went wrong. Please try again.')
+      alert(`Couldn't add client: ${err instanceof Error ? err.message : 'unknown error'}`)
     } finally {
       setLoading(false)
     }
@@ -616,26 +623,39 @@ function EmployeeWizard({ onDone }: { onDone: () => void }) {
   async function handleCreate() {
     setLoading(true)
     try {
-      await supabase.from('profiles').insert({
-        role: 'employee',
-        full_name: form.fullName.trim(),
-        email: form.email.trim() || null,
-        phone: form.phone.trim() || null,
-        start_date: form.startDate || null,
-        hourly_rate:
-          form.payType === 'hourly' && form.hourlyRate
-            ? parseFloat(form.hourlyRate)
-            : null,
-        base_salary:
-          form.payType === 'salary' && form.annualSalary
-            ? parseFloat(form.annualSalary)
-            : null,
+      if (!form.email.trim()) {
+        alert('Email is required so we can send a magic-link invite.')
+        setLoading(false)
+        return
+      }
+      // Delegate to invite-team-member edge function. Direct INSERT into
+      // profiles would fail because profiles.id must match an auth.users.id.
+      const { data, error } = await supabase.functions.invoke('invite-team-member', {
+        body: {
+          email: form.email.trim(),
+          full_name: form.fullName.trim(),
+          role: 'employee',
+          phone: form.phone.trim() || undefined,
+          start_date: form.startDate || undefined,
+          hourly_rate:
+            form.payType === 'hourly' && form.hourlyRate
+              ? parseFloat(form.hourlyRate)
+              : null,
+          base_salary:
+            form.payType === 'salary' && form.annualSalary
+              ? parseFloat(form.annualSalary)
+              : null,
+        },
       })
+      if (error) throw error
+      if ((data as { ok?: boolean } | null)?.ok === false) {
+        throw new Error((data as { error?: string }).error ?? 'Invite failed')
+      }
       setDone(true)
       setStep(4)
     } catch (err) {
       console.error(err)
-      alert('Something went wrong. Please try again.')
+      alert(`Couldn't add employee: ${err instanceof Error ? err.message : 'unknown error'}`)
     } finally {
       setLoading(false)
     }

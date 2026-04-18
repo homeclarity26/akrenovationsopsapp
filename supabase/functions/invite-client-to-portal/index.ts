@@ -302,7 +302,7 @@ serve(async (req) => {
     }).catch(() => {})
 
     return new Response(
-      JSON.stringify({ ok: true, link, sent_via: sentVia }),
+      JSON.stringify({ ok: true, profile_id: clientProfileId, link, sent_via: sentVia }),
       { headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
     )
   } catch (err) {
