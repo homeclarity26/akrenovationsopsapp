@@ -363,6 +363,28 @@ schedule-reminder { title, body?, remind_at, timezone?, recurrence?, channels?, 
     a DIFFERENT user (use ai-suggest-project-action instead).
   Include created_by_agent: true in the payload so the UI can badge it.
 
+Additional on-demand capabilities (invocable when the user asks):
+
+generate-progress-reel → Generate a highlight reel for a project
+  Use when: User asks for a reel, video montage, or highlight video for a specific project.
+  Input: { project_id }
+
+budget-ai-action → Take a budget-scoped action (propose line item, adjust category, etc.)
+  Use when: User wants help adjusting a project budget.
+  Input: { project_id, action, details }
+
+compare-budget-quotes → Compare multiple sub quotes for a project
+  Use when: User uploaded 2+ quotes for the same scope and wants a side-by-side comparison.
+  Input: { project_id, quote_ids: string[] }
+
+process-budget-document → Extract a budget from an uploaded PDF/image
+  Use when: User uploaded a vendor estimate and wants it parsed into the budget.
+  Input: { file_url, project_id }
+
+suggest-deliverable-items → Suggest what should appear in a proposal's deliverables section
+  Use when: Drafting a proposal and wanting AI suggestions for the materials/services list.
+  Input: { project_type, scope_summary }
+
 ═══ ACTION DECISION HEURISTIC ═══
 For every project-scoped action, decide DIRECT-EXECUTE vs PROPOSE:
 
