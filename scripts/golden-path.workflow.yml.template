@@ -1,0 +1,27 @@
+name: Golden Path
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  golden-path:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+      - run: npm run build
+      - run: npm test -- --run
+        env:
+          # Golden Path integration test — hits the scratch Supabase project
+          # via REST API. Skips automatically if these secrets aren't set.
+          GOLDEN_SUPABASE_URL: ${{ secrets.GOLDEN_SUPABASE_URL }}
+          GOLDEN_SUPABASE_SERVICE_KEY: ${{ secrets.GOLDEN_SUPABASE_SERVICE_KEY }}
+          GOLDEN_COMPANY_ID: ${{ secrets.GOLDEN_COMPANY_ID }}
