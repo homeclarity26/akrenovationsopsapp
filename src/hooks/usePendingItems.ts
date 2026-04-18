@@ -52,15 +52,24 @@ export function usePendingItems(): PendingItems {
     enabled: !!companyId,
     staleTime: 60_000,
     queryFn: async () => {
+      // Real inventory_alerts schema: no item_name column (comes from a join
+      // to inventory_items), no message column (it's `summary`), and the
+      // "open" flag is `status='open'`, not a boolean `resolved`.
       const { data, error } = await supabase
         .from('inventory_alerts')
-        .select('id, item_name, alert_type, message, created_at')
+        .select('id, alert_type, summary, created_at, inventory_items(name)')
         .eq('company_id', companyId as string)
-        .eq('resolved', false)
+        .eq('status', 'open')
         .order('created_at', { ascending: false })
         .limit(5)
       if (error) throw error
-      return (data ?? []) as PendingAlert[]
+      return (data ?? []).map((row: any) => ({
+        id: row.id as string,
+        item_name: (row.inventory_items?.name as string | undefined) ?? '',
+        alert_type: row.alert_type as string,
+        message: (row.summary as string | null) ?? '',
+        created_at: row.created_at as string,
+      })) as PendingAlert[]
     },
   })
 
