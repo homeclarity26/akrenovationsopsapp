@@ -336,7 +336,7 @@ export function ProposalsPage() {
           </div>
           <div className="flex items-center justify-between pt-3 border-t border-[var(--border-light)]">
             <p className="font-semibold text-[var(--text)]">Total Investment</p>
-            <p className="font-mono text-xl font-bold text-[var(--navy)]">${(viewing.total_price as number).toLocaleString()}</p>
+            <p className="font-mono text-xl font-bold text-[var(--navy)]">${((viewing.total_price as number) ?? 0).toLocaleString()}</p>
           </div>
         </Card>
 
@@ -424,9 +424,12 @@ export function ProposalsPage() {
               </div>
               <div className="text-right flex-shrink-0">
                 <p className="font-mono text-sm font-bold text-[var(--text)]">
-                  {(prop.total_price as number) >= 1000
-                    ? `$${((prop.total_price as number) / 1000).toFixed(0)}K`
-                    : `$${(prop.total_price as number).toLocaleString()}`}
+                  {(() => {
+                    const price = (prop.total_price as number) ?? 0
+                    return price >= 1000
+                      ? `$${(price / 1000).toFixed(0)}K`
+                      : `$${price.toLocaleString()}`
+                  })()}
                 </p>
                 <ChevronRight size={15} className="text-[var(--text-tertiary)] mt-1 ml-auto" />
               </div>
