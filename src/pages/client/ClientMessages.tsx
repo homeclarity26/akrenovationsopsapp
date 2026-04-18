@@ -9,8 +9,8 @@ interface Message {
   project_id: string
   sender_id: string
   sender_role: string
-  content: string
-  message_type?: string
+  message: string
+  channel?: string
   is_read?: boolean | null
   created_at: string
 }
@@ -135,8 +135,8 @@ export function ClientMessages() {
         project_id: projectId,
         sender_id: user!.id,
         sender_role: 'client',
-        content,
-        message_type: 'text',
+        message: content,
+        channel: 'in_app',
       })
       if (error) throw error
     },
@@ -199,7 +199,7 @@ export function ClientMessages() {
                       : 'bg-gray-100 text-[var(--text)] rounded-bl-sm'
                   }`}
                 >
-                  {m.content}
+                  {m.message}
                 </div>
                 <p className={`text-[10px] text-[var(--text-tertiary)] mt-1 ${mine ? 'text-right' : ''}`}>
                   {!mine && sender?.full_name ? `${sender.full_name} · ` : ''}

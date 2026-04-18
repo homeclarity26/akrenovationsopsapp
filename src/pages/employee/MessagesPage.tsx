@@ -25,15 +25,15 @@ export function MessagesPage() {
       try {
         const { data } = await supabase
           .from('messages')
-          .select('id, sender_id, sender_name, body, created_at')
+          .select('id, sender_id, message, created_at, profiles:sender_id(full_name)')
           .order('created_at', { ascending: true })
           .limit(100)
 
         if (data && data.length > 0) {
-          setMessages(data.map(m => ({
+          setMessages(data.map((m: any) => ({
             id: m.id,
-            sender: m.sender_name ?? 'Unknown',
-            text: m.body ?? '',
+            sender: m.profiles?.full_name ?? 'Unknown',
+            text: m.message ?? '',
             time: new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
             mine: m.sender_id === user?.id,
           })))
@@ -67,9 +67,9 @@ export function MessagesPage() {
     try {
       await supabase.from('messages').insert({
         sender_id: user.id,
-        sender_name: user.full_name,
-        body: text,
-        company_id: user.company_id,
+        sender_role: user.role ?? 'employee',
+        message: text,
+        channel: 'in_app',
       })
     } catch {
       // Silently fail — message is shown locally

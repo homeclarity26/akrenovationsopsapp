@@ -261,9 +261,13 @@ export function SubcontractorsPage() {
                   setSaving(true)
                   const payload = {
                     company_id: companyId,
+                    // suppliers.company_name is NOT NULL — mirror the UI "name" field.
+                    company_name: name,
                     name,
-                    category: (fd.get('category') as string) || null,
+                    // suppliers.category is NOT NULL — fall back to 'misc'.
+                    category: (fd.get('category') as string) || 'misc',
                     primary_contact_name: (fd.get('primary_contact_name') as string).trim() || null,
+                    contact_name: (fd.get('primary_contact_name') as string).trim() || null,
                     phone: (fd.get('phone') as string).trim() || null,
                     email: (fd.get('email') as string).trim() || null,
                     website: (fd.get('website') as string).trim() || null,

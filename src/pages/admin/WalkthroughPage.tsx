@@ -160,19 +160,22 @@ export function WalkthroughPage() {
         addition: 'Addition',
       }
 
+      const paymentSchedule = (estimate.payment_schedule ?? []).map(pm => ({
+        label: pm.milestone,
+        percent: pm.percent,
+      }))
       const { data, error: insertErr } = await supabase.from('proposals').insert({
         title: `${typeLabels[projectType] ?? projectType} Proposal`,
-        client_name: '',
+        client_name: 'TBD',
         project_type: typeLabels[projectType] ?? projectType,
         total_price: estimate.total_proposed_price ?? 0,
         status: 'draft',
         sections,
+        // Payment schedule lives inside the options jsonb since proposals has no
+        // dedicated payment_schedule column.
+        options: paymentSchedule.length ? { payment_schedule: paymentSchedule } : null,
         overview_body: estimate.summary ?? '',
         duration: estimate.estimated_duration_weeks ? `${estimate.estimated_duration_weeks} weeks` : null,
-        payment_schedule: (estimate.payment_schedule ?? []).map(pm => ({
-          label: pm.milestone,
-          percent: pm.percent,
-        })),
       }).select().single()
 
       if (insertErr) throw new Error(insertErr.message)

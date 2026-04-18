@@ -32,15 +32,15 @@ export function ToolRequestPage() {
       const { data } = await supabase
         .from('tool_requests')
         .select('*, projects(title)')
-        .eq('employee_id', user!.id)
-        .order('submitted_at', { ascending: false })
+        .eq('requested_by', user!.id)
+        .order('created_at', { ascending: false })
       return (data ?? []).map((r: any) => ({
         id: r.id,
-        tool_name: r.item_name,
+        tool_name: r.tool_name,
         project_title: r.projects?.title ?? '',
-        needed_by: r.submitted_at ? new Date(r.submitted_at).toLocaleDateString() : '',
+        needed_by: r.needed_by ? new Date(r.needed_by).toLocaleDateString() : '',
         status: r.status ?? 'pending',
-        admin_response: r.reason ?? null,
+        admin_response: r.admin_response ?? null,
       }))
     },
   })
@@ -182,12 +182,13 @@ export function ToolRequestPage() {
             disabled={!toolName.trim()}
             onClick={async () => {
               await supabase.from('tool_requests').insert({
-                employee_id: user?.id,
-                item_name: toolName,
+                requested_by: user?.id,
+                tool_name: toolName,
                 project_id: projectId || null,
-                reason: notes || null,
+                needed_by: neededBy || null,
+                urgency,
+                notes: notes || null,
                 status: 'pending',
-                submitted_at: new Date().toISOString(),
               })
               queryClient.invalidateQueries({ queryKey: ['tool-requests', user?.id] })
               setSubmitted(true)

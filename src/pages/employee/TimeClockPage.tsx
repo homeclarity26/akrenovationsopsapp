@@ -98,15 +98,14 @@ export function TimeClockPage() {
       const { data } = await supabase
         .from('time_entries')
         .select('*, projects(title)')
-        .eq('employee_id', user!.id)
+        .eq('user_id', user!.id)
         .gte('clock_in', `${TODAY}T00:00:00`)
         .lte('clock_in', `${TODAY}T23:59:59`)
         .order('clock_in', { ascending: false })
       return (data ?? []).map((e: any) => ({
         ...e,
-        user_id: e.employee_id,
         project_title: e.projects?.title ?? null,
-        total_minutes: e.total_hours != null ? Math.round(e.total_hours * 60) : null,
+        total_minutes: e.total_minutes ?? null,
         work_type: (e.work_type ?? 'other') as WorkType,
         entry_method: (e.entry_method ?? 'live') as EntryMethod,
         billing_status: (e.billing_status ?? 'na') as BillingStatus,
@@ -194,12 +193,12 @@ export function TimeClockPage() {
   const handleClockInConfirm = () => {
     const doInsert = async (coords: { lat: number; lng: number } | null) => {
       await supabase.from('time_entries').insert({
-        employee_id: user!.id,
+        user_id: user!.id,
         project_id: ciProject?.id ?? null,
         clock_in: new Date().toISOString(),
         clock_in_lat: coords?.lat ?? null,
         clock_in_lng: coords?.lng ?? null,
-        entry_type: 'live',
+        entry_method: 'live',
         work_type: ciWorkType,
         is_billable: ciProject ? ciBillable : false,
         billing_rate: ciProject && ciBillable ? ciRate : null,
@@ -228,12 +227,12 @@ export function TimeClockPage() {
 
     const doUpdate = async (coords: { lat: number; lng: number } | null) => {
       const clockOutTime = new Date()
-      const totalHours = (clockOutTime.getTime() - new Date(openEntry.clock_in).getTime()) / 3600000
+      const totalMinutes = Math.round((clockOutTime.getTime() - new Date(openEntry.clock_in).getTime()) / 60000)
       await supabase.from('time_entries').update({
         clock_out: clockOutTime.toISOString(),
         clock_out_lat: coords?.lat ?? null,
         clock_out_lng: coords?.lng ?? null,
-        total_hours: Math.round(totalHours * 100) / 100,
+        total_minutes: totalMinutes,
         notes: clockOutNote || null,
       }).eq('id', openEntry.id)
       queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
@@ -262,19 +261,20 @@ export function TimeClockPage() {
     const endDt = new Date(`${manualDate}T${manualEnd}`)
     if (endDt <= startDt) { setManualError('End time must be after start time'); return }
     if (endDt > new Date()) { setManualError('Cannot enter future time'); return }
-    const totalHours = (endDt.getTime() - startDt.getTime()) / 3600000
+    const totalMinutes = Math.round((endDt.getTime() - startDt.getTime()) / 60000)
 
     await supabase.from('time_entries').insert({
-      employee_id: user!.id,
+      user_id: user!.id,
       project_id: manualProject.id,
       clock_in: startDt.toISOString(),
       clock_out: endDt.toISOString(),
-      total_hours: Math.round(totalHours * 100) / 100,
-      entry_type: 'manual',
+      total_minutes: totalMinutes,
+      entry_method: 'manual',
       work_type: manualWorkType,
       is_billable: manualBillable,
       billing_rate: manualBillable ? manualRate : null,
       billing_status: manualBillable ? 'pending' : 'na',
+      manual_reason: manualReason,
       notes: manualReason,
     })
     queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
@@ -292,12 +292,12 @@ export function TimeClockPage() {
 
     const doSwitch = async (coords: { lat: number; lng: number } | null) => {
       const clockOutTime = new Date()
-      const totalHours = (clockOutTime.getTime() - new Date(openEntry.clock_in).getTime()) / 3600000
+      const totalMinutes = Math.round((clockOutTime.getTime() - new Date(openEntry.clock_in).getTime()) / 60000)
       await supabase.from('time_entries').update({
         clock_out: clockOutTime.toISOString(),
         clock_out_lat: coords?.lat ?? null,
         clock_out_lng: coords?.lng ?? null,
-        total_hours: Math.round(totalHours * 100) / 100,
+        total_minutes: totalMinutes,
       }).eq('id', openEntry.id)
       queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
     }
