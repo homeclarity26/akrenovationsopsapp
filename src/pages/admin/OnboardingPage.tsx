@@ -13,6 +13,7 @@ import { Card } from '@/components/ui/Card'
 import { Button } from '@/components/ui/Button'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { supabase } from '@/lib/supabase'
+import { useAuth } from '@/context/AuthContext'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -203,6 +204,7 @@ interface ClientForm {
 }
 
 function ClientWizard({ onDone }: { onDone: () => void }) {
+  const { user } = useAuth()
   const [step, setStep] = useState(1)
   const totalSteps = 3
   const [form, setForm] = useState<ClientForm>({
@@ -288,6 +290,7 @@ function ClientWizard({ onDone }: { onDone: () => void }) {
             ? parseFloat(form.newProjectContractValue)
             : 0,
           status: 'pending',
+          company_id: user?.company_id ?? null,
         })
       } else if (form.projectMode === 'link' && form.linkedProjectId) {
         await supabase
