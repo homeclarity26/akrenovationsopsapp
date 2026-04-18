@@ -1,6 +1,6 @@
 // send-email — Final Build
 // Sends transactional emails via the Resend API.
-// Accepts: { to, subject, html, from_name?, reply_to? }
+// Accepts: { to, subject, html, from_name?, from_email?, reply_to? }
 // Logs all sends to api_usage_log for tracking.
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -15,11 +15,13 @@ const InputSchema = z.object({
   subject: z.string().min(1).max(500),
   html: z.string().min(1),
   from_name: z.string().optional(),
+  from_email: z.string().email().optional(),
   reply_to: z.string().email().optional(),
 })
 
 const DEFAULT_FROM_NAME = 'AK Renovations'
 const DEFAULT_FROM_DOMAIN = 'akrenovationsohio.com'
+const DEFAULT_FROM_LOCALPART = 'mail'
 
 serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: getCorsHeaders(req) })
@@ -44,7 +46,7 @@ serve(async (req) => {
       )
     }
 
-    const { to, subject, html, from_name, reply_to } = parsedInput.data
+    const { to, subject, html, from_name, from_email, reply_to } = parsedInput.data
 
     const resendApiKey = Deno.env.get('RESEND_API_KEY')
     if (!resendApiKey) {
@@ -54,8 +56,12 @@ serve(async (req) => {
       )
     }
 
+    // Domain is verified at akrenovationsohio.com as of 2026-04-18, so any
+    // local-part on that domain works. Default to `mail@` for generic sends;
+    // callers can pass from_email to route specific purposes (e.g.
+    // reminders@, alerts@, adam@) without needing code changes here.
     const fromName = from_name ?? DEFAULT_FROM_NAME
-    const fromEmail = `${fromName.toLowerCase().replace(/\s+/g, '')}@${DEFAULT_FROM_DOMAIN}`
+    const fromEmail = from_email ?? `${DEFAULT_FROM_LOCALPART}@${DEFAULT_FROM_DOMAIN}`
 
     const resendPayload: Record<string, unknown> = {
       from: `${fromName} <${fromEmail}>`,

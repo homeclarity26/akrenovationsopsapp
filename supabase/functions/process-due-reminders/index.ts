@@ -219,10 +219,12 @@ serve(async (req) => {
   let partial = 0
   let errored = 0
 
-  // Match the from-line the rest of the app uses (send-email edge function).
-  // Using a different local-part ('reminders@') was rejected by Resend even
-  // though the domain is the same — only specific senders are validated.
-  const FROM_LINE = 'AK Renovations <akrenovations@akrenovationsohio.com>'
+  // akrenovationsohio.com verified at Resend on 2026-04-18, so any local-part
+  // works. Use `reminders@` so recipients can scan their inbox and instantly
+  // see what kind of message it is. (Earlier code-comment claimed Resend
+  // rejected `reminders@` — that was a pre-verification artifact, not a
+  // permanent limit.)
+  const FROM_LINE = 'AK Renovations <reminders@akrenovationsohio.com>'
 
   for (const r of due as ReminderRow[]) {
     // Claim this row: only proceed if we flip pending -> sent. If the UPDATE
