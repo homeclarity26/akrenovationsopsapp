@@ -65,5 +65,28 @@ export default defineConfig({
       use: { ...devices['Desktop Chrome'], storageState: 'tests/e2e/.auth/client.json' },
       dependencies: ['setup'],
     },
+    // Mobile viewport — the field crew uses this on phones. Narrow to the
+    // two flows most likely to break on small screens: employee daily flow
+    // and client portal. Same storage state, Pixel 5 device.
+    {
+      name: 'employee-mobile',
+      testMatch: /employee\..*\.spec\.ts/,
+      use: { ...devices['Pixel 5'], storageState: 'tests/e2e/.auth/employee.json' },
+      dependencies: ['setup'],
+    },
+    {
+      name: 'client-mobile',
+      testMatch: /client\..*\.spec\.ts/,
+      use: { ...devices['iPhone 13'], storageState: 'tests/e2e/.auth/client.json' },
+      dependencies: ['setup'],
+    },
+    // Magic-link end-to-end — doesn't reuse any persona's state; creates its
+    // own browser contexts for admin and invite-recipient.
+    {
+      name: 'magic-link',
+      testMatch: /magic-link\.spec\.ts/,
+      use: { ...devices['Desktop Chrome'] },
+      dependencies: ['setup'],
+    },
   ],
 })
