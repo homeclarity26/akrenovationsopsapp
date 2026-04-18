@@ -41,16 +41,30 @@ export function ProjectsPage() {
 
   const handleCreate = async () => {
     const title = form.title.trim()
+    const clientName = form.client_name.trim()
     if (!title) {
       setCreateError('Project name is required')
       return
     }
+    if (!clientName) {
+      setCreateError('Client name is required')
+      return
+    }
     setCreating(true)
     setCreateError(null)
+    // Schema note (verified 2026-04-18 against live DB): projects has
+    // NOT-NULL constraints on title, project_type, client_name, address
+    // and a CHECK constraint on status IN
+    // ('pending','active','on_hold','complete','cancelled'). This quick-add
+    // form only collects title + client_name, so default the rest to
+    // placeholder values that satisfy the schema — the admin can fill in
+    // the real values from the project detail page afterwards.
     const { error: insertError } = await supabase.from('projects').insert({
       title,
-      client_name: form.client_name.trim() || null,
-      status: 'planning',
+      client_name: clientName,
+      project_type: 'other',
+      address: '',
+      status: 'pending',
       company_id: user?.company_id ?? null,
     })
     setCreating(false)
@@ -106,7 +120,7 @@ export function ProjectsPage() {
             />
             <input
               type="text"
-              placeholder="Client name (optional)"
+              placeholder="Client name"
               value={form.client_name}
               onChange={e => setForm(f => ({ ...f, client_name: e.target.value }))}
               className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/30"
