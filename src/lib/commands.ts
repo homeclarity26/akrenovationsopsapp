@@ -951,33 +951,6 @@ export const COMMANDS: Command[] = [
   },
 
   // =========================================================================
-  // SHARED — INVENTORY (legacy aliases kept for backward compat)
-  // =========================================================================
-
-  {
-    id: 'check_inventory',
-    label: 'Check inventory',
-    icon: '📦',
-    description: 'See current stock levels and alerts',
-    roles: ADMINS_EMP,
-    when: (ctx) => ctx.pathname.includes('/inventory') || ctx.pathname.includes('/stocktake'),
-    execute: async (_args, ctx) => {
-      const target = ctx.user?.role === 'employee' ? '/employee/stocktake' : '/admin/inventory'
-      nav(target)
-      return { ok: true, message: '__navigate__', data: { path: target } }
-    },
-  },
-  {
-    id: 'review_pending',
-    label: 'Review pending',
-    icon: '📋',
-    description: 'Review pending suggestions and change orders',
-    roles: ADMINS,
-    when: () => true,
-    execute: agentQuery('Show me all pending suggestions and change orders.'),
-  },
-
-  // =========================================================================
   // REMINDERS (all authenticated roles)
   // =========================================================================
 
