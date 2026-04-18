@@ -107,11 +107,9 @@ describe('matchVoiceIntent', () => {
   });
 
   // --- review_suggestions ---
-  // The intent regex `^(?:review|show)\s+(?:pending|suggestions)` maps these
-  // phrases to the `review_suggestions` command. A near-duplicate command
-  // `review_pending` also exists in the registry but is not reachable by
-  // voice — if we want "review pending" to hit `review_pending` we need to
-  // reshuffle the regex ordering, which is a separate decision.
+  // The intent regex `^(?:review|show)\s+(?:pending|suggestions)` maps both
+  // "review pending" and "show pending" to `review_suggestions` (the sole
+  // command covering AI suggestion/change-order review).
   it('"review pending" matches review_suggestions', () => {
     const result = matchVoiceIntent('review pending');
     expect(result).not.toBeNull();
@@ -125,9 +123,8 @@ describe('matchVoiceIntent', () => {
   });
 
   // --- check_stock ---
-  // Similar duplicate-command situation: `check_stock` is the voice-routed
-  // command; `check_inventory` exists in the registry but is only a
-  // keyboard/palette entry gated by pathname.
+  // `check_stock` is the single inventory-lookup command; both "check stock"
+  // and "check inventory" route to it.
   it('"check inventory" matches check_stock', () => {
     const result = matchVoiceIntent('check inventory');
     expect(result).not.toBeNull();
