@@ -11,6 +11,7 @@ export interface InventoryLocationFormValue {
   name: string
   type: LocationType
   assigned_to: string | null
+  assigned_employees: string[]
   license_plate: string | null
   notes: string | null
   is_active: boolean
@@ -33,6 +34,7 @@ const EMPTY: InventoryLocationFormValue = {
   name: '',
   type: 'shop',
   assigned_to: null,
+  assigned_employees: [],
   license_plate: null,
   notes: null,
   is_active: true,
@@ -69,11 +71,15 @@ export function InventoryLocationForm({ initial, onClose }: Props) {
       if (!companyId) throw new Error('Company not loaded')
       if (!v.name.trim()) throw new Error('Name is required')
 
+      // Keep the legacy single `assigned_to` in sync with the first entry of
+      // the multi-assign array so older code paths (sort-assigned-to-me-first
+      // on the stocktake page, agent queries) still find an assignee.
       const payload = {
         company_id: companyId,
         name: v.name.trim(),
         type: v.type,
-        assigned_to: v.assigned_to,
+        assigned_to: v.assigned_employees[0] ?? v.assigned_to ?? null,
+        assigned_employees: v.assigned_employees,
         license_plate: v.license_plate?.trim() || null,
         notes: v.notes?.trim() || null,
         is_active: v.is_active,
@@ -153,18 +159,40 @@ export function InventoryLocationForm({ initial, onClose }: Props) {
 
         <div>
           <label className="text-xs font-semibold uppercase tracking-wide text-[var(--text-tertiary)]">Assigned to</label>
-          <select
-            className="w-full mt-1 px-3 py-2.5 rounded-xl border border-[var(--border)] text-sm bg-[var(--bg)] text-[var(--text)] focus:outline-none focus:border-[var(--navy)]"
-            value={value.assigned_to ?? ''}
-            onChange={e => setValue(v => ({ ...v, assigned_to: e.target.value || null }))}
-          >
-            <option value="">Nobody</option>
-            {employees.map(p => (
-              <option key={p.id} value={p.id}>
-                {p.full_name ?? p.email ?? p.id}
-              </option>
-            ))}
-          </select>
+          <p className="text-[11px] text-[var(--text-tertiary)] mt-0.5 mb-1">Check everyone who should see this location on their Stocktake tab.</p>
+          {employees.length === 0 ? (
+            <p className="text-xs text-[var(--text-secondary)] px-3 py-2 border border-dashed border-[var(--border)] rounded-xl">
+              No team members yet. Add employees in Settings → Team before assigning.
+            </p>
+          ) : (
+            <div className="mt-1 border border-[var(--border)] rounded-xl divide-y divide-[var(--border-light)] max-h-48 overflow-y-auto bg-[var(--bg)]">
+              {employees.map(p => {
+                const checked = value.assigned_employees.includes(p.id)
+                return (
+                  <label
+                    key={p.id}
+                    className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-white"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={(e) => {
+                        setValue(v => {
+                          const next = e.target.checked
+                            ? [...v.assigned_employees, p.id]
+                            : v.assigned_employees.filter(x => x !== p.id)
+                          return { ...v, assigned_employees: next }
+                        })
+                      }}
+                    />
+                    <span className="text-sm text-[var(--text)]">
+                      {p.full_name ?? p.email ?? p.id}
+                    </span>
+                  </label>
+                )
+              })}
+            </div>
+          )}
         </div>
 
         <div>

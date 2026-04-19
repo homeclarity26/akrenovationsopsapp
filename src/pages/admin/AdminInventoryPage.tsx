@@ -42,6 +42,7 @@ interface LocationRow {
   name: string
   type: LocationType
   assigned_to: string | null
+  assigned_employees: string[] | null
   license_plate: string | null
   notes: string | null
   is_active: boolean
@@ -495,7 +496,7 @@ function LocationsTab({ companyId, queryClient }: LocationsTabProps) {
     queryFn: async () => {
       let query = supabase
         .from('inventory_locations')
-        .select('id, name, type, assigned_to, license_plate, notes, is_active')
+        .select('id, name, type, assigned_to, assigned_employees, license_plate, notes, is_active')
         .eq('company_id', companyId)
         .order('name')
       if (!showInactive) query = query.eq('is_active', true)
@@ -550,6 +551,7 @@ function LocationsTab({ companyId, queryClient }: LocationsTabProps) {
       name: row.name,
       type: row.type,
       assigned_to: row.assigned_to,
+      assigned_employees: Array.isArray(row.assigned_employees) ? row.assigned_employees : [],
       license_plate: row.license_plate,
       notes: row.notes,
       is_active: row.is_active,

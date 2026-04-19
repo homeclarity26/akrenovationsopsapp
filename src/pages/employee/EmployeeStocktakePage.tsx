@@ -28,6 +28,7 @@ interface InventoryLocation {
   name: string
   type: LocationType
   assigned_to: string | null
+  assigned_employees: string[] | null
   license_plate: string | null
   notes: string | null
   is_active: boolean
@@ -172,13 +173,15 @@ export function EmployeeStocktakePage() {
   }, [user?.id])
 
   // Locations query — company-scoped, active only. RLS also enforces company scope.
+  const [showAllLocations, setShowAllLocations] = useState(false)
+
   const { data: locations = [], isLoading: locationsLoading } = useQuery<InventoryLocation[]>({
     queryKey: ['inventory_locations', user?.company_id],
     enabled: !!user?.company_id,
     queryFn: async () => {
       const { data, error } = await supabase
         .from('inventory_locations')
-        .select('id, company_id, name, type, assigned_to, license_plate, notes, is_active')
+        .select('id, company_id, name, type, assigned_to, assigned_employees, license_plate, notes, is_active')
         .eq('company_id', user!.company_id!)
         .eq('is_active', true)
       if (error) throw error
@@ -186,21 +189,39 @@ export function EmployeeStocktakePage() {
     },
   })
 
+  // "Assigned to me" = I'm in assigned_employees OR the legacy single
+  // assigned_to column points at me. Admins see everything regardless.
+  const isMine = (l: InventoryLocation): boolean => {
+    if (!user?.id) return false
+    if (Array.isArray(l.assigned_employees) && l.assigned_employees.includes(user.id)) return true
+    if (l.assigned_to === user.id) return true
+    return false
+  }
+
+  const isAdminView = user?.role === 'admin' || user?.role === 'super_admin'
+  const myLocations = locations.filter(isMine)
+
+  // Show only mine unless the user explicitly asks for all, OR they're an
+  // admin (who should never be filtered), OR they have no assignments yet
+  // (otherwise they'd see an empty page with no way out).
+  const visibleLocations = (showAllLocations || isAdminView || myLocations.length === 0)
+    ? locations
+    : myLocations
+
   const sortedLocations = useMemo(() => {
-    const list = [...locations]
+    const list = [...visibleLocations]
     list.sort((a, b) => {
-      // Pin the user's assigned truck/location to the top
-      const aMine = a.assigned_to === user?.id ? 0 : 1
-      const bMine = b.assigned_to === user?.id ? 0 : 1
+      const aMine = isMine(a) ? 0 : 1
+      const bMine = isMine(b) ? 0 : 1
       if (aMine !== bMine) return aMine - bMine
-      // Then by type order (shop → truck → trailer → jobsite → other)
       const aT = LOCATION_TYPE_ORDER[a.type] ?? 99
       const bT = LOCATION_TYPE_ORDER[b.type] ?? 99
       if (aT !== bT) return aT - bT
       return a.name.localeCompare(b.name)
     })
     return list
-  }, [locations, user?.id])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleLocations, user?.id])
 
   const pickedLocation = useMemo(
     () => locations.find(l => l.id === locationId) ?? null,
@@ -508,7 +529,20 @@ export function EmployeeStocktakePage() {
   if (!locationId || !pickedLocation) {
     return (
       <div className="max-w-2xl mx-auto p-4 space-y-4">
-        <PageHeader title="Stocktake" subtitle="Pick the location you're counting from today" />
+        <PageHeader
+          title="Stocktake"
+          subtitle="Pick the location you're counting from today"
+          action={
+            !isAdminView && locations.length > myLocations.length && myLocations.length > 0 ? (
+              <button
+                onClick={() => setShowAllLocations(v => !v)}
+                className="text-[11px] font-semibold text-[var(--navy)] border border-[var(--navy)]/30 px-3 py-1.5 rounded-lg"
+              >
+                {showAllLocations ? 'Show only mine' : 'Show all locations'}
+              </button>
+            ) : undefined
+          }
+        />
 
         {locationsLoading ? (
           <Card>
@@ -527,7 +561,7 @@ export function EmployeeStocktakePage() {
           <div className="space-y-2">
             {sortedLocations.map(loc => {
               const Icon = LOCATION_TYPE_ICONS[loc.type] ?? Package
-              const isMine = loc.assigned_to === user?.id
+              const locIsMine = isMine(loc)
               return (
                 <button
                   key={loc.id}
@@ -541,9 +575,9 @@ export function EmployeeStocktakePage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
                         <p className="font-semibold text-sm text-[var(--text)] truncate">{loc.name}</p>
-                        {isMine && (
+                        {locIsMine && (
                           <span className="text-[10px] font-semibold uppercase tracking-wider text-white bg-[var(--rust)] rounded px-1.5 py-0.5">
-                            Your truck
+                            Yours
                           </span>
                         )}
                       </div>
