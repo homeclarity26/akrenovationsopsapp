@@ -7,7 +7,7 @@ import {
 import { Badge } from '@/components/ui/Badge'
 import { FirstVisitWizard } from '@/components/onboarding/FirstVisitWizard'
 import { useAuth } from '@/context/AuthContext'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
 function greeting(name: string) {
@@ -26,6 +26,7 @@ function fmtDuration(mins: number) {
 
 export function EmployeeHome() {
   const { user } = useAuth()
+  const queryClient = useQueryClient()
   const navigate = useNavigate()
   const [now, setNow] = useState(Date.now())
   const todayStr = new Date().toISOString().slice(0, 10)
@@ -47,6 +48,24 @@ export function EmployeeHome() {
       return count ?? 0
     },
   })
+
+  // Keep the badge fresh across devices: any INSERT/UPDATE/DELETE on
+  // shopping_list_items invalidates the count query, so when someone ticks an
+  // item off their phone this tile updates on everyone else's home screen too.
+  useEffect(() => {
+    if (!user?.id) return
+    const channel = supabase
+      .channel(`home-shopping-badge-${user.id}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'shopping_list_items' },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['shopping-needed-count'] })
+        },
+      )
+      .subscribe()
+    return () => { supabase.removeChannel(channel) }
+  }, [user?.id, queryClient])
 
   // Today's schedule event
   const { data: todayEvent } = useQuery({

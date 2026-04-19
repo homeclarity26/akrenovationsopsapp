@@ -167,6 +167,9 @@ export function ShoppingListPage() {
     }
 
     queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
+    // Also refresh the field home "Shopping List" badge — it reads from a
+    // separate query key and was getting stuck on the pre-toggle count.
+    queryClient.invalidateQueries({ queryKey: ['shopping-needed-count'] })
   }
 
   // ── deduct from stock (admin) ────────────────────────────────────
@@ -184,6 +187,7 @@ export function ShoppingListPage() {
         toast.warning(`Deducted with a warning: ${data.warning}`)
       }
       queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
+      queryClient.invalidateQueries({ queryKey: ['shopping-needed-count'] })
     } finally {
       setBusyIds(prev => {
         const next = { ...prev }
@@ -209,6 +213,7 @@ export function ShoppingListPage() {
       .update({ source_location_id: locationId })
       .eq('id', rowId)
     queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
+    queryClient.invalidateQueries({ queryKey: ['shopping-needed-count'] })
   }
 
   // ── clear purchased ───────────────────────────────────────────────
@@ -224,6 +229,7 @@ export function ShoppingListPage() {
       return next
     })
     queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
+    queryClient.invalidateQueries({ queryKey: ['shopping-needed-count'] })
   }
 
   // ── submit new item ───────────────────────────────────────────────
@@ -244,6 +250,7 @@ export function ShoppingListPage() {
     setSubmitting(false)
     if (error) { setFormError('Failed to add item. Try again.'); return }
     queryClient.invalidateQueries({ queryKey: ['shopping-list-items'] })
+    queryClient.invalidateQueries({ queryKey: ['shopping-needed-count'] })
     toast.success('Item added to list')
     // reset form
     setNewName('')
