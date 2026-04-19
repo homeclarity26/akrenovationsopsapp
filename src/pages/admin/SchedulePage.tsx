@@ -1,12 +1,44 @@
 import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
-import { MapPin, CalendarDays, Grid3x3, Sparkles, ChevronLeft, ChevronRight, X } from 'lucide-react'
+import { MapPin, CalendarDays, Grid3x3, Sparkles, ChevronLeft, ChevronRight, X, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
+
+const EVENT_TYPES = ['install', 'site_visit', 'inspection', 'delivery', 'meeting', 'other'] as const
+type EventType = typeof EVENT_TYPES[number]
+
+interface NewEventForm {
+  title: string
+  project_id: string
+  start_date: string
+  start_time: string
+  end_time: string
+  all_day: boolean
+  event_type: EventType
+  location: string
+  description: string
+}
+
+function todayIso(): string {
+  const d = new Date()
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+}
+
+const EMPTY_EVENT: NewEventForm = {
+  title: '',
+  project_id: '',
+  start_date: todayIso(),
+  start_time: '',
+  end_time: '',
+  all_day: false,
+  event_type: 'site_visit',
+  location: '',
+  description: '',
+}
 
 // Compute the Monday of the week that contains `d` (local time).
 function mondayOf(d: Date): Date {
@@ -59,6 +91,11 @@ export function SchedulePage() {
   const [optimizing, setOptimizing] = useState(false)
   const [optimizeResult, setOptimizeResult] = useState<string | null>(null)
   const [weekStart, setWeekStart] = useState<Date>(() => mondayOf(new Date()))
+  const [showNewEvent, setShowNewEvent] = useState(false)
+  const [newEvent, setNewEvent] = useState<NewEventForm>(EMPTY_EVENT)
+  const [savingEvent, setSavingEvent] = useState(false)
+  const [newEventError, setNewEventError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
 
   const WEEK_DAYS = useMemo(() => weekDaysFrom(weekStart), [weekStart])
   const weekLabel = useMemo(
@@ -99,6 +136,56 @@ export function SchedulePage() {
     },
   })
 
+  const { data: activeProjects = [] } = useQuery({
+    queryKey: ['schedule-projects'],
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('projects')
+        .select('id, title, client_name, status')
+        .in('status', ['active', 'pending'])
+        .order('title')
+      return (data ?? []) as { id: string; title: string; client_name: string | null; status: string }[]
+    },
+  })
+
+  const resetNewEvent = () => {
+    setNewEvent({ ...EMPTY_EVENT, start_date: todayIso() })
+    setNewEventError(null)
+  }
+
+  const handleSaveEvent = async () => {
+    setNewEventError(null)
+    if (!newEvent.title.trim()) { setNewEventError('Title is required'); return }
+    if (!newEvent.project_id) { setNewEventError('Pick a project'); return }
+    if (!newEvent.start_date) { setNewEventError('Pick a date'); return }
+    if (!newEvent.all_day && newEvent.start_time && newEvent.end_time && newEvent.end_time <= newEvent.start_time) {
+      setNewEventError('End time must be after start time'); return
+    }
+    setSavingEvent(true)
+    const payload: Record<string, unknown> = {
+      title: newEvent.title.trim(),
+      project_id: newEvent.project_id,
+      start_date: newEvent.start_date,
+      event_type: newEvent.event_type,
+      all_day: newEvent.all_day,
+      location: newEvent.location.trim() || null,
+      description: newEvent.description.trim() || null,
+    }
+    if (!newEvent.all_day) {
+      payload.start_time = newEvent.start_time || null
+      payload.end_time = newEvent.end_time || null
+    }
+    const { error: insertError } = await supabase.from('schedule_events').insert(payload)
+    setSavingEvent(false)
+    if (insertError) {
+      setNewEventError(insertError.message)
+      return
+    }
+    queryClient.invalidateQueries({ queryKey: ['schedule_events'] })
+    setShowNewEvent(false)
+    resetNewEvent()
+  }
+
   const groupedEvents = groupByDate(scheduleEvents)
 
   if (error) return (
@@ -114,27 +201,32 @@ export function SchedulePage() {
         title="Schedule"
         subtitle={weekLabel}
         action={
-          <div className="flex items-center gap-1 border border-[var(--border)] rounded-lg p-0.5">
-            <button
-              onClick={() => setView('calendar')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
-                view === 'calendar' ? 'bg-[var(--navy)] text-white' : 'text-[var(--text-secondary)]'
-              )}
-            >
-              <CalendarDays size={13} />
-              Calendar
-            </button>
-            <button
-              onClick={() => setView('crew')}
-              className={cn(
-                'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
-                view === 'crew' ? 'bg-[var(--navy)] text-white' : 'text-[var(--text-secondary)]'
-              )}
-            >
-              <Grid3x3 size={13} />
-              Crew Board
-            </button>
+          <div className="flex items-center gap-2 flex-wrap">
+            <Button size="sm" onClick={() => { resetNewEvent(); setShowNewEvent(true) }}>
+              <Plus size={14} /> New event
+            </Button>
+            <div className="flex items-center gap-1 border border-[var(--border)] rounded-lg p-0.5">
+              <button
+                onClick={() => setView('calendar')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
+                  view === 'calendar' ? 'bg-[var(--navy)] text-white' : 'text-[var(--text-secondary)]'
+                )}
+              >
+                <CalendarDays size={13} />
+                Calendar
+              </button>
+              <button
+                onClick={() => setView('crew')}
+                className={cn(
+                  'flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition-all',
+                  view === 'crew' ? 'bg-[var(--navy)] text-white' : 'text-[var(--text-secondary)]'
+                )}
+              >
+                <Grid3x3 size={13} />
+                Crew Board
+              </button>
+            </div>
           </div>
         }
       />
@@ -148,7 +240,7 @@ export function SchedulePage() {
           ) : groupedEvents.length === 0 ? (
             <div className="text-center py-12 px-4">
               <p className="font-medium text-sm text-[var(--text)]">No events scheduled</p>
-              <p className="text-xs text-[var(--text-tertiary)] mt-1">Add events to see them here.</p>
+              <p className="text-xs text-[var(--text-tertiary)] mt-1">Tap "New event" above to schedule one.</p>
             </div>
           ) : (
             groupedEvents.map((day) => {
@@ -326,6 +418,140 @@ export function SchedulePage() {
           <p className="text-[11px] text-[var(--text-tertiary)] text-center">
             Drag a block to reassign. Tap a cell to schedule. Capacity bars warn at 80% / 100%.
           </p>
+        </div>
+      )}
+
+      {showNewEvent && (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 p-0 sm:p-4"
+          onClick={() => { setShowNewEvent(false); resetNewEvent() }}
+        >
+          <div
+            className="bg-white w-full sm:max-w-lg rounded-t-2xl sm:rounded-2xl p-5 max-h-[90vh] overflow-y-auto"
+            onClick={e => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-semibold text-base text-[var(--text)]">New event</h3>
+              <button
+                onClick={() => { setShowNewEvent(false); resetNewEvent() }}
+                className="p-1 rounded hover:bg-gray-100 text-[var(--text-tertiary)]"
+                aria-label="Close"
+              >
+                <X size={18} />
+              </button>
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">Title</label>
+                <input
+                  type="text"
+                  placeholder="Delivery, inspection, install…"
+                  value={newEvent.title}
+                  onChange={e => setNewEvent(f => ({ ...f, title: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-[var(--navy)]/30"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">Project</label>
+                <select
+                  value={newEvent.project_id}
+                  onChange={e => setNewEvent(f => ({ ...f, project_id: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm bg-white"
+                >
+                  <option value="">Select a project…</option>
+                  {activeProjects.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.title}{p.client_name ? ` — ${p.client_name}` : ''}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">Event type</label>
+                <select
+                  value={newEvent.event_type}
+                  onChange={e => setNewEvent(f => ({ ...f, event_type: e.target.value as EventType }))}
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm bg-white"
+                >
+                  {EVENT_TYPES.map(t => (
+                    <option key={t} value={t}>{t.replace(/_/g, ' ')}</option>
+                  ))}
+                </select>
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">Date</label>
+                <input
+                  type="date"
+                  value={newEvent.start_date}
+                  onChange={e => setNewEvent(f => ({ ...f, start_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm"
+                />
+              </div>
+              <label className="flex items-center gap-2 text-sm text-[var(--text-secondary)]">
+                <input
+                  type="checkbox"
+                  checked={newEvent.all_day}
+                  onChange={e => setNewEvent(f => ({ ...f, all_day: e.target.checked }))}
+                />
+                All day
+              </label>
+              {!newEvent.all_day && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">Start</label>
+                    <input
+                      type="time"
+                      value={newEvent.start_time}
+                      onChange={e => setNewEvent(f => ({ ...f, start_time: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">End</label>
+                    <input
+                      type="time"
+                      value={newEvent.end_time}
+                      onChange={e => setNewEvent(f => ({ ...f, end_time: e.target.value }))}
+                      className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm"
+                    />
+                  </div>
+                </div>
+              )}
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">Location (optional)</label>
+                <input
+                  type="text"
+                  placeholder="Job site address, office, etc."
+                  value={newEvent.location}
+                  onChange={e => setNewEvent(f => ({ ...f, location: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm"
+                />
+              </div>
+              <div>
+                <label className="block text-[11px] font-semibold uppercase tracking-wide text-[var(--text-tertiary)] mb-1">Notes (optional)</label>
+                <textarea
+                  rows={3}
+                  value={newEvent.description}
+                  onChange={e => setNewEvent(f => ({ ...f, description: e.target.value }))}
+                  className="w-full px-3 py-2 border border-[var(--border)] rounded-lg text-sm resize-none"
+                />
+              </div>
+              {newEventError && <p className="text-xs text-[var(--danger)]">{newEventError}</p>}
+              <div className="flex justify-end gap-2 pt-1">
+                <Button
+                  size="sm"
+                  variant="secondary"
+                  onClick={() => { setShowNewEvent(false); resetNewEvent() }}
+                  disabled={savingEvent}
+                >
+                  Cancel
+                </Button>
+                <Button size="sm" onClick={handleSaveEvent} disabled={savingEvent}>
+                  {savingEvent ? 'Saving…' : 'Save event'}
+                </Button>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>
