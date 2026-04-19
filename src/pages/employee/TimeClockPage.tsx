@@ -122,7 +122,7 @@ export function TimeClockPage() {
       const { data } = await supabase
         .from('projects')
         .select('id, title, client_name')
-        .eq('status', 'active')
+        .in('status', ['active', 'pending'])
         .order('title')
       return data ?? []
     },

@@ -51,7 +51,7 @@ export function PhotosPage() {
       const { data } = await supabase
         .from('projects')
         .select('id, title')
-        .eq('status', 'active')
+        .in('status', ['active', 'pending'])
         .order('title')
       return (data ?? []) as Project[]
     },

@@ -6,8 +6,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { useBackNavigation } from '@/hooks/useBackNavigation'
+import { usePickableProjects } from '@/hooks/usePickableProjects'
 
-interface Project { id: string; title: string }
 
 export function NotesPage() {
   const { user } = useAuth()
@@ -32,14 +32,7 @@ export function NotesPage() {
   const [logWeather, setLogWeather] = useState('')
   const [submittingLog, setSubmittingLog] = useState(false)
 
-  const { data: projects = [], error: projectsError, refetch: projectsRefetch } = useQuery<Project[]>({
-    queryKey: ['active-projects-notes', user?.company_id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('projects').select('id, title').eq('status', 'active').order('title')
-      if (error) throw error
-      return (data ?? []) as Project[]
-    },
-  })
+  const { data: projects = [], error: projectsError, refetch: projectsRefetch } = usePickableProjects()
 
   // Reset selectedProjectId if it's not in the projects list
   useEffect(() => {

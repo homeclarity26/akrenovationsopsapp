@@ -6,8 +6,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { useBackNavigation } from '@/hooks/useBackNavigation'
+import { usePickableProjects } from '@/hooks/usePickableProjects'
 
-interface Project { id: string; title: string }
 interface ReceiptRow {
   id: string; vendor: string | null; amount: number; date: string
   project: string; project_id: string | null; status: 'pending' | 'submitted'
@@ -31,14 +31,7 @@ export function ReceiptsPage() {
   })
   const [uploadError, setUploadError] = useState<string | null>(null)
 
-  const { data: projects = [] } = useQuery<Project[]>({
-    queryKey: ['active-projects-receipts', user?.company_id],
-    queryFn: async () => {
-      const { data, error } = await supabase.from('projects').select('id, title').eq('status', 'active').order('title')
-      if (error) throw error
-      return (data ?? []) as Project[]
-    },
-  })
+  const { data: projects = [] } = usePickableProjects()
 
   const { data: receipts = [], error: receiptsError, refetch: receiptsRefetch } = useQuery<ReceiptRow[]>({
     queryKey: ['receipts', user?.id, user?.company_id],
