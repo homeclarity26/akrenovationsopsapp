@@ -78,9 +78,11 @@ async function callClaudeVision(
   maxTokens = 1024,
 ): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
   const isPdf = mediaType === 'application/pdf'
-  const contentBlock = isPdf
-    ? { type: 'document' as const, source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } }
-    : { type: 'image' as const, source: { type: 'base64', media_type: mediaType, data: fileBase64 } }
+  // Claude content block shape varies by file type — images go through the
+  // `image` block, PDFs through `document` (which reads pages natively).
+  const contentBlock: Record<string, unknown> = isPdf
+    ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } }
+    : { type: 'image', source: { type: 'base64', media_type: mediaType, data: fileBase64 } }
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -118,10 +120,16 @@ function parseStorageUrl(url: string): { bucket: string; path: string } | null {
 }
 
 function uint8ToBase64(bytes: Uint8Array): string {
+  // Build the binary string one chunk at a time to avoid "too many arguments"
+  // errors on String.fromCharCode for huge buffers. TextDecoder('latin1') is
+  // the simplest way to get a 1-byte-per-char string the btoa call can handle.
+  const CHUNK = 0x8000
   let binary = ''
-  const chunk = 0x8000
-  for (let i = 0; i < bytes.length; i += chunk) {
-    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)))
+  for (let i = 0; i < bytes.length; i += CHUNK) {
+    const slice = bytes.subarray(i, Math.min(i + CHUNK, bytes.length))
+    // Spread a Uint8Array into String.fromCharCode — Deno supports spreading
+    // typed arrays into function calls directly; no Array.from needed.
+    binary += String.fromCharCode(...slice)
   }
   return btoa(binary)
 }
@@ -198,11 +206,11 @@ If you cannot read a field clearly, use null. Return ONLY the JSON object.`
 
     // Download file bytes via storage (bucket may be private — .getPublicUrl()
     // is broken for private buckets and Claude can't URL-fetch PDFs anyway).
-    const parsed = parseStorageUrl(file.file_url)
-    if (!parsed) throw new Error(`Cannot parse storage URL: ${file.file_url}`)
+    const storageRef = parseStorageUrl(file.file_url)
+    if (!storageRef) throw new Error(`Cannot parse storage URL: ${file.file_url}`)
     const { data: blob, error: dlErr } = await supabase.storage
-      .from(parsed.bucket)
-      .download(parsed.path)
+      .from(storageRef.bucket)
+      .download(storageRef.path)
     if (dlErr || !blob) throw dlErr ?? new Error('storage download failed')
     const bytes = new Uint8Array(await blob.arrayBuffer())
     const fileBase64 = uint8ToBase64(bytes)
