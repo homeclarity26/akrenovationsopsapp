@@ -192,7 +192,7 @@ export function TimeClockPage() {
 
   const handleClockInConfirm = () => {
     const doInsert = async (coords: { lat: number; lng: number } | null) => {
-      await supabase.from('time_entries').insert({
+      const { error } = await supabase.from('time_entries').insert({
         user_id: user!.id,
         project_id: ciProject?.id ?? null,
         clock_in: new Date().toISOString(),
@@ -205,6 +205,10 @@ export function TimeClockPage() {
         billing_status: ciProject && ciBillable ? 'pending' : 'na',
         notes: null,
       })
+      if (error) {
+        toast.error(`Couldn't clock in: ${error.message}`)
+        return
+      }
       queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
       toast.success('Clocked in')
     }
@@ -228,13 +232,17 @@ export function TimeClockPage() {
     const doUpdate = async (coords: { lat: number; lng: number } | null) => {
       const clockOutTime = new Date()
       const totalMinutes = Math.round((clockOutTime.getTime() - new Date(openEntry.clock_in).getTime()) / 60000)
-      await supabase.from('time_entries').update({
+      const { error } = await supabase.from('time_entries').update({
         clock_out: clockOutTime.toISOString(),
         clock_out_lat: coords?.lat ?? null,
         clock_out_lng: coords?.lng ?? null,
         total_minutes: totalMinutes,
         notes: clockOutNote || null,
       }).eq('id', openEntry.id)
+      if (error) {
+        toast.error(`Couldn't clock out: ${error.message}`)
+        return
+      }
       queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
       toast.success('Clock out saved')
     }
@@ -263,7 +271,7 @@ export function TimeClockPage() {
     if (endDt > new Date()) { setManualError('Cannot enter future time'); return }
     const totalMinutes = Math.round((endDt.getTime() - startDt.getTime()) / 60000)
 
-    await supabase.from('time_entries').insert({
+    const { error: insertError } = await supabase.from('time_entries').insert({
       user_id: user!.id,
       project_id: manualProject.id,
       clock_in: startDt.toISOString(),
@@ -277,6 +285,10 @@ export function TimeClockPage() {
       manual_reason: manualReason,
       notes: manualReason,
     })
+    if (insertError) {
+      setManualError(`Couldn't save: ${insertError.message}`)
+      return
+    }
     queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
     toast.success('Manual entry saved')
 
@@ -293,12 +305,16 @@ export function TimeClockPage() {
     const doSwitch = async (coords: { lat: number; lng: number } | null) => {
       const clockOutTime = new Date()
       const totalMinutes = Math.round((clockOutTime.getTime() - new Date(openEntry.clock_in).getTime()) / 60000)
-      await supabase.from('time_entries').update({
+      const { error: switchError } = await supabase.from('time_entries').update({
         clock_out: clockOutTime.toISOString(),
         clock_out_lat: coords?.lat ?? null,
         clock_out_lng: coords?.lng ?? null,
         total_minutes: totalMinutes,
       }).eq('id', openEntry.id)
+      if (switchError) {
+        toast.error(`Couldn't switch projects: ${switchError.message}`)
+        return
+      }
       queryClient.invalidateQueries({ queryKey: ['today-time-entries'] })
     }
 
