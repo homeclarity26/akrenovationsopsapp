@@ -67,7 +67,20 @@ async function writeOutput(
   })
 }
 
-async function callClaudeVision(systemPrompt: string, imageUrl: string, userMessage: string, maxTokens = 1024): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
+// Download file bytes from Supabase storage (bucket is private) and send to
+// Claude as base64. Supports PNG/JPG/WEBP/GIF via `image` blocks and PDF via
+// the `document` block (which reads actual PDF pages).
+async function callClaudeVision(
+  systemPrompt: string,
+  fileBase64: string,
+  mediaType: string,
+  userMessage: string,
+  maxTokens = 1024,
+): Promise<{ text: string; usage: { input_tokens: number; output_tokens: number } }> {
+  const isPdf = mediaType === 'application/pdf'
+  const contentBlock = isPdf
+    ? { type: 'document' as const, source: { type: 'base64', media_type: 'application/pdf', data: fileBase64 } }
+    : { type: 'image' as const, source: { type: 'base64', media_type: mediaType, data: fileBase64 } }
   const res = await fetch('https://api.anthropic.com/v1/messages', {
     method: 'POST',
     headers: {
@@ -83,7 +96,7 @@ async function callClaudeVision(systemPrompt: string, imageUrl: string, userMess
         {
           role: 'user',
           content: [
-            { type: 'image', source: { type: 'url', url: imageUrl } },
+            contentBlock,
             { type: 'text', text: userMessage },
           ],
         },
@@ -93,6 +106,38 @@ async function callClaudeVision(systemPrompt: string, imageUrl: string, userMess
   if (!res.ok) throw new Error(`Claude vision error: ${await res.text()}`)
   const data = await res.json()
   return { text: data.content?.[0]?.text ?? '', usage: { input_tokens: data.usage?.input_tokens ?? 0, output_tokens: data.usage?.output_tokens ?? 0 } }
+}
+
+// Parse a Supabase storage URL into { bucket, path }. Handles both the
+// "public" variant (.../storage/v1/object/public/bucket/path) and the plain
+// variant (.../storage/v1/object/bucket/path).
+function parseStorageUrl(url: string): { bucket: string; path: string } | null {
+  const m = url.match(/\/storage\/v1\/object\/(?:public\/)?([^/]+)\/(.+)$/)
+  if (!m) return null
+  return { bucket: decodeURIComponent(m[1]), path: decodeURIComponent(m[2]) }
+}
+
+function uint8ToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunk = 0x8000
+  for (let i = 0; i < bytes.length; i += chunk) {
+    binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)))
+  }
+  return btoa(binary)
+}
+
+function mediaTypeFromNameOrType(fileName: string, storedType: string | null | undefined): string {
+  if (storedType && storedType.includes('/')) return storedType
+  const ext = fileName.split('.').pop()?.toLowerCase()
+  switch (ext) {
+    case 'pdf':  return 'application/pdf'
+    case 'png':  return 'image/png'
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg'
+    case 'webp': return 'image/webp'
+    case 'gif':  return 'image/gif'
+    default:     return 'image/jpeg'
+  }
 }
 
 serve(async (req) => {
@@ -142,7 +187,7 @@ If you cannot read a field clearly, use null. Return ONLY the JSON object.`
     // Get file record
     const { data: file, error: fileError } = await supabase
       .from('project_files')
-      .select('id,file_url,project_id,file_name')
+      .select('id,file_url,project_id,file_name,file_type')
       .eq('id', file_id)
       .single()
 
@@ -151,12 +196,25 @@ If you cannot read a field clearly, use null. Return ONLY the JSON object.`
     const targetProjectId = project_id ?? file.project_id
     if (!targetProjectId) throw new Error('project_id required — either pass it in or associate the file with a project')
 
+    // Download file bytes via storage (bucket may be private — .getPublicUrl()
+    // is broken for private buckets and Claude can't URL-fetch PDFs anyway).
+    const parsed = parseStorageUrl(file.file_url)
+    if (!parsed) throw new Error(`Cannot parse storage URL: ${file.file_url}`)
+    const { data: blob, error: dlErr } = await supabase.storage
+      .from(parsed.bucket)
+      .download(parsed.path)
+    if (dlErr || !blob) throw dlErr ?? new Error('storage download failed')
+    const bytes = new Uint8Array(await blob.arrayBuffer())
+    const fileBase64 = uint8ToBase64(bytes)
+    const mediaType = mediaTypeFromNameOrType(file.file_name ?? '', blob.type)
+
     // Call Claude vision to extract receipt data
     const _tv = Date.now()
     const { text: extractionResult, usage: _uv } = await callClaudeVision(
       systemPrompt,
-      file.file_url,
-      'Extract all receipt data from this image and return as JSON.',
+      fileBase64,
+      mediaType,
+      'Extract all receipt data from this file and return as JSON. If it is a PDF, read every page.',
       800,
     )
     logAiUsage({ function_name: 'agent-receipt-processor', model_provider: 'anthropic', model_name: 'claude-sonnet-4-20250514', input_tokens: _uv.input_tokens, output_tokens: _uv.output_tokens, duration_ms: Date.now() - _tv, status: 'success' })
