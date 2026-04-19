@@ -54,7 +54,7 @@ export function InvoicesPage() {
     queryFn: async () => {
       const { data } = await supabase
         .from('invoices')
-        .select('*')
+        .select('*, projects(client_name, client_email, client_phone, address, title), proposals(title)')
         .order('created_at', { ascending: false })
       return data ?? []
     },
@@ -244,7 +244,7 @@ export function InvoicesPage() {
             const invBalanceDue = Number(inv.balance_due ?? 0)
             const invStatus = String(inv.status ?? '')
             const invDueDate = inv.due_date ? String(inv.due_date) : ''
-            const lineItems = (inv.line_items as { label: string; amount: number }[]) ?? []
+            const lineItems = (inv.line_items as { label: string; amount: number; kind?: string }[]) ?? []
             return (
               <div key={invId} className="p-4 border-b border-[var(--border-light)] last:border-0">
                 <div className="flex items-start justify-between gap-3 mb-2">
@@ -323,8 +323,10 @@ export function InvoicesPage() {
                       issueDate: String(inv.issue_date ?? inv.created_at ?? '').slice(0, 10),
                       dueDate: inv.due_date ? String(inv.due_date).slice(0, 10) : null,
                       lineItems,
-                      amountPaid: Number(inv.amount_paid ?? 0),
+                      amountPaid: Number((inv as Record<string, unknown>).paid_amount ?? 0),
                       notes: String(inv.notes ?? '') || null,
+                      milestoneLabel: String((inv as Record<string, unknown>).milestone_label ?? '') || null,
+                      proposalTitle: String(((inv as Record<string, unknown>).proposals as Record<string, unknown> | null)?.title ?? '') || null,
                     })}
                   />
                   {!!inv.drive_url && (

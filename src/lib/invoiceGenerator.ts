@@ -1,6 +1,8 @@
-// Minimal invoice -> .docx generator. Uses the same `docx` lib as the
-// proposal generator; keeps layout simple and branded. Returns a Blob +
-// filename suitable for ShareMenu.
+// Invoice -> .docx generator. Shares header/footer/colors with the proposal
+// generator via docxBrand so every document in the client-facing stack
+// reads as one visual system — same navy/rust palette, same Arial
+// typography, same tagline footer, same rust accent rule. Only the body
+// content + table structure differ between docs.
 
 import {
   Document,
@@ -13,12 +15,27 @@ import {
   AlignmentType,
   WidthType,
   BorderStyle,
-  HeadingLevel,
+  ShadingType,
 } from 'docx'
+import {
+  BRAND,
+  PAGE_WIDTH_DXA,
+  noBorders,
+  softRowBorders,
+  eyebrow,
+  rustRule,
+  sp,
+  compactCoverBar,
+  brandFooter,
+  AK_PHONE,
+  AK_WEBSITE,
+} from './docxBrand'
 
 export interface InvoiceLineItem {
   label: string
   amount: number
+  /** 'base' (from the proposal milestone) or 'change_order'. Tints rendering. */
+  kind?: 'base' | 'change_order' | string
 }
 
 export interface InvoiceData {
@@ -32,48 +49,50 @@ export interface InvoiceData {
   taxRate?: number            // 0..1
   amountPaid?: number
   notes?: string | null
+  /** Optional proposal title. When present, renders an "against proposal" line. */
+  proposalTitle?: string | null
+  /** Optional milestone label (e.g., "Rough-in"). */
+  milestoneLabel?: string | null
 }
-
-const NAVY = '1F2B4F'
-const RUST = '9B5A3E'
 
 function fmtUsd(n: number): string {
   return n.toLocaleString('en-US', { style: 'currency', currency: 'USD' })
 }
 
-function p(text: string, opts?: { bold?: boolean; size?: number; color?: string; align?: 'left' | 'center' | 'right' }): Paragraph {
+function p(text: string, opts?: {
+  bold?: boolean
+  size?: number
+  color?: string
+  align?: 'left' | 'center' | 'right'
+  italics?: boolean
+}): Paragraph {
   return new Paragraph({
     alignment:
       opts?.align === 'center' ? AlignmentType.CENTER :
-      opts?.align === 'right' ? AlignmentType.RIGHT :
+      opts?.align === 'right'  ? AlignmentType.RIGHT  :
       AlignmentType.LEFT,
     children: [new TextRun({
       text,
       bold: opts?.bold,
+      italics: opts?.italics,
       size: opts?.size ?? 22,
-      color: opts?.color ?? '333333',
+      color: opts?.color ?? BRAND.TEXT,
+      font: 'Arial',
     })],
   })
 }
 
-function hrule(): Paragraph {
-  return new Paragraph({
-    border: { bottom: { color: RUST, space: 1, style: BorderStyle.SINGLE, size: 8 } },
-    children: [new TextRun({ text: '' })],
-  })
-}
-
-function cell(text: string | Paragraph, opts?: { width?: number; bold?: boolean; align?: 'left' | 'right' }): TableCell {
-  const content = typeof text === 'string' ? p(text, { bold: opts?.bold, align: opts?.align }) : text
+function cell(
+  content: string | Paragraph,
+  opts?: { width?: number; bold?: boolean; align?: 'left' | 'right'; shade?: string },
+): TableCell {
+  const para = typeof content === 'string' ? p(content, { bold: opts?.bold, align: opts?.align }) : content
   return new TableCell({
-    children: [content],
+    children: [para],
     width: opts?.width ? { size: opts.width, type: WidthType.PERCENTAGE } : undefined,
-    borders: {
-      top:    { style: BorderStyle.SINGLE, size: 4, color: 'DDDDDD' },
-      bottom: { style: BorderStyle.SINGLE, size: 4, color: 'DDDDDD' },
-      left:   { style: BorderStyle.NONE,   size: 0, color: 'FFFFFF' },
-      right:  { style: BorderStyle.NONE,   size: 0, color: 'FFFFFF' },
-    },
+    shading: opts?.shade ? { fill: opts.shade, type: ShadingType.CLEAR } : undefined,
+    borders: softRowBorders,
+    margins: { top: 120, bottom: 120, left: 160, right: 160 },
   })
 }
 
@@ -83,81 +102,169 @@ export async function buildInvoiceDocxBlob(data: InvoiceData): Promise<{ blob: B
   const total = subtotal + tax
   const balance = total - (data.amountPaid ?? 0)
 
-  const headerTable = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: {
-      top:    { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-      bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-      left:   { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-      right:  { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-      insideHorizontal: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-      insideVertical:   { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-    },
-    rows: [new TableRow({
-      children: [
-        new TableCell({
-          width: { size: 60, type: WidthType.PERCENTAGE },
+  // Line items table — header row in rust accent + rows in soft borders.
+  const lineItemsTable = new Table({
+    width: { size: PAGE_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [Math.round(PAGE_WIDTH_DXA * 0.75), Math.round(PAGE_WIDTH_DXA * 0.25)],
+    borders: noBorders,
+    rows: [
+      new TableRow({
+        tableHeader: true,
+        children: [
+          new TableCell({
+            borders: { ...noBorders, bottom: { style: BorderStyle.SINGLE, size: 8, color: BRAND.RUST } },
+            shading: { fill: BRAND.RUST_TINT, type: ShadingType.CLEAR },
+            margins: { top: 160, bottom: 160, left: 160, right: 160 },
+            width: { size: 75, type: WidthType.PERCENTAGE },
+            children: [p('DESCRIPTION', { bold: true, size: 18, color: BRAND.TEXT_MUTED })],
+          }),
+          new TableCell({
+            borders: { ...noBorders, bottom: { style: BorderStyle.SINGLE, size: 8, color: BRAND.RUST } },
+            shading: { fill: BRAND.RUST_TINT, type: ShadingType.CLEAR },
+            margins: { top: 160, bottom: 160, left: 160, right: 160 },
+            width: { size: 25, type: WidthType.PERCENTAGE },
+            children: [p('AMOUNT', { bold: true, size: 18, color: BRAND.TEXT_MUTED, align: 'right' })],
+          }),
+        ],
+      }),
+      ...data.lineItems.map((li) => {
+        const isChange = li.kind === 'change_order'
+        return new TableRow({
           children: [
-            p('AK RENOVATIONS', { bold: true, size: 32, color: NAVY }),
-            p('Ohio\'s Trusted Contractor', { size: 20, color: '666666' }),
+            cell(
+              p(li.label, { size: 22, color: isChange ? BRAND.RUST : BRAND.TEXT }),
+              { width: 75 },
+            ),
+            cell(
+              p(fmtUsd(li.amount), { size: 22, align: 'right', color: isChange ? BRAND.RUST : BRAND.TEXT }),
+              { width: 25, align: 'right' },
+            ),
           ],
-          borders: emptyBorders(),
-        }),
-        new TableCell({
-          width: { size: 40, type: WidthType.PERCENTAGE },
-          children: [
-            p('INVOICE', { bold: true, size: 36, color: NAVY, align: 'right' }),
-            p(`#${data.invoiceNumber}   ·   ${data.issueDate}`, { size: 20, color: '666666', align: 'right' }),
-          ],
-          borders: emptyBorders(),
-        }),
-      ],
-    })],
+        })
+      }),
+    ],
   })
 
-  const lineItemsTable = new Table({
-    width: { size: 100, type: WidthType.PERCENTAGE },
-    borders: emptyBorders(),
+  // "Billed to" block + issue/due dates — two columns, no visual borders.
+  const metaTable = new Table({
+    width: { size: PAGE_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [PAGE_WIDTH_DXA / 2, PAGE_WIDTH_DXA / 2],
+    borders: noBorders,
     rows: [
       new TableRow({
         children: [
-          cell(p('DESCRIPTION', { bold: true, size: 18, color: '666666' }), { width: 75 }),
-          cell(p('AMOUNT', { bold: true, size: 18, color: '666666', align: 'right' }), { width: 25, align: 'right' }),
+          new TableCell({
+            borders: noBorders,
+            margins: { top: 0, bottom: 0, left: 0, right: 0 },
+            children: [
+              p('BILLED TO', { bold: true, size: 16, color: BRAND.TEXT_MUTED }),
+              p(data.clientName, { size: 22, bold: true }),
+              ...(data.clientAddress ? [p(data.clientAddress, { size: 20, color: BRAND.TEXT_MUTED })] : []),
+              ...(data.proposalTitle
+                ? [p(`Against proposal: ${data.proposalTitle}`, { size: 18, color: BRAND.TEXT_MUTED, italics: true })]
+                : []),
+            ],
+          }),
+          new TableCell({
+            borders: noBorders,
+            margins: { top: 0, bottom: 0, left: 0, right: 0 },
+            children: [
+              p('ISSUE DATE', { bold: true, size: 16, color: BRAND.TEXT_MUTED, align: 'right' }),
+              p(data.issueDate, { size: 22, align: 'right' }),
+              ...(data.dueDate ? [
+                p(''),
+                p('DUE', { bold: true, size: 16, color: BRAND.TEXT_MUTED, align: 'right' }),
+                p(data.dueDate, { size: 22, bold: true, align: 'right' }),
+              ] : []),
+            ],
+          }),
         ],
       }),
-      ...data.lineItems.map((li) => new TableRow({
-        children: [
-          cell(li.label, { width: 75 }),
-          cell(fmtUsd(li.amount), { width: 25, align: 'right' }),
-        ],
-      })),
+    ],
+  })
+
+  // Totals block — right-aligned mini table so amounts stack neatly under the
+  // line items instead of floating at random indentation.
+  function totalsRow(label: string, value: string, opts?: { bold?: boolean; color?: string; size?: number }): TableRow {
+    return new TableRow({
+      children: [
+        new TableCell({
+          borders: noBorders,
+          margins: { top: 40, bottom: 40, left: 160, right: 160 },
+          width: { size: 70, type: WidthType.PERCENTAGE },
+          children: [p(label, { align: 'right', bold: opts?.bold, color: opts?.color ?? BRAND.TEXT_MUTED, size: opts?.size ?? 20 })],
+        }),
+        new TableCell({
+          borders: noBorders,
+          margins: { top: 40, bottom: 40, left: 160, right: 160 },
+          width: { size: 30, type: WidthType.PERCENTAGE },
+          children: [p(value, { align: 'right', bold: opts?.bold, color: opts?.color ?? BRAND.TEXT, size: opts?.size ?? 22 })],
+        }),
+      ],
+    })
+  }
+
+  const totalsTable = new Table({
+    width: { size: PAGE_WIDTH_DXA, type: WidthType.DXA },
+    columnWidths: [Math.round(PAGE_WIDTH_DXA * 0.7), Math.round(PAGE_WIDTH_DXA * 0.3)],
+    borders: noBorders,
+    rows: [
+      totalsRow('Subtotal', fmtUsd(subtotal)),
+      ...(tax > 0 ? [totalsRow('Tax', fmtUsd(tax))] : []),
+      totalsRow('Total', fmtUsd(total), { bold: true, color: BRAND.NAVY, size: 26 }),
+      ...(data.amountPaid && data.amountPaid > 0
+        ? [totalsRow('Paid', fmtUsd(data.amountPaid), { color: '2E7D32' })]
+        : []),
+      ...(balance > 0
+        ? [totalsRow('Balance Due', fmtUsd(balance), { bold: true, color: BRAND.RUST, size: 28 })]
+        : []),
     ],
   })
 
   const children = [
-    headerTable,
-    p(''),
-    hrule(),
-    p(''),
+    compactCoverBar(
+      'INVOICE',
+      `#${data.invoiceNumber}  ·  ${data.issueDate}`,
+      { titleBelow: data.milestoneLabel ? `Milestone: ${data.milestoneLabel}` : '' },
+    ),
+    sp(320),
+
+    // Invoice title below the bar, navy headline, same typographic weight
+    // as the proposal's section titles.
     new Paragraph({
-      heading: HeadingLevel.HEADING_2,
-      children: [new TextRun({ text: data.title, bold: true, size: 28, color: NAVY })],
+      spacing: { before: 0, after: 0 },
+      children: [new TextRun({ text: data.title, font: 'Arial', size: 36, bold: true, color: BRAND.NAVY })],
     }),
-    p(''),
-    p('Billed to:', { bold: true, size: 20, color: '666666' }),
-    p(data.clientName, { size: 22 }),
-    ...(data.clientAddress ? [p(data.clientAddress, { size: 22 })] : []),
-    ...(data.dueDate ? [p(''), p(`Due: ${data.dueDate}`, { bold: true, size: 22 })] : []),
-    p(''),
+    rustRule(),
+    sp(240),
+
+    metaTable,
+    sp(320),
+
+    eyebrow('Line items'),
     lineItemsTable,
-    p(''),
-    p(`Subtotal: ${fmtUsd(subtotal)}`, { align: 'right', size: 22 }),
-    ...(tax > 0 ? [p(`Tax: ${fmtUsd(tax)}`, { align: 'right', size: 22 })] : []),
-    p(`Total: ${fmtUsd(total)}`, { align: 'right', bold: true, size: 24 }),
-    ...(data.amountPaid && data.amountPaid > 0 ? [p(`Paid: ${fmtUsd(data.amountPaid)}`, { align: 'right', size: 22, color: '2E7D32' })] : []),
-    ...(balance > 0 ? [p(`Balance Due: ${fmtUsd(balance)}`, { align: 'right', bold: true, size: 24, color: RUST })] : []),
-    p(''),
-    ...(data.notes ? [p(''), p('Notes:', { bold: true, size: 20, color: '666666' }), p(data.notes, { size: 20 })] : []),
+    sp(240),
+
+    totalsTable,
+    sp(240),
+
+    ...(data.notes
+      ? [
+          eyebrow('Notes'),
+          p(data.notes, { size: 20, color: BRAND.TEXT_MUTED }),
+          sp(240),
+        ]
+      : []),
+
+    rustRule(),
+    sp(120),
+    p(
+      `Please remit by ${data.dueDate ?? 'the agreed due date'}. Checks payable to AK Renovations, LLC. Online payment link sent separately if enabled.`,
+      { size: 18, color: BRAND.TEXT_MUTED, italics: true },
+    ),
+    sp(320),
+
+    brandFooter(AK_PHONE, AK_WEBSITE),
   ]
 
   const doc = new Document({
@@ -166,20 +273,18 @@ export async function buildInvoiceDocxBlob(data: InvoiceData): Promise<{ blob: B
         document: { run: { font: 'Arial' } },
       },
     },
-    sections: [{ properties: {}, children }],
+    sections: [
+      {
+        properties: {
+          page: { margin: { top: 720, bottom: 720, left: 720, right: 720 } },
+        },
+        children,
+      },
+    ],
   })
 
   const blob = await Packer.toBlob(doc)
-  const safeClient = data.clientName.replace(/[^a-zA-Z0-9]/g, '_')
+  const safeClient = (data.clientName || 'Client').replace(/[^a-zA-Z0-9]+/g, '_').replace(/^_+|_+$/g, '') || 'Client'
   const filename = `${safeClient}_Invoice_${data.invoiceNumber}.docx`
   return { blob, filename }
-}
-
-function emptyBorders() {
-  return {
-    top:    { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-    bottom: { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-    left:   { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-    right:  { style: BorderStyle.NONE, size: 0, color: 'FFFFFF' },
-  }
 }
