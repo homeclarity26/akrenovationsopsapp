@@ -17,7 +17,11 @@ import fs from 'node:fs'
 
 const APP = 'https://akrenovationsopsapp.vercel.app'
 const SUPABASE_URL = 'https://mebzqfeeiciayxdetteb.supabase.co'
-const EMAIL = 'akrenovations01@gmail.com'
+// After the 2026-04-19 platform/admin separation, the sweep uses two logins:
+// ADMIN_EMAIL walks /admin/* + /employee/* + project-detail routes; PLATFORM_EMAIL
+// walks /platform/*. Before that split, a single super_admin login covered both.
+const ADMIN_EMAIL = 'akrenovations01@gmail.com'
+const PLATFORM_EMAIL = 'adam@hometownbuildersclub.com'
 
 // PAT lookup (same pattern as smoke-edge.sh)
 const MEMORY = '/Users/adamkilgore/.claude/projects/-Users-adamkilgore-Desktop-AKR---BUSINESS-APP/memory/infrastructure_state.md'
@@ -83,22 +87,35 @@ const PLATFORM_ROUTES = [
   '/platform/users',
 ]
 
-async function getMagicLink() {
-  // Get service-role key
+async function getServiceRoleKey() {
   const keysRes = await fetch(`https://api.supabase.com/v1/projects/mebzqfeeiciayxdetteb/api-keys?reveal=true`, {
-    headers: { Authorization: `Bearer ${PAT}` },
+    headers: { Authorization: `Bearer ${PAT}`, 'User-Agent': 'Mozilla/5.0' },
   })
   const keys = await keysRes.json()
   const sr = keys.find(k => k.name === 'service_role' && k.type === 'legacy')?.api_key
   if (!sr) throw new Error('no service_role key')
+  return sr
+}
 
+async function getMagicLink(email, sr) {
   const linkRes = await fetch(`${SUPABASE_URL}/auth/v1/admin/generate_link`, {
     method: 'POST',
     headers: { apikey: sr, Authorization: `Bearer ${sr}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ type: 'magiclink', email: EMAIL }),
+    body: JSON.stringify({ type: 'magiclink', email }),
   })
   const j = await linkRes.json()
   return j.action_link
+}
+
+async function loginAs(ctx, page, email, sr) {
+  const link = await getMagicLink(email, sr)
+  // Fresh context would be cleaner but reusing works — the magic link redirect
+  // replaces the session in place.
+  await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 25_000 })
+  await page.waitForTimeout(3500)
+  const loggedIn = !/\/login/.test(page.url())
+  if (!loggedIn) throw new Error(`login for ${email} did not redirect to app; url = ${page.url()}`)
+  return page.url()
 }
 
 const results = []
@@ -148,8 +165,7 @@ async function sweepRoute(page, route) {
 }
 
 (async () => {
-  console.log('[sweep] generating magic link …')
-  const link = await getMagicLink()
+  const sr = await getServiceRoleKey()
   console.log('[sweep] launching webkit …')
   const browser = await webkit.launch({ headless: true })
   const ctx = await browser.newContext({
@@ -158,41 +174,37 @@ async function sweepRoute(page, route) {
   })
   const page = await ctx.newPage()
 
-  console.log('[sweep] logging in via magic link …')
-  await page.goto(link, { waitUntil: 'domcontentloaded', timeout: 25_000 })
-  await page.waitForTimeout(3500)
-  const loggedIn = !/\/login/.test(page.url())
-  if (!loggedIn) {
-    console.error('[sweep] login did not redirect to app; aborting. URL =', page.url())
-    await browser.close(); process.exit(3)
-  }
-  console.log('[sweep] logged in, url =', page.url())
+  // ── Admin / Employee / Project-detail routes as the company admin ──
+  console.log(`[sweep] logging in as ${ADMIN_EMAIL} …`)
+  const adminUrl = await loginAs(ctx, page, ADMIN_EMAIL, sr)
+  console.log('[sweep] logged in, url =', adminUrl)
 
-  console.log('\n── Admin routes (super_admin) ──')
+  console.log('\n── Admin routes ──')
   for (const r of ADMIN_ROUTES) await sweepRoute(page, r)
 
-  console.log('\n── Platform routes ──')
-  for (const r of PLATFORM_ROUTES) await sweepRoute(page, r)
-
   console.log('\n── Employee / Field routes ──')
-  // Same user is super_admin so has employee mode access via ModeToggle; direct-URL works.
+  // Company admin has Admin↔Field toggle; direct-URL to /employee works.
   for (const r of EMPLOYEE_ROUTES) await sweepRoute(page, r)
 
   // Project-detail routes — these mount ProjectPresenceBar + ProjectBalanceCard
   // which the list-level routes don't. Fetch the first project id from the DB
   // and sweep its admin + employee detail pages.
   console.log('\n── Project detail routes ──')
-  const keysRes2 = await fetch(`https://api.supabase.com/v1/projects/mebzqfeeiciayxdetteb/api-keys?reveal=true`, {
-    headers: { Authorization: `Bearer ${PAT}` },
-  })
-  const sr2 = (await keysRes2.json()).find(k => k.name === 'service_role' && k.type === 'legacy').api_key
   const projs = await (await fetch(`${SUPABASE_URL}/rest/v1/projects?select=id&order=created_at.desc&limit=1`, {
-    headers: { apikey: sr2, Authorization: `Bearer ${sr2}` },
+    headers: { apikey: sr, Authorization: `Bearer ${sr}` },
   })).json()
   if (projs?.[0]?.id) {
     await sweepRoute(page, `/admin/projects/${projs[0].id}`)
     await sweepRoute(page, `/employee/projects/${projs[0].id}`)
   }
+
+  // ── Platform routes as the platform owner (separate login) ──
+  console.log(`\n[sweep] logging in as ${PLATFORM_EMAIL} …`)
+  const platformUrl = await loginAs(ctx, page, PLATFORM_EMAIL, sr)
+  console.log('[sweep] logged in, url =', platformUrl)
+
+  console.log('\n── Platform routes ──')
+  for (const r of PLATFORM_ROUTES) await sweepRoute(page, r)
 
   await browser.close()
 

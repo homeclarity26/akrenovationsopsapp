@@ -32,6 +32,10 @@ export function ModeProvider({ children }: { children: ReactNode }) {
   const navigate = useNavigate()
   const location = useLocation()
 
+  // Admin↔Field toggle is scoped to a single company. platform_owner does
+  // NOT get it — they run a separate UI at /platform. super_admin retains
+  // the toggle during the migration window (Phase A/B) and is removed in
+  // Phase C.
   const canToggle = user?.role === 'admin' || user?.role === 'super_admin'
 
   const [currentMode, setCurrentMode] = useState<AppMode>(() => {

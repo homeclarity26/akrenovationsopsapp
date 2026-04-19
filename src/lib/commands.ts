@@ -22,7 +22,7 @@ import type { AppUser } from '@/context/AuthContext'
 // Types
 // ---------------------------------------------------------------------------
 
-export type CommandRole = 'super_admin' | 'admin' | 'employee' | 'client'
+export type CommandRole = 'super_admin' | 'admin' | 'employee' | 'client' | 'platform_owner'
 
 export interface CommandContext {
   /** Current react-router pathname */

@@ -160,17 +160,32 @@ function AuthRequired({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'client' | 'super_admin'; children: React.ReactNode }) {
+function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'client' | 'super_admin' | 'platform_owner'; children: React.ReactNode }) {
   const { user, loading } = useAuth()
   // Wait for the initial Supabase session check to complete before deciding
   // where to send the user. Without this, a page refresh redirects to /login
   // before the session restores.
   if (loading) return <AuthLoadingScreen />
   if (!user) return <Navigate to="/login" replace />
-  // Super-admins can access any area — platform admin, company admin, field
-  // mode (for previewing employee screens), client portal (for previewing
-  // what clients see). Previously they were blocked from /employee, which
-  // silently broke the Admin/Field ModeToggle.
+
+  // platform_owner (the product owner persona) is scoped to /platform/* only.
+  // They cannot access /admin, /employee, or /client — a visit redirects to
+  // their own home. They do NOT get blanket tenant access.
+  if (user.role === 'platform_owner') {
+    if (role === 'platform_owner') return <>{children}</>
+    return <Navigate to="/platform" replace />
+  }
+
+  // Platform routes are restricted to platform_owner. Any non-platform_owner
+  // hitting /platform bounces back to their own home.
+  if (role === 'platform_owner') {
+    if (user.role === 'admin' || user.role === 'super_admin') return <Navigate to="/admin" replace />
+    if (user.role === 'employee') return <Navigate to="/employee" replace />
+    return <Navigate to="/client/progress" replace />
+  }
+
+  // super_admin keeps full access during the migration window (Phase A/B).
+  // Phase C removes the role entirely.
   if (user.role === 'super_admin') return <>{children}</>
   // Admins can access all routes (field mode lets admins use employee screens)
   if (user.role === 'admin') return <>{children}</>
@@ -242,6 +257,7 @@ function RootRedirect() {
   }
 
   // Normal routing
+  if (user.role === 'platform_owner') return <Navigate to="/platform" replace />
   if (user.role === 'super_admin') return <Navigate to="/admin" replace />
   if (user.role === 'admin') return <Navigate to="/admin" replace />
   if (user.role === 'employee') return <Navigate to="/employee" replace />
@@ -360,8 +376,8 @@ function AppRoutes() {
           <Route path="referral" element={<ClientReferral />} />
         </Route>
 
-        {/* Platform Admin (super_admin) */}
-        <Route path="/platform" element={<ProtectedRoute role="super_admin"><PlatformLayout /></ProtectedRoute>}>
+        {/* Platform Admin (platform_owner — distinct from company admin) */}
+        <Route path="/platform" element={<ProtectedRoute role="platform_owner"><PlatformLayout /></ProtectedRoute>}>
           <Route index element={<PlatformDashboard />} />
           <Route path="companies" element={<PlatformCompanies />} />
           <Route path="companies/:id" element={<PlatformCompanyDetail />} />

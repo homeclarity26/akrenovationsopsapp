@@ -15,7 +15,10 @@ import {
 import { supabase } from '@/lib/supabase'
 import type { Session } from '@supabase/supabase-js'
 
-type Role = 'admin' | 'employee' | 'client' | 'super_admin'
+// 'super_admin' remains in the union during the platform-owner migration
+// (Phase A/B in the 2026-04-19 role separation). It will be removed in
+// Phase C once every reference is rewritten.
+type Role = 'admin' | 'employee' | 'client' | 'super_admin' | 'platform_owner'
 
 export interface AppUser {
   id: string
