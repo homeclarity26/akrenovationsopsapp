@@ -2,12 +2,12 @@ import { Check, X, TrendingUp, ArrowLeft } from 'lucide-react'
 import { Card, MetricCard } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useBackNavigation } from '@/hooks/useBackNavigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 
 export function BonusTrackerPage() {
-  const navigate = useNavigate()
+  const goBack = useBackNavigation('/employee')
   const { user } = useAuth()
 
   const { data: records = [], isLoading, error, refetch } = useQuery({
@@ -40,7 +40,7 @@ export function BonusTrackerPage() {
   return (
     <div className="p-4 space-y-5">
       <div className="flex items-center gap-2 pt-2">
-        <button onClick={() => navigate(-1)} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
+        <button onClick={goBack} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
           <ArrowLeft size={20} />
         </button>
         <div>

@@ -2,12 +2,12 @@ import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { MapPin, ChevronRight, ArrowLeft } from 'lucide-react'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useBackNavigation } from '@/hooks/useBackNavigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 
 export function SchedulePageEmployee() {
-  const navigate = useNavigate()
+  const goBack = useBackNavigation('/employee')
   const { user } = useAuth()
   const todayStr = new Date().toISOString().slice(0, 10)
 
@@ -48,7 +48,7 @@ export function SchedulePageEmployee() {
   return (
     <div className="p-4 space-y-5">
       <div className="flex items-center gap-2 pt-2">
-        <button onClick={() => navigate(-1)} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
+        <button onClick={goBack} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
           <ArrowLeft size={20} />
         </button>
         <h1 className="font-display text-2xl text-[var(--navy)]">Schedule</h1>

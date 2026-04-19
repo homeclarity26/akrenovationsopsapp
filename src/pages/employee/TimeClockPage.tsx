@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { Plus, Clock, X, ArrowLeft } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useBackNavigation } from '@/hooks/useBackNavigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { useToast } from '@/hooks/useToast'
@@ -86,7 +86,7 @@ function fmtMoney(n: number) {
 
 export function TimeClockPage() {
   const { user } = useAuth()
-  const navigate = useNavigate()
+  const goBack = useBackNavigation('/employee')
   const queryClient = useQueryClient()
   const { toast } = useToast()
   const TODAY = new Date().toISOString().slice(0, 10)
@@ -348,7 +348,7 @@ export function TimeClockPage() {
   return (
     <div className="p-4 space-y-4 pb-24">
       {/* Back arrow */}
-      <button onClick={() => navigate(-1)} className="flex items-center gap-1.5 text-sm text-[var(--text-secondary)] pt-2 px-0 pb-0">
+      <button onClick={goBack} className="flex items-center gap-1.5 text-sm text-[var(--text-secondary)] pt-2 px-0 pb-0">
         <ArrowLeft size={16} />
         Back
       </button>

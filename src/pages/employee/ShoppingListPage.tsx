@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useBackNavigation } from '@/hooks/useBackNavigation'
 import { Plus, Check, ArrowLeft, Trash2, Link2, X as XIcon, PackageMinus, CircleCheck, AlertTriangle } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { cn } from '@/lib/utils'
@@ -44,7 +44,7 @@ interface ActiveProject {
 }
 
 export function ShoppingListPage() {
-  const navigate = useNavigate()
+  const goBack = useBackNavigation('/employee')
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const { toast } = useToast()
@@ -342,7 +342,7 @@ export function ShoppingListPage() {
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
             <button
-              onClick={() => navigate(-1)}
+              onClick={goBack}
               className="w-8 h-8 flex items-center justify-center rounded-lg text-[var(--text-secondary)] hover:bg-[var(--border-light)] transition-colors"
               aria-label="Go back"
             >

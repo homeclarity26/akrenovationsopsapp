@@ -5,7 +5,7 @@ import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
 import { cn } from '@/lib/utils'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useBackNavigation } from '@/hooks/useBackNavigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 
@@ -33,7 +33,7 @@ interface ChecklistItem {
 }
 
 export function EmployeeChecklistsPage() {
-  const navigate = useNavigate()
+  const goBack = useBackNavigation('/employee')
   const { user } = useAuth()
   const queryClient = useQueryClient()
 
@@ -106,7 +106,7 @@ export function EmployeeChecklistsPage() {
   return (
     <div className="space-y-4 pb-24">
       <div className="flex items-center gap-2">
-        <button onClick={() => navigate(-1)} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
+        <button onClick={goBack} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
           <ArrowLeft size={20} />
         </button>
         <PageHeader title="Checklists" subtitle={`${pendingCount} items assigned to you`} />

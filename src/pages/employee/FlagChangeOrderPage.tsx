@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { ArrowLeft, AlertTriangle, Check, Loader2 } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useBackNavigation } from '@/hooks/useBackNavigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 import { Card } from '@/components/ui/Card'
@@ -30,7 +30,7 @@ interface FlaggedChange {
 
 export function FlagChangeOrderPage() {
   const { user } = useAuth()
-  const navigate = useNavigate()
+  const goBack = useBackNavigation('/employee')
   const queryClient = useQueryClient()
 
   const [projectId, setProjectId] = useState('')
@@ -151,7 +151,7 @@ export function FlagChangeOrderPage() {
   return (
     <div className="p-4 space-y-4 max-w-xl mx-auto">
       <button
-        onClick={() => navigate(-1)}
+        onClick={goBack}
         className="text-sm text-[var(--text-secondary)] inline-flex items-center gap-1"
       >
         <ArrowLeft size={14} /> Back

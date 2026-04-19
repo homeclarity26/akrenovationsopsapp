@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { useAuth } from '@/context/AuthContext'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useBackNavigation } from '@/hooks/useBackNavigation'
 import { supabase } from '@/lib/supabase'
 import type { PayrollRecord } from '@/data/mock'
 
@@ -22,7 +22,7 @@ type PayPeriodRow = { id: string; period_start: string; period_end: string; pay_
 type YTDData = { gross_pay_ytd: number; net_pay_ytd: number; federal_withholding_ytd: number; state_withholding_ytd: number; employee_ss_ytd: number; employee_medicare_ytd: number; year: number }
 
 export function PaystubsPage() {
-  const navigate = useNavigate()
+  const goBack = useBackNavigation('/employee')
   const { user } = useAuth()
   const [expanded, setExpanded] = useState<string | null>(null)
 
@@ -68,7 +68,7 @@ export function PaystubsPage() {
   return (
     <div className="px-4 lg:px-8 py-4 space-y-4 max-w-2xl mx-auto">
       <div className="flex items-center gap-2">
-        <button onClick={() => navigate(-1)} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
+        <button onClick={goBack} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
           <ArrowLeft size={20} />
         </button>
         <PageHeader title="My paystubs" subtitle="Bi-weekly · Direct deposit via Gusto" />

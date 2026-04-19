@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Send, ArrowLeft, MessageSquare } from 'lucide-react'
-import { useNavigate } from 'react-router-dom'
+import { useBackNavigation } from '@/hooks/useBackNavigation'
 import { useAuth } from '@/context/AuthContext'
 import { supabase } from '@/lib/supabase'
 
@@ -13,7 +13,7 @@ interface Message {
 }
 
 export function MessagesPage() {
-  const navigate = useNavigate()
+  const goBack = useBackNavigation('/employee')
   const { user } = useAuth()
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -80,7 +80,7 @@ export function MessagesPage() {
     <div className="flex flex-col h-[calc(100svh-7rem)]">
       {/* Header */}
       <div className="px-4 py-3 border-b border-[var(--border-light)] bg-white flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="p-1 -ml-1 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)] flex-shrink-0">
+        <button onClick={goBack} className="p-1 -ml-1 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)] flex-shrink-0">
           <ArrowLeft size={20} />
         </button>
         <div>

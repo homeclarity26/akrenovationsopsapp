@@ -2,12 +2,12 @@ import { Phone, Mail, MapPin, ExternalLink, User, ArrowLeft } from 'lucide-react
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { useQuery } from '@tanstack/react-query'
-import { useNavigate } from 'react-router-dom'
+import { useBackNavigation } from '@/hooks/useBackNavigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
 
 export function ClientInfoPage() {
-  const navigate = useNavigate()
+  const goBack = useBackNavigation('/employee')
   const { user } = useAuth()
 
   const { data: project, isLoading, error, refetch } = useQuery({
@@ -43,7 +43,7 @@ export function ClientInfoPage() {
   }
 
   const backBtn = (
-    <button onClick={() => navigate(-1)} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
+    <button onClick={goBack} className="p-1.5 -ml-1.5 rounded-lg text-[var(--text-secondary)] hover:bg-[var(--bg)]">
       <ArrowLeft size={20} />
     </button>
   )

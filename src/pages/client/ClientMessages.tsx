@@ -108,20 +108,29 @@ export function ClientMessages() {
   const profileMap = new Map<string, SenderProfile>()
   for (const p of profiles) profileMap.set(p.id, p)
 
-  // Real-time subscription for incoming messages
+  // Real-time subscription for incoming messages. Safari 26+ can throw
+  // "WebSocket not available: The operation is insecure" on subscribe();
+  // swallow so realtime failure doesn't take down the messages page.
   useEffect(() => {
     if (!projectId) return
-    const channel = supabase
-      .channel(`messages:${projectId}`)
-      .on(
-        'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `project_id=eq.${projectId}` },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['messages', projectId] })
-        },
-      )
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase
+        .channel(`messages:${projectId}`)
+        .on(
+          'postgres_changes',
+          { event: 'INSERT', schema: 'public', table: 'messages', filter: `project_id=eq.${projectId}` },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ['messages', projectId] })
+          },
+        )
+      channel.subscribe()
+    } catch (err) {
+      console.warn('[ClientMessages] realtime unavailable', err)
+    }
+    return () => {
+      try { if (channel) supabase.removeChannel(channel) } catch { /* noop */ }
+    }
   }, [projectId, queryClient])
 
   // Auto-scroll on new messages

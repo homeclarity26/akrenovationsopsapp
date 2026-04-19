@@ -5,13 +5,13 @@ import { SectionHeader } from '@/components/ui/SectionHeader'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/context/AuthContext'
-import { useNavigate } from 'react-router-dom'
+import { useBackNavigation } from '@/hooks/useBackNavigation'
 
 interface Project { id: string; title: string }
 
 export function NotesPage() {
   const { user } = useAuth()
-  const navigate = useNavigate()
+  const goBack = useBackNavigation('/employee')
   const queryClient = useQueryClient()
 
   // Persist last-used project
@@ -132,7 +132,7 @@ export function NotesPage() {
     <div className="p-4 space-y-5">
       <div className="pt-2 flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="p-1 -ml-1">
+          <button onClick={goBack} className="p-1 -ml-1">
             <ArrowLeft size={20} className="text-[var(--navy)]" />
           </button>
           <h1 className="font-display text-2xl text-[var(--navy)]">Notes</h1>

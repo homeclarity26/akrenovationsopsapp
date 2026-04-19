@@ -52,19 +52,32 @@ export function EmployeeHome() {
   // Keep the badge fresh across devices: any INSERT/UPDATE/DELETE on
   // shopping_list_items invalidates the count query, so when someone ticks an
   // item off their phone this tile updates on everyone else's home screen too.
+  //
+  // Safari 26+ throws "WebSocket not available: The operation is insecure"
+  // synchronously on subscribe() in some contexts (fresh tab, restored
+  // session). Swallow so a realtime setup failure doesn't bubble up to the
+  // error boundary — live updates just won't happen; a manual refresh
+  // picks up changes.
   useEffect(() => {
     if (!user?.id) return
-    const channel = supabase
-      .channel(`home-shopping-badge-${user.id}`)
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'shopping_list_items' },
-        () => {
-          queryClient.invalidateQueries({ queryKey: ['shopping-needed-count'] })
-        },
-      )
-      .subscribe()
-    return () => { supabase.removeChannel(channel) }
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase
+        .channel(`home-shopping-badge-${user.id}`)
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'shopping_list_items' },
+          () => {
+            queryClient.invalidateQueries({ queryKey: ['shopping-needed-count'] })
+          },
+        )
+      channel.subscribe()
+    } catch (err) {
+      console.warn('[EmployeeHome] shopping-badge realtime unavailable', err)
+    }
+    return () => {
+      try { if (channel) supabase.removeChannel(channel) } catch { /* noop */ }
+    }
   }, [user?.id, queryClient])
 
   // Today's schedule event
