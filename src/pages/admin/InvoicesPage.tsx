@@ -1,11 +1,13 @@
 import { useState } from 'react'
-import { Plus, Send, Download, ExternalLink, X, CheckCircle2, DollarSign } from 'lucide-react'
+import { Plus, Send, ExternalLink, X, CheckCircle2, DollarSign } from 'lucide-react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
+import { ShareMenu } from '@/components/ui/ShareMenu'
 import { supabase } from '@/lib/supabase'
+import { buildInvoiceDocxBlob } from '@/lib/invoiceGenerator'
 
 type Tab = 'all' | 'outstanding' | 'paid'
 
@@ -306,40 +308,25 @@ export function InvoicesPage() {
                       Mark Paid
                     </button>
                   )}
-                  {/* Download PDF */}
-                  <button
-                    onClick={async e => {
-                      e.stopPropagation()
-                      const supabaseUrl = import.meta.env.VITE_SUPABASE_URL as string
-                      const { data: { session } } = await supabase.auth.getSession()
-                      const token = session?.access_token ?? import.meta.env.VITE_SUPABASE_ANON_KEY as string
-                      try {
-                        const res = await fetch(`${supabaseUrl}/functions/v1/generate-pdf`, {
-                          method: 'POST',
-                          headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
-                          body: JSON.stringify({ type: 'invoice', id: invId }),
-                        })
-                        if (res.ok) {
-                          const blob = await res.blob()
-                          const url = URL.createObjectURL(blob)
-                          const a = document.createElement('a')
-                          a.href = url
-                          a.download = `${invNumber}.pdf`
-                          a.click()
-                          URL.revokeObjectURL(url)
-                        } else {
-                          const errData = await res.json().catch(() => ({}))
-                          alert(`PDF generation failed: ${errData.error ?? `HTTP ${res.status}`}`)
-                        }
-                      } catch (err) {
-                        alert(`PDF generation error: ${err instanceof Error ? err.message : 'Network error'}`)
-                      }
-                    }}
-                    className="flex items-center gap-1.5 text-xs text-[var(--navy)] font-semibold border border-[var(--navy)]/20 bg-[var(--cream-light)] px-3 py-2 rounded-xl min-h-[36px] hover:bg-[var(--cream)] transition-colors"
-                  >
-                    <Download size={12} />
-                    PDF
-                  </button>
+                  {/* Share (Download PDF / .docx / Email / SMS / Copy link) */}
+                  <ShareMenu
+                    kind="invoice"
+                    documentId={invId}
+                    documentTitle={`Invoice ${invNumber}`}
+                    defaultEmail={String((inv as Record<string, unknown>).client_email ?? (inv.projects as Record<string, unknown> | null)?.client_email ?? '')}
+                    defaultPhone={String((inv as Record<string, unknown>).client_phone ?? (inv.projects as Record<string, unknown> | null)?.client_phone ?? '')}
+                    buildDocx={async () => buildInvoiceDocxBlob({
+                      invoiceNumber: invNumber,
+                      title: String(inv.title ?? `Invoice ${invNumber}`),
+                      clientName: String((inv.projects as Record<string, unknown> | null)?.client_name ?? 'Client'),
+                      clientAddress: String((inv.projects as Record<string, unknown> | null)?.address ?? ''),
+                      issueDate: String(inv.issue_date ?? inv.created_at ?? '').slice(0, 10),
+                      dueDate: inv.due_date ? String(inv.due_date).slice(0, 10) : null,
+                      lineItems,
+                      amountPaid: Number(inv.amount_paid ?? 0),
+                      notes: String(inv.notes ?? '') || null,
+                    })}
+                  />
                   {!!inv.drive_url && (
                     <button
                       onClick={() => window.open(inv.drive_url as string, '_blank')}

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Plus, Eye, Send, ChevronRight, Image as ImageIcon, X, Download, Sparkles, Loader2, FileText } from 'lucide-react'
+import { Plus, Eye, Send, ChevronRight, Image as ImageIcon, X, Sparkles, Loader2, FileText } from 'lucide-react'
+import { ShareMenu } from '@/components/ui/ShareMenu'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { StatusPill } from '@/components/ui/StatusPill'
@@ -8,7 +9,7 @@ import { Button } from '@/components/ui/Button'
 import { EditableDeliverable } from '@/components/ui/EditableDeliverable'
 import type { EditableItem } from '@/components/ui/EditableDeliverable'
 import { supabase } from '@/lib/supabase'
-import { generateProposalDocx, SCOPE_FRAMEWORKS, defaultProposalData } from '@/lib/proposalGenerator'
+import { buildProposalDocxBlob, SCOPE_FRAMEWORKS, defaultProposalData } from '@/lib/proposalGenerator'
 import type { ProposalData, ScopeSection } from '@/lib/proposalGenerator'
 
 type ProposalRecord = Record<string, unknown>
@@ -79,7 +80,6 @@ export function ProposalsPage() {
   const [showNewForm, setShowNewForm] = useState(false)
   const [saving, setSaving] = useState(false)
   const [aiGenerating, setAiGenerating] = useState(false)
-  const [downloadingDocx, setDownloadingDocx] = useState(false)
 
   const { data: fetchedProposals = [], isLoading, error, refetch } = useQuery({
     queryKey: ['proposals'],
@@ -100,18 +100,6 @@ export function ProposalsPage() {
 
   const proposals = localProposals.length > 0 ? localProposals : fetchedProposals
   const viewing = proposals.find(p => p.id === selected) ?? null
-
-  const handleDownloadDocx = async (proposal: ProposalRecord) => {
-    setDownloadingDocx(true)
-    try {
-      const data = buildProposalData(proposal)
-      await generateProposalDocx(data)
-    } catch (err) {
-      alert('Error generating document: ' + (err instanceof Error ? err.message : 'Unknown error'))
-    } finally {
-      setDownloadingDocx(false)
-    }
-  }
 
   const handleAiGenerate = async (proposalId: string) => {
     const proposal = proposals.find(p => p.id === proposalId)
@@ -202,15 +190,14 @@ export function ProposalsPage() {
             {aiGenerating ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
             {aiGenerating ? 'Generating...' : 'Generate with AI'}
           </Button>
-          <Button
-            variant="secondary"
-            size="sm"
-            onClick={() => handleDownloadDocx(viewing)}
-            disabled={downloadingDocx}
-          >
-            {downloadingDocx ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />}
-            {downloadingDocx ? 'Building...' : 'Download .docx'}
-          </Button>
+          <ShareMenu
+            kind="proposal"
+            documentId={String(viewing.id)}
+            documentTitle={String(viewing.title ?? 'Proposal')}
+            defaultEmail={String((viewing as Record<string, unknown>).client_email ?? '')}
+            defaultPhone={String((viewing as Record<string, unknown>).client_phone ?? '')}
+            buildDocx={() => buildProposalDocxBlob(buildProposalData(viewing))}
+          />
         </div>
 
         {/* Overview */}

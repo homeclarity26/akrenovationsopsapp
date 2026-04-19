@@ -1174,7 +1174,23 @@ const footerTable = (data: ProposalData) =>
 
 // ── BUILD AND DOWNLOAD ───────────────────────────────────────
 
+export async function buildProposalDocxBlob(data: ProposalData): Promise<{ blob: Blob; filename: string }> {
+  const { doc, filename } = await composeProposalDoc(data)
+  const blob = await Packer.toBlob(doc)
+  return { blob, filename }
+}
+
 export async function generateProposalDocx(data: ProposalData): Promise<void> {
+  const { blob, filename } = await buildProposalDocxBlob(data)
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function composeProposalDoc(data: ProposalData): Promise<{ doc: Document; filename: string }> {
   const children = [
     coverTable(data),
     sp(560),
@@ -1293,11 +1309,6 @@ export async function generateProposalDocx(data: ProposalData): Promise<void> {
     ],
   });
 
-  const buffer = await Packer.toBlob(doc);
-  const url = URL.createObjectURL(buffer);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `${data.clientLastName}_${data.projectType.replace(/\s+/g, "_")}_Proposal.docx`;
-  a.click();
-  URL.revokeObjectURL(url);
+  const filename = `${data.clientLastName}_${data.projectType.replace(/\s+/g, '_')}_Proposal.docx`
+  return { doc, filename }
 }
