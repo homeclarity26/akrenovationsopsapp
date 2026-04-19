@@ -110,8 +110,11 @@ export function AdminDashboard() {
   const outstandingAR = invoices
     .filter(i => ['sent', 'viewed', 'partial_paid', 'overdue'].includes(i.status))
     .reduce((sum, i) => sum + (i.balance_due ?? 0), 0)
-  const avgMargin = activeProjects.length > 0
-    ? activeProjects.filter(p => p.actual_margin).reduce((sum, p) => sum + (p.actual_margin ?? 0), 0) / activeProjects.filter(p => p.actual_margin).length
+  // Guard: dividing by the count of projects-with-margins, not the count of
+  // active projects, or we divide by zero (→ NaN%) when none have margins yet.
+  const projectsWithMargin = activeProjects.filter(p => typeof p.actual_margin === 'number' && !Number.isNaN(p.actual_margin))
+  const avgMargin = projectsWithMargin.length > 0
+    ? projectsWithMargin.reduce((sum, p) => sum + (p.actual_margin ?? 0), 0) / projectsWithMargin.length
     : null
 
   const hasAlerts = overdueInvoices.length > 0 || atRiskProjects.length > 0

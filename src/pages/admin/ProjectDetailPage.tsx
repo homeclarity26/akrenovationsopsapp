@@ -18,6 +18,7 @@ import { useProjectRealtime } from '@/hooks/useProjectRealtime'
 import { ProjectActivityFeed } from '@/components/project/ProjectActivityFeed'
 import { ProjectPresenceBar } from '@/components/project/ProjectPresenceBar'
 import { ClientShareToggle } from '@/components/project/ClientShareToggle'
+import { ProjectBalanceCard } from '@/components/project/ProjectBalanceCard'
 import { ProjectSuggestionInbox } from '@/components/project/ProjectSuggestionInbox'
 import { InviteClientToPortal } from '@/components/project/InviteClientToPortal'
 
@@ -635,6 +636,8 @@ export function ProjectDetailPage() {
         {/* ── FINANCIALS ── */}
         {tab === 'financials' && (
           <>
+            <ProjectBalanceCard projectId={project.id} />
+
             <div className="grid grid-cols-2 gap-3">
               <div className="bg-[var(--white)] border border-[var(--border-light)] rounded-2xl p-4">
                 <p className="text-[10px] font-semibold uppercase tracking-widest text-[var(--text-tertiary)] mb-1">Contract</p>

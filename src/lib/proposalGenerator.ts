@@ -1309,6 +1309,19 @@ async function composeProposalDoc(data: ProposalData): Promise<{ doc: Document; 
     ],
   });
 
-  const filename = `${data.clientLastName}_${data.projectType.replace(/\s+/g, '_')}_Proposal.docx`
+  // Filename: prefer "LastName_ProjectType.docx" over the doubled-up
+  // "Client_BATHROOM_REMODEL_PROPOSAL_Proposal.docx" shape. Strip the
+  // trailing " PROPOSAL" token the caller appends so we don't print it twice,
+  // and sanitize any special chars that the OS file picker doesn't like.
+  const trimmedType = data.projectType
+    .replace(/\s*PROPOSAL\s*$/i, '')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    || 'Project'
+  const client = (data.clientLastName || 'Client')
+    .replace(/[^a-zA-Z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '')
+    || 'Client'
+  const filename = `${client}_${trimmedType}_Proposal.docx`
   return { doc, filename }
 }

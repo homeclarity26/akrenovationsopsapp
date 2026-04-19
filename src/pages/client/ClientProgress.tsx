@@ -6,6 +6,7 @@ import { CheckCircle, Circle, Loader } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { useClientProject } from '@/hooks/useClientProject'
 import { SkeletonCard, SkeletonText } from '@/components/ui/Skeleton'
+import { ProjectBalanceCard } from '@/components/project/ProjectBalanceCard'
 
 interface Phase {
   id: string
@@ -129,6 +130,9 @@ export function ClientProgress() {
         <MetricCard label="Est. Done" value={completionDisplay} subtitle="" />
         <MetricCard label="Contract" value={contractDisplay} subtitle="Signed" />
       </div>
+
+      {/* Balance card — same data as admin Financials, read-only here */}
+      {projectId && <ProjectBalanceCard projectId={projectId} readOnly />}
 
       {/* Phase tracker */}
       <div>

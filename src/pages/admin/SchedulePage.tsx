@@ -220,7 +220,11 @@ export function SchedulePage() {
       payload.start_time = newEvent.start_time || null
       payload.end_time = newEvent.end_time || null
     }
-    const { error: insertError } = await supabase.from('schedule_events').insert(payload)
+    const { data: inserted, error: insertError } = await supabase
+      .from('schedule_events')
+      .insert(payload)
+      .select('id')
+      .single()
     setSavingEvent(false)
     if (insertError) {
       setNewEventError(insertError.message)
@@ -229,6 +233,14 @@ export function SchedulePage() {
     queryClient.invalidateQueries({ queryKey: ['schedule_events'] })
     setShowNewEvent(false)
     resetNewEvent()
+    // Fire-and-forget push to Google Calendar. If the service account / calendar
+    // ID aren't set yet, the edge function returns 501 with a setup message —
+    // user sees it in the button's own Sync flow, so we swallow here.
+    if (inserted?.id) {
+      supabase.functions
+        .invoke('sync-to-google-calendar', { body: { event_id: inserted.id, action: 'upsert' } })
+        .catch(() => null)
+    }
   }
 
   const groupedEvents = groupByDate(scheduleEvents)
