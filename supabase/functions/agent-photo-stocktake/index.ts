@@ -219,7 +219,7 @@ serve(async (req) => {
   // Only employees + admins can propose stocktake counts. Same boundary as
   // the inventory_stocktakes INSERT policy.
   const role = auth.role
-  if (role !== 'employee' && role !== 'admin' && role !== 'super_admin') {
+  if (role !== 'employee' && role !== 'admin') {
     return new Response(
       JSON.stringify({ error: 'Forbidden' }),
       { status: 403, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },

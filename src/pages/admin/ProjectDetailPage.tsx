@@ -84,7 +84,7 @@ export function ProjectDetailPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const [tab, setTab] = useState<Tab>('overview')
-  const canShareWithClient = user?.role === 'admin' || user?.role === 'super_admin'
+  const canShareWithClient = user?.role === 'admin'
 
   // Comms tab — local state for the "Log conversation" inline form.
   const [commFormOpen, setCommFormOpen] = useState(false)

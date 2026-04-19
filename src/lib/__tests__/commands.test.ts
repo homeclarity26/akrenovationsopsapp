@@ -63,7 +63,7 @@ describe('Command registry', () => {
   });
 
   it('all roles are valid', () => {
-    const validRoles: CommandRole[] = ['super_admin', 'admin', 'employee', 'client'];
+    const validRoles: CommandRole[] = ['platform_owner', 'admin', 'employee', 'client'];
     for (const cmd of COMMANDS) {
       for (const role of cmd.roles) {
         expect(validRoles).toContain(role);
@@ -126,7 +126,7 @@ describe('getVisibleCommands', () => {
       makeCtx({ user: makeUser('employee'), pathname: '/employee/dashboard' }),
     );
     expect(cmds.find((c) => c.id === 'clock_in')).toBeDefined();
-    // create_project should NOT appear (admin/super_admin only)
+    // create_project should NOT appear (admin only)
     expect(cmds.find((c) => c.id === 'create_project')).toBeUndefined();
   });
 });

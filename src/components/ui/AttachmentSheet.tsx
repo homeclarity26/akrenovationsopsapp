@@ -59,13 +59,13 @@ const CLIENT_OPTIONS: AttachmentOption[] = [
 
 function getOptionsForRole(role: string | undefined): AttachmentOption[] {
   switch (role) {
-    case 'super_admin':
     case 'admin':
       return ADMIN_OPTIONS
     case 'employee':
       return EMPLOYEE_OPTIONS
     case 'client':
       return CLIENT_OPTIONS
+    // platform_owner has no attachment flow — they don't interact with projects
     default:
       return CLIENT_OPTIONS
   }

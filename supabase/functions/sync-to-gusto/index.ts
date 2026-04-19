@@ -383,7 +383,7 @@ serve(async (req) => {
   }
 
   const auth = await verifyAuth(req)
-  if (!auth || (auth.role !== 'admin' && auth.role !== 'super_admin')) {
+  if (!auth || (auth.role !== 'admin')) {
     return new Response(JSON.stringify({ error: 'Unauthorized' }), {
       status: 401,
       headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },

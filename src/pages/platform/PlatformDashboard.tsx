@@ -191,7 +191,7 @@ export function PlatformDashboard() {
                 <div className="text-right flex-shrink-0">
                   <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold ${
                     profile.role === 'admin' ? 'bg-[var(--navy)] text-white' :
-                    profile.role === 'super_admin' ? 'bg-[var(--rust)] text-white' :
+                    profile.role === 'platform_owner' ? 'bg-[var(--rust)] text-white' :
                     profile.role === 'employee' ? 'bg-[var(--cream-light)] text-[var(--navy)]' :
                     'bg-gray-100 text-[var(--text-secondary)]'
                   }`}>

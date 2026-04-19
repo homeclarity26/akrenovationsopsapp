@@ -3,7 +3,7 @@ import { NavLink, Navigate, Outlet } from 'react-router-dom'
 import {
   LayoutDashboard, Users, FolderOpen, DollarSign,
   Calendar, Sparkles, Settings, Menu, X, FileText,
-  Receipt, ClipboardList, HardHat, Shield, Wallet, ArrowLeft, Package
+  Receipt, ClipboardList, HardHat, Shield, Wallet, Package
 } from 'lucide-react'
 import { AgentBar } from '@/components/ui/AgentBar'
 import { APIUsageBar } from '@/components/ui/APIUsageBar'
@@ -35,13 +35,12 @@ export function AdminLayout() {
   const [menuOpen, setMenuOpen] = useState(false)
   const { user } = useAuth()
   const { data: company } = useCompanyProfile()
-  const isSuperAdmin = user?.role === 'super_admin'
 
-  // Onboarding guards — redirect to the appropriate wizard if incomplete
-  if (isSuperAdmin && !user?.platform_onboarding_complete) {
-    return <Navigate to="/onboard/platform" replace />
-  }
-  if ((isSuperAdmin || user?.role === 'admin') && !user?.company_onboarding_complete) {
+  // Onboarding guard — redirect to the company wizard if incomplete. The
+  // platform-onboarding guard used to fire here for super_admin; post-split
+  // platform_owner never reaches this layout (ProtectedRoute redirects them
+  // to /platform), so that branch is gone.
+  if (user?.role === 'admin' && !user?.company_onboarding_complete) {
     return <Navigate to="/onboard/company" replace />
   }
 
@@ -61,15 +60,6 @@ export function AdminLayout() {
           </div>
         </div>
         <nav className="flex-1 p-3 space-y-0.5">
-          {isSuperAdmin && (
-            <NavLink
-              to="/platform"
-              className="flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm text-white/60 hover:text-white hover:bg-white/10 transition-colors mb-2 border-b border-white/10 pb-3"
-            >
-              <ArrowLeft size={18} />
-              Back to Platform
-            </NavLink>
-          )}
           {NAV.map(({ to, label, icon: Icon, exact }) => (
             <NavLink
               key={to}
@@ -140,7 +130,7 @@ export function AdminLayout() {
       {menuOpen && (
         <div className="lg:hidden fixed inset-0 z-50" onClick={() => setMenuOpen(false)}>
           <div className="absolute right-2 top-12 w-52 bg-[var(--navy)] rounded-2xl p-2 shadow-2xl" onClick={e => e.stopPropagation()}>
-            {[...(isSuperAdmin ? [{ to: '/platform', label: 'Back to Platform', icon: ArrowLeft, exact: false }] : []), ...NAV, { to: '/admin/ai', label: 'AI Command', icon: Sparkles, exact: false }, { to: '/admin/settings', label: 'Settings', icon: Settings, exact: false }].map(({ to, label, icon: Icon, exact }) => (
+            {[...NAV, { to: '/admin/ai', label: 'AI Command', icon: Sparkles, exact: false }, { to: '/admin/settings', label: 'Settings', icon: Settings, exact: false }].map(({ to, label, icon: Icon, exact }) => (
               <NavLink
                 key={to}
                 to={to}

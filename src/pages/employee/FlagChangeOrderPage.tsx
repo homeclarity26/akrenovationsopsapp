@@ -56,10 +56,10 @@ export function FlagChangeOrderPage() {
     },
   })
 
-  // Admins / super_admins can flag on any project — they see the full list.
+  // Admins can flag on any project in their company — they see the full list.
   const { data: allProjects = [] } = useQuery({
     queryKey: ['all-active-projects-for-co', user?.company_id],
-    enabled: (user?.role === 'admin' || user?.role === 'super_admin') && !!user?.company_id,
+    enabled: user?.role === 'admin' && !!user?.company_id,
     queryFn: async () => {
       const { data } = await supabase
         .from('projects')
@@ -71,7 +71,7 @@ export function FlagChangeOrderPage() {
   })
 
   const pickableProjects = useMemo(() => {
-    const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
+    const isAdmin = user?.role === 'admin'
     return isAdmin ? allProjects : projects
   }, [user?.role, allProjects, projects])
 

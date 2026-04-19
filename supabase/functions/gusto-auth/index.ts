@@ -150,7 +150,7 @@ serve(async (req) => {
   // ── connect: redirect to Gusto authorize ──────────────────────────
   if (action === 'connect') {
     const auth = await verifyAuth(req)
-    if (!auth || (auth.role !== 'admin' && auth.role !== 'super_admin')) {
+    if (!auth || (auth.role !== 'admin')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
@@ -191,7 +191,7 @@ serve(async (req) => {
   // ── callback: exchange code for tokens ────────────────────────────
   if (action === 'callback') {
     const auth = await verifyAuth(req)
-    if (!auth || (auth.role !== 'admin' && auth.role !== 'super_admin')) {
+    if (!auth || (auth.role !== 'admin')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
@@ -296,7 +296,7 @@ serve(async (req) => {
   // ── POST: refresh or disconnect ───────────────────────────────────
   if (req.method === 'POST') {
     const auth = await verifyAuth(req)
-    if (!auth || (auth.role !== 'admin' && auth.role !== 'super_admin')) {
+    if (!auth || (auth.role !== 'admin')) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), {
         status: 401,
         headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },

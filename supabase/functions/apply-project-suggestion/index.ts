@@ -53,7 +53,7 @@ serve(async (req) => {
         { status: 401, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
-    if (auth.role !== 'admin' && auth.role !== 'super_admin') {
+    if (auth.role !== 'admin') {
       return new Response(
         JSON.stringify({ error: 'Admin access required' }),
         { status: 403, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },

@@ -48,7 +48,7 @@ export function ShoppingListPage() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const { toast } = useToast()
-  const isAdmin = user?.role === 'admin' || user?.role === 'super_admin'
+  const isAdmin = user?.role === 'admin'
 
   // ── add-item sheet state ──────────────────────────────────────────
   const [sheetOpen, setSheetOpen] = useState(false)

@@ -28,7 +28,7 @@ export function LoginPage() {
   useEffect(() => {
     if (loading) return
     if (!user) return
-    if (user.role === 'super_admin') navigate('/admin', { replace: true })
+    if (user.role === 'platform_owner') navigate('/platform', { replace: true })
     else if (user.role === 'admin') navigate('/', { replace: true })
     else if (user.role === 'employee') navigate('/employee', { replace: true })
     else navigate('/client/progress', { replace: true })

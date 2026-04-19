@@ -160,7 +160,7 @@ function AuthRequired({ children }: { children: React.ReactNode }) {
   return <>{children}</>
 }
 
-function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'client' | 'super_admin' | 'platform_owner'; children: React.ReactNode }) {
+function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'client' | 'platform_owner'; children: React.ReactNode }) {
   const { user, loading } = useAuth()
   // Wait for the initial Supabase session check to complete before deciding
   // where to send the user. Without this, a page refresh redirects to /login
@@ -179,14 +179,11 @@ function ProtectedRoute({ role, children }: { role: 'admin' | 'employee' | 'clie
   // Platform routes are restricted to platform_owner. Any non-platform_owner
   // hitting /platform bounces back to their own home.
   if (role === 'platform_owner') {
-    if (user.role === 'admin' || user.role === 'super_admin') return <Navigate to="/admin" replace />
+    if (user.role === 'admin') return <Navigate to="/admin" replace />
     if (user.role === 'employee') return <Navigate to="/employee" replace />
     return <Navigate to="/client/progress" replace />
   }
 
-  // super_admin keeps full access during the migration window (Phase A/B).
-  // Phase C removes the role entirely.
-  if (user.role === 'super_admin') return <>{children}</>
   // Admins can access all routes (field mode lets admins use employee screens)
   if (user.role === 'admin') return <>{children}</>
   if (user.role !== role) {
@@ -206,7 +203,8 @@ function RootRedirect() {
       setChecking(false)
       return
     }
-    // Only check company onboarding for admin role (super_admin uses profile flags)
+    // Only check company onboarding for admin role. platform_owner / employee /
+    // client each use their own profile flags + routing rules below.
     if (user.role !== 'admin') {
       setChecking(false)
       return
@@ -238,27 +236,23 @@ function RootRedirect() {
   if (!user) return <Navigate to="/login" replace />
 
   // 3-level onboarding routing
-  // Level 1: Platform admin onboarding (super_admin only)
-  if (user.role === 'super_admin' && !user.platform_onboarding_complete) {
+  // Level 1: Platform admin onboarding (platform_owner only)
+  if (user.role === 'platform_owner' && !user.platform_onboarding_complete) {
     return <Navigate to="/onboard/platform" replace />
   }
 
-  // Level 2: Company/business admin onboarding (admin + super_admin)
-  if (user.role === 'super_admin' && !user.company_onboarding_complete) {
-    return <Navigate to="/onboard/company" replace />
-  }
+  // Level 2: Company/business admin onboarding
   if (user.role === 'admin' && (needsCompanyOnboarding || !user.company_onboarding_complete)) {
     return <Navigate to="/onboard/company" replace />
   }
 
-  // Level 3: Field mode onboarding (employees, or admin/super_admin who haven't done it)
+  // Level 3: Field mode onboarding (employees)
   if (user.role === 'employee' && !user.field_onboarding_complete) {
     return <Navigate to="/onboard/field" replace />
   }
 
   // Normal routing
   if (user.role === 'platform_owner') return <Navigate to="/platform" replace />
-  if (user.role === 'super_admin') return <Navigate to="/admin" replace />
   if (user.role === 'admin') return <Navigate to="/admin" replace />
   if (user.role === 'employee') return <Navigate to="/employee" replace />
   return <Navigate to="/client/progress" replace />
@@ -274,7 +268,7 @@ function AppRoutes() {
         <Route path="/reset-password" element={<ResetPasswordPage />} />
 
         {/* Onboarding wizards (standalone, no layout chrome) */}
-        <Route path="/onboard/platform" element={<ProtectedRoute role="super_admin"><PlatformOnboarding /></ProtectedRoute>} />
+        <Route path="/onboard/platform" element={<ProtectedRoute role="platform_owner"><PlatformOnboarding /></ProtectedRoute>} />
         <Route path="/onboard/company" element={<ProtectedRoute role="admin"><CompanyOnboardingWizard /></ProtectedRoute>} />
         <Route path="/onboard/field" element={<AuthRequired><FieldOnboarding /></AuthRequired>} />
 

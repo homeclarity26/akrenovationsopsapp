@@ -22,7 +22,7 @@ import type { AppUser } from '@/context/AuthContext'
 // Types
 // ---------------------------------------------------------------------------
 
-export type CommandRole = 'super_admin' | 'admin' | 'employee' | 'client' | 'platform_owner'
+export type CommandRole = 'platform_owner' | 'admin' | 'employee' | 'client'
 
 export interface CommandContext {
   /** Current react-router pathname */
@@ -31,7 +31,7 @@ export interface CommandContext {
   user: AppUser | null
   /** Route params — e.g. `{ projectId: '...' }` extracted by caller */
   params: Record<string, string | undefined>
-  /** Current UI mode — admin/super_admin in Field mode should see employee commands */
+  /** Current UI mode — admin in Field mode should see employee commands */
   currentMode?: 'admin' | 'field'
 }
 
@@ -97,8 +97,8 @@ function isOnProject(ctx: CommandContext): boolean {
 }
 
 // Admin roles shorthand
-const ADMINS: CommandRole[] = ['super_admin', 'admin']
-const ADMINS_EMP: CommandRole[] = ['super_admin', 'admin', 'employee']
+const ADMINS: CommandRole[] = ['admin']
+const ADMINS_EMP: CommandRole[] = ['admin', 'employee']
 
 // ---------------------------------------------------------------------------
 // Registry
@@ -107,7 +107,7 @@ const ADMINS_EMP: CommandRole[] = ['super_admin', 'admin', 'employee']
 export const COMMANDS: Command[] = [
 
   // =========================================================================
-  // PLATFORM ADMIN (super_admin only)
+  // PLATFORM ADMIN (platform_owner only)
   // =========================================================================
 
   {
@@ -115,7 +115,7 @@ export const COMMANDS: Command[] = [
     label: 'List companies',
     icon: '🏢',
     description: 'View all companies on the platform',
-    roles: ['super_admin'],
+    roles: ['platform_owner'],
     when: () => true,
     execute: navigateTo('/admin/settings?tab=companies', 'list_companies'),
   },
@@ -124,7 +124,7 @@ export const COMMANDS: Command[] = [
     label: 'Create company',
     icon: '🏗️',
     description: 'Register a new company on the platform',
-    roles: ['super_admin'],
+    roles: ['platform_owner'],
     when: () => true,
     execute: navigateTo('/admin/settings?tab=companies&action=new', 'create_company'),
   },
@@ -133,7 +133,7 @@ export const COMMANDS: Command[] = [
     label: 'Manage users',
     icon: '👥',
     description: 'View and manage all platform users',
-    roles: ['super_admin'],
+    roles: ['platform_owner'],
     when: () => true,
     execute: navigateTo('/admin/settings?tab=team', 'manage_users'),
   },
@@ -142,7 +142,7 @@ export const COMMANDS: Command[] = [
     label: 'Platform stats',
     icon: '📊',
     description: 'View platform-wide analytics and usage',
-    roles: ['super_admin'],
+    roles: ['platform_owner'],
     when: () => true,
     execute: agentQuery('Show me platform-wide statistics: total companies, users, projects, and revenue.'),
   },
@@ -151,7 +151,7 @@ export const COMMANDS: Command[] = [
     label: 'View all tenants',
     icon: '🌐',
     description: 'List all tenant accounts and their status',
-    roles: ['super_admin'],
+    roles: ['platform_owner'],
     when: () => true,
     execute: agentQuery('List all tenant companies with their status, user count, and subscription tier.'),
   },
@@ -993,15 +993,14 @@ export const COMMANDS: Command[] = [
 // ---------------------------------------------------------------------------
 
 /** Return commands visible to the current user/role.
- * When an admin or super_admin is operating in Field mode, they should see
- * employee commands (and vice-versa they should NOT see super-admin platform
- * commands). Effective role substitutes 'employee' in that case.
+ * When an admin is operating in Field mode, they should see employee
+ * commands. Effective role substitutes 'employee' in that case.
  */
 export function getVisibleCommands(ctx: CommandContext): Command[] {
   const role = ctx.user?.role
   if (!role) return []
   const effectiveRole: CommandRole =
-    (role === 'admin' || role === 'super_admin') && ctx.currentMode === 'field'
+    role === 'admin' && ctx.currentMode === 'field'
       ? 'employee'
       : role
   return COMMANDS.filter(

@@ -198,7 +198,7 @@ export function EmployeeStocktakePage() {
     return false
   }
 
-  const isAdminView = user?.role === 'admin' || user?.role === 'super_admin'
+  const isAdminView = user?.role === 'admin'
   const myLocations = locations.filter(isMine)
 
   // Show only mine unless the user explicitly asks for all, OR they're an

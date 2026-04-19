@@ -45,7 +45,7 @@ export function useContextChips(): ContextChip[] {
     // Effective role for scoring follows the same rule as getVisibleCommands.
     const rawRole = user?.role
     if (!rawRole) return []
-    const role: CommandRole = (rawRole === 'admin' || rawRole === 'super_admin') && currentMode === 'field'
+    const role: CommandRole = rawRole === 'admin' && currentMode === 'field'
       ? 'employee'
       : rawRole
 
@@ -162,8 +162,8 @@ function scoreCommand(
   // --- Role-based urgency boosts ---
 
   // Admins always want quick access to risk + suggestions
-  if ((role === 'admin' || role === 'super_admin') && cmd.id === 'whats_at_risk') score += 15
-  if ((role === 'admin' || role === 'super_admin') && cmd.id === 'review_suggestions') score += 10
+  if (role === 'admin' && cmd.id === 'whats_at_risk') score += 15
+  if (role === 'admin' && cmd.id === 'review_suggestions') score += 10
 
   // Employee home page — surface most common field actions
   if (role === 'employee' && pathname === '/employee') {
@@ -178,13 +178,13 @@ function scoreCommand(
   }
 
   // Admin dashboard — surface daily drivers
-  if ((role === 'admin' || role === 'super_admin') && pathname === '/admin') {
+  if (role === 'admin' && pathname === '/admin') {
     const dashCmds = ['morning_brief', 'whats_at_risk', 'create_project', 'view_pipeline', 'review_suggestions']
     if (dashCmds.includes(cmd.id)) score += 20
   }
 
-  // Super admin boosts on admin pages
-  if (role === 'super_admin') {
+  // Platform owner — surface platform-level actions
+  if (role === 'platform_owner') {
     const platformCmds = ['list_companies', 'platform_stats', 'manage_users']
     if (platformCmds.includes(cmd.id)) score += 8
   }

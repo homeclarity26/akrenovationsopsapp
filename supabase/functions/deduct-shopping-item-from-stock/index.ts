@@ -36,7 +36,7 @@ serve(async (req) => {
     }
     // This PR keeps the scope tight: admin-only. Employees who need to move
     // stock submit stocktakes directly from the stocktake page (PR 9).
-    if (auth.role !== 'admin' && auth.role !== 'super_admin') {
+    if (auth.role !== 'admin') {
       return new Response(JSON.stringify({ error: 'Admin access required' }), { status: 403, headers })
     }
 

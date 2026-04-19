@@ -27,7 +27,7 @@ serve(async (req: Request) => {
       headers: { ...cors, 'Content-Type': 'application/json' },
     })
   }
-  if (auth.role !== 'client' && auth.role !== 'admin' && auth.role !== 'super_admin') {
+  if (auth.role !== 'client' && auth.role !== 'admin') {
     return new Response(JSON.stringify({ error: 'Forbidden — client role required' }), {
       status: 403,
       headers: { ...cors, 'Content-Type': 'application/json' },

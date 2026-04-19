@@ -75,7 +75,7 @@ export function usePendingItems(): PendingItems {
 
   const suggestionsQuery = useQuery<PendingSuggestion[]>({
     queryKey: ['agent_pending_suggestions', companyId],
-    enabled: !!companyId && (user?.role === 'admin' || user?.role === 'super_admin'),
+    enabled: !!companyId && user?.role === 'admin',
     staleTime: 60_000,
     queryFn: async () => {
       const { data, error } = await supabase

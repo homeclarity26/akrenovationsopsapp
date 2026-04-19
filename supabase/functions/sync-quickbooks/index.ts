@@ -41,7 +41,7 @@ serve(async (req: Request) => {
 
     if (!isCron) {
       const auth = await verifyAuth(req)
-      if (!auth || !['admin', 'super_admin'].includes(auth.role)) {
+      if (!auth || !['admin'].includes(auth.role)) {
         return new Response(
           JSON.stringify({ error: 'Admin access required' }),
           { status: 403, headers: { ...cors, 'Content-Type': 'application/json' } },

@@ -5,7 +5,7 @@ import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { supabase } from '@/lib/supabase'
 
-type RoleFilter = 'all' | 'admin' | 'employee' | 'client' | 'super_admin'
+type RoleFilter = 'all' | 'admin' | 'employee' | 'client' | 'platform_owner'
 
 export function PlatformUsers() {
   const [search, setSearch] = useState('')
@@ -51,7 +51,7 @@ export function PlatformUsers() {
     { value: 'admin', label: `Admins (${users.filter(u => u.role === 'admin').length})` },
     { value: 'employee', label: `Employees (${users.filter(u => u.role === 'employee').length})` },
     { value: 'client', label: `Clients (${users.filter(u => u.role === 'client').length})` },
-    { value: 'super_admin', label: `Super (${users.filter(u => u.role === 'super_admin').length})` },
+    { value: 'platform_owner', label: `Platform (${users.filter(u => u.role === 'platform_owner').length})` },
   ]
 
   return (
@@ -136,7 +136,7 @@ export function PlatformUsers() {
                 </p>
                 <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-semibold w-fit ${
                   u.role === 'admin' ? 'bg-[var(--navy)] text-white' :
-                  u.role === 'super_admin' ? 'bg-[var(--rust)] text-white' :
+                  u.role === 'platform_owner' ? 'bg-[var(--rust)] text-white' :
                   u.role === 'employee' ? 'bg-[var(--cream-light)] text-[var(--navy)]' :
                   'bg-gray-100 text-[var(--text-secondary)]'
                 }`}>

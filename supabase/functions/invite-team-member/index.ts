@@ -41,7 +41,7 @@ serve(async (req) => {
       headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },
     })
   }
-  if (auth.role !== 'admin' && auth.role !== 'super_admin') {
+  if (auth.role !== 'admin') {
     return new Response(JSON.stringify({ error: 'Forbidden — admin only' }), {
       status: 403,
       headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },

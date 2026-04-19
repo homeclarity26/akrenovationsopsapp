@@ -12,8 +12,8 @@
 // This hook:
 //   - waits for auth (enabled on user.id)
 //   - includes BOTH 'active' and 'pending' by default (caller can override)
-//   - relies on RLS to scope rows correctly: admins/super_admins see their
-//     whole company, employees see only projects they're assigned to
+//   - relies on RLS to scope rows correctly: admins see their whole
+//     company, employees see only projects they're assigned to
 //   - is cached per user so multiple pages share the same request
 
 import { useQuery } from '@tanstack/react-query'

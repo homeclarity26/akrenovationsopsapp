@@ -30,7 +30,7 @@ serve(async (req) => {
   }
 
   // Admin or employee only
-  if (!['super_admin', 'admin', 'employee'].includes(auth.role)) {
+  if (!['admin', 'employee'].includes(auth.role)) {
     return new Response(JSON.stringify({ error: 'Forbidden' }), {
       status: 403,
       headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' },

@@ -9,7 +9,7 @@
 //   2. For each company with new alerts, compose a plain-text-ish HTML digest
 //      grouped by alert_type (out_of_stock / low_stock / stale_count).
 //   3. Send via Resend directly (same pattern as send-email) to every admin
-//      + super_admin for the company.
+//      for the company.
 //   4. Log via ai_usage_logs as a zero-cost record (function_name =
 //      'notify-inventory-alerts') so we can see it run.
 //
@@ -238,7 +238,7 @@ serve(async (req) => {
       .from('profiles')
       .select('id, company_id, email, full_name, role')
       .in('company_id', companyIds)
-      .in('role', ['admin', 'super_admin'])
+      .in('role', ['admin'])
     if (profileErr) throw profileErr
     const adminsByCompany = new Map<string, ProfileRow[]>()
     for (const p of (profileData ?? []) as ProfileRow[]) {

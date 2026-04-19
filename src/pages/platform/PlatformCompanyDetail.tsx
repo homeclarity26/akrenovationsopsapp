@@ -1,7 +1,6 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { ArrowLeft, LogIn } from 'lucide-react'
-import { useAuth } from '@/context/AuthContext'
+import { ArrowLeft } from 'lucide-react'
 import { Card, MetricCard } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -10,7 +9,6 @@ import { supabase } from '@/lib/supabase'
 export function PlatformCompanyDetail() {
   const { id } = useParams<{ id: string }>()
   const navigate = useNavigate()
-  const { user } = useAuth()
 
   const { data: company, isLoading: companyLoading } = useQuery({
     queryKey: ['platform-company', id],
@@ -90,15 +88,10 @@ export function PlatformCompanyDetail() {
           title={company.name}
           subtitle={[company.industry, company.city, company.state].filter(Boolean).join(' - ')}
         />
-        {user?.role === 'super_admin' && (
-          <button
-            onClick={() => navigate('/admin')}
-            className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white bg-[var(--navy)] hover:opacity-90 transition-opacity shrink-0"
-          >
-            <LogIn size={16} />
-            Enter as Admin
-          </button>
-        )}
+        {/* Previously a super_admin "Enter as Admin" jump button — removed
+            after the 2026-04-19 platform/admin separation. platform_owner
+            does not get blanket tenant access; an explicit impersonation
+            flow is TODO if cross-tenant investigation is ever needed. */}
       </div>
 
       {/* Metrics */}

@@ -91,9 +91,9 @@ serve(async (req) => {
     }
 
     // Employees may only propose suggestions on projects they're assigned to.
-    // Admins + super_admins skip this check. Callers with no project-level
-    // scope (e.g. internal edge functions using service role) still get
-    // blocked here unless they come in with admin/super_admin role.
+    // Admins skip this check. Callers with no project-level scope
+    // (e.g. internal edge functions using service role) still get blocked
+    // here unless they come in with the admin role.
     if (auth.role === 'employee') {
       const { data: assignment } = await supabase
         .from('project_assignments')

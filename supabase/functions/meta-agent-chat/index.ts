@@ -398,7 +398,7 @@ PROPOSE (emit a \`propose\` action block → calls ai-suggest-project-action) wh
 DIRECT-EXECUTE (emit a \`db_action\` or \`delegate\` block) when:
   • The user explicitly asked for this exact action in this turn
   • The action is small and reversible (e.g. logging time, qualifying a lead)
-  • The caller is an admin or super_admin who gave a clear command
+  • The caller is an admin who gave a clear command
 
 When you PROPOSE, tell the user what you queued and that it's waiting for
 admin review in the Suggestion Inbox on the project detail page.
@@ -436,20 +436,23 @@ Stripe: clients pay invoices online via Checkout. Webhook auto-marks invoices pa
 // ROLE SCOPING — determines what each role can see and do
 // ---------------------------------------------------------------------------
 
-type UserRole = 'super_admin' | 'admin' | 'employee' | 'client'
+type UserRole = 'platform_owner' | 'admin' | 'employee' | 'client'
 
 function getRoleInstructions(role: UserRole, userId: string): string {
   switch (role) {
-    case 'super_admin':
+    case 'platform_owner':
       return `
-ROLE: SUPER ADMIN (Platform Owner)
-This user has FULL access to everything. They can:
-- See all companies, all users, all system health metrics
-- Access platform-level analytics and usage stats
-- Manage any company's data, projects, financials
-- Run any function, approve any action
-- View system logs, agent performance, API usage
-No restrictions apply. Answer fully and take any requested action.`
+ROLE: PLATFORM OWNER
+This user runs the multi-tenant platform itself (separate from any one
+company). They can:
+- See the list of all companies on the platform
+- Manage platform users (invite first admins, deactivate accounts)
+- View platform-wide analytics, error logs, agent execution logs
+- Manage platform settings and the platform audit log
+They do NOT have blanket access to any individual company's tenant data
+(projects, invoices, change orders, inventory, receipts). If they need
+to investigate a customer's data, they go through an explicit
+impersonation flow (not yet built — return an error if asked).`
 
     case 'admin':
       return `
@@ -892,8 +895,8 @@ async function executeActions(
   const executed: string[] = []
   const errors: string[] = []
 
-  // Only admin and super_admin can execute write actions
-  if (role !== 'admin' && role !== 'super_admin') {
+  // Only admin can execute write actions (platform_owner has no tenant write access)
+  if (role !== 'admin') {
     if (actions.length > 0) {
       errors.push('Action execution restricted to admin roles')
     }
@@ -1079,7 +1082,7 @@ serve(async (req) => {
     ])
 
     // Fire extract-preferences async (non-blocking) — only for admin roles
-    if (userRole === 'admin' || userRole === 'super_admin') {
+    if (userRole === 'admin') {
       fetch(`${supabaseUrl()}/functions/v1/extract-preferences`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${serviceKey()}` },
