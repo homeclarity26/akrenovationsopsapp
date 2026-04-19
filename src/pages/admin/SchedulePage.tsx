@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
@@ -8,13 +8,26 @@ import { MapPin, CalendarDays, Grid3x3, Sparkles, ChevronLeft, ChevronRight, X }
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
-const WEEK_DAYS = [
-  { date: '2026-04-06', label: 'Mon Apr 6' },
-  { date: '2026-04-07', label: 'Tue Apr 7' },
-  { date: '2026-04-08', label: 'Wed Apr 8' },
-  { date: '2026-04-09', label: 'Thu Apr 9' },
-  { date: '2026-04-10', label: 'Fri Apr 10' },
-]
+// Compute the Monday of the week that contains `d` (local time).
+function mondayOf(d: Date): Date {
+  const out = new Date(d.getFullYear(), d.getMonth(), d.getDate())
+  const dow = out.getDay() // 0 = Sun, 1 = Mon, ... 6 = Sat
+  const diff = dow === 0 ? -6 : 1 - dow
+  out.setDate(out.getDate() + diff)
+  return out
+}
+
+// Build Mon..Fri day cells for a given Monday.
+function weekDaysFrom(monday: Date): { date: string; label: string }[] {
+  const fmt = new Intl.DateTimeFormat('en-US', { weekday: 'short', month: 'short', day: 'numeric' })
+  const days: { date: string; label: string }[] = []
+  for (let i = 0; i < 5; i++) {
+    const d = new Date(monday.getFullYear(), monday.getMonth(), monday.getDate() + i)
+    const iso = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+    days.push({ date: iso, label: fmt.format(d).replace(',', '') })
+  }
+  return days
+}
 
 function calcEmployeeHours(employeeId: string, events: Record<string, unknown>[]): number {
   return events
@@ -45,6 +58,23 @@ export function SchedulePage() {
   const [view, setView] = useState<'calendar' | 'crew'>('calendar')
   const [optimizing, setOptimizing] = useState(false)
   const [optimizeResult, setOptimizeResult] = useState<string | null>(null)
+  const [weekStart, setWeekStart] = useState<Date>(() => mondayOf(new Date()))
+
+  const WEEK_DAYS = useMemo(() => weekDaysFrom(weekStart), [weekStart])
+  const weekLabel = useMemo(
+    () =>
+      `Week of ${weekStart.toLocaleDateString('en-US', {
+        month: 'long',
+        day: 'numeric',
+        year: 'numeric',
+      })}`,
+    [weekStart],
+  )
+
+  const shiftWeek = (deltaDays: number) => {
+    const next = new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + deltaDays)
+    setWeekStart(mondayOf(next))
+  }
 
   const { data: scheduleEvents = [], isLoading, error, refetch } = useQuery({
     queryKey: ['schedule_events'],
@@ -82,7 +112,7 @@ export function SchedulePage() {
     <div className="p-4 space-y-4 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">
       <PageHeader
         title="Schedule"
-        subtitle="Week of April 6, 2026"
+        subtitle={weekLabel}
         action={
           <div className="flex items-center gap-1 border border-[var(--border)] rounded-lg p-0.5">
             <button
@@ -164,13 +194,24 @@ export function SchedulePage() {
           {/* Week navigation + AI optimize */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-1">
-              <button className="p-2 border border-[var(--border)] rounded-lg text-[var(--text-secondary)]">
+              <button
+                onClick={() => shiftWeek(-7)}
+                aria-label="Previous week"
+                className="p-2 border border-[var(--border)] rounded-lg text-[var(--text-secondary)]"
+              >
                 <ChevronLeft size={14} />
               </button>
-              <button className="px-3 py-1.5 border border-[var(--border)] rounded-lg text-xs font-semibold text-[var(--text-secondary)]">
+              <button
+                onClick={() => setWeekStart(mondayOf(new Date()))}
+                className="px-3 py-1.5 border border-[var(--border)] rounded-lg text-xs font-semibold text-[var(--text-secondary)]"
+              >
                 Today
               </button>
-              <button className="p-2 border border-[var(--border)] rounded-lg text-[var(--text-secondary)]">
+              <button
+                onClick={() => shiftWeek(7)}
+                aria-label="Next week"
+                className="p-2 border border-[var(--border)] rounded-lg text-[var(--text-secondary)]"
+              >
                 <ChevronRight size={14} />
               </button>
             </div>

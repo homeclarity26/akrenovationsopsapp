@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Check, X, Edit2, AlertTriangle, Info } from 'lucide-react'
 import { Card } from '@/components/ui/Card'
 import { PageHeader } from '@/components/ui/PageHeader'
-import { useQuery } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 
 type RiskLevel = 'low' | 'medium' | 'high'
@@ -20,6 +20,7 @@ const RISK_ICON: Record<RiskLevel, React.ReactNode> = {
 }
 
 export function ApprovalsPage() {
+  const queryClient = useQueryClient()
   const { data: rawActions = [], isLoading, error, refetch } = useQuery({
     queryKey: ['ai-actions-pending'],
     queryFn: async () => {
@@ -32,29 +33,54 @@ export function ApprovalsPage() {
       return data ?? []
     },
   })
-  const [dismissed, setDismissed] = useState<string[]>([])
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editContent, setEditContent] = useState('')
+  const [mutationError, setMutationError] = useState<string | null>(null)
 
-  const actions = rawActions.filter(a => !dismissed.includes(a.id))
+  const actions = rawActions
+
+  const updateStatus = useMutation({
+    mutationFn: async ({ id, status, editedBody }: { id: string; status: 'approved' | 'rejected'; editedBody?: string }) => {
+      const patch: Record<string, unknown> = { status }
+      if (status === 'approved') {
+        patch.approved_at = new Date().toISOString()
+        const { data: userData } = await supabase.auth.getUser()
+        if (userData?.user?.id) patch.approved_by = userData.user.id
+      }
+      if (editedBody !== undefined) {
+        const original = rawActions.find(a => a.id === id) as Record<string, unknown> | undefined
+        const originalData = (original?.action_data ?? {}) as Record<string, unknown>
+        patch.action_data = { ...originalData, body: editedBody, edited: true }
+      }
+      const { error } = await supabase.from('ai_actions').update(patch).eq('id', id)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      setMutationError(null)
+      queryClient.invalidateQueries({ queryKey: ['ai-actions-pending'] })
+    },
+    onError: (err: unknown) => {
+      setMutationError(err instanceof Error ? err.message : String(err))
+    },
+  })
 
   const approve = (id: string) => {
-    setDismissed(prev => [...prev, id])
+    updateStatus.mutate({ id, status: 'approved' })
   }
 
   const reject = (id: string) => {
-    setDismissed(prev => [...prev, id])
+    updateStatus.mutate({ id, status: 'rejected' })
   }
 
   const startEdit = (action: typeof actions[0]) => {
+    const data = (action as Record<string, unknown>).action_data as Record<string, unknown> | null | undefined
+    const bodyFromData = data && typeof data.body === 'string' ? (data.body as string) : null
     setEditingId(action.id)
-    setEditContent((action as Record<string, unknown>).action_data
-      ? String((action as Record<string, unknown>).action_data)
-      : action.request_text ?? '')
+    setEditContent(bodyFromData ?? action.request_text ?? '')
   }
 
   const approveEdited = (id: string) => {
-    setDismissed(prev => [...prev, id])
+    updateStatus.mutate({ id, status: 'approved', editedBody: editContent })
     setEditingId(null)
   }
 
@@ -77,6 +103,12 @@ export function ApprovalsPage() {
   return (
     <div className="p-4 space-y-6 max-w-2xl mx-auto lg:max-w-none lg:px-8 lg:py-6">
       <PageHeader title="Pending Approvals" subtitle={`${actions.length} action${actions.length !== 1 ? 's' : ''} waiting for review`} />
+
+      {mutationError && (
+        <Card>
+          <p className="text-sm text-[var(--danger)]">Couldn't save change: {mutationError}</p>
+        </Card>
+      )}
 
       {actions.length === 0 ? (
         <Card>
@@ -120,9 +152,19 @@ export function ApprovalsPage() {
                       onChange={e => setEditContent(e.target.value)}
                     />
                   ) : (
-                    <p className="text-sm text-[var(--text)] leading-relaxed">
-                      {action.request_text}
-                    </p>
+                    (() => {
+                      const data = (action as Record<string, unknown>).action_data as Record<string, unknown> | null | undefined
+                      const body = data && typeof data.body === 'string' ? (data.body as string) : null
+                      const request = (action.request_text ?? '').replace(/\bundefined\b/g, '(unnamed)')
+                      return (
+                        <>
+                          <p className="text-sm text-[var(--text)] leading-relaxed whitespace-pre-wrap">{request}</p>
+                          {body && (
+                            <p className="text-xs text-[var(--text-secondary)] mt-2 whitespace-pre-wrap">{body}</p>
+                          )}
+                        </>
+                      )
+                    })()
                   )}
                 </div>
 

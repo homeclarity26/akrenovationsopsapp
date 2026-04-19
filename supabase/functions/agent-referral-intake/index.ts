@@ -82,7 +82,8 @@ serve(async (req) => {
         { status: 400, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
       )
     }
-    const { referred_name, referred_phone, referred_email, project_type, referrer_lead_id, referring_client_name } = parsed.data
+    const { referred_name, referred_phone, referred_email, project_type, referrer_lead_id } = parsed.data
+    const referring_client_name = parsed.data.referring_client_name?.trim() || 'the referring client'
 
     // Create the lead
     const { data: lead } = await supabase.from('leads').insert({
@@ -100,7 +101,37 @@ serve(async (req) => {
       buildSystemPrompt(company, 'referral coordinator'))
       + `\n\nREFERRAL INTAKE\nDraft warm thank-you to referrer and outreach to referred lead. Sound like Adam, not a corporation. No em dashes.`
 
+    const thankYouPrompt = `Write a short, warm text message thanking ${referring_client_name} for sending ${referred_name}${project_type ? ` (${project_type} project)` : ''} our way. Under 60 words. No em dashes. Just the message, no preamble.`
+    const outreachPrompt = `Write a short, warm text message reaching out to ${referred_name}${project_type ? ` about their ${project_type}` : ''}. Mention that ${referring_client_name} referred them. Offer to schedule a free consultation. Under 70 words. No em dashes. Just the message, no preamble.`
 
+    let thankYou = ''
+    let outreach = ''
+    const t0 = Date.now()
+    try {
+      const [tResp, oResp] = await Promise.all([
+        callClaude(systemPrompt, thankYouPrompt, 400),
+        callClaude(systemPrompt, outreachPrompt, 500),
+      ])
+      thankYou = tResp.text.trim()
+      outreach = oResp.text.trim()
+      const duration_ms = Date.now() - t0
+      const totalIn = tResp.usage.input_tokens + oResp.usage.input_tokens
+      const totalOut = tResp.usage.output_tokens + oResp.usage.output_tokens
+      await logAiUsage({
+        function_name: 'agent-referral-intake',
+        model_provider: 'anthropic',
+        model_name: AI_CONFIG.PRIMARY_MODEL,
+        input_tokens: totalIn,
+        output_tokens: totalOut,
+        duration_ms,
+        status: 'success',
+      }).catch(() => null)
+    } catch (err) {
+      return new Response(
+        JSON.stringify({ error: 'Failed to draft messages', details: err instanceof Error ? err.message : String(err) }),
+        { status: 502, headers: { ...getCorsHeaders(req), 'Content-Type': 'application/json' } },
+      )
+    }
 
     await supabase.from('ai_actions').insert([
       {
