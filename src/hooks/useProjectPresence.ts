@@ -35,48 +35,57 @@ export function useProjectPresence(projectId: string | undefined | null) {
       return
     }
 
-    const channel = supabase.channel(`project-presence:${projectId}`, {
-      config: { presence: { key: user.id } },
-    })
-
-    const sync = () => {
-      const state = channel.presenceState() as Record<string, PresenceUser[]>
-      const seen = new Set<string>()
-      const list: PresenceUser[] = []
-      for (const [key, metas] of Object.entries(state)) {
-        if (key === user.id) continue
-        // A single user may have multiple metas (multiple tabs). Take first.
-        const meta = metas?.[0]
-        if (!meta) continue
-        if (seen.has(meta.user_id)) continue
-        seen.add(meta.user_id)
-        list.push(meta)
-      }
-      // Stable order: oldest first by online_at so re-renders don't flicker.
-      list.sort((a, b) => a.online_at.localeCompare(b.online_at))
-      setOthers(list)
-    }
-
-    channel
-      .on('presence', { event: 'sync' }, sync)
-      .on('presence', { event: 'join' }, sync)
-      .on('presence', { event: 'leave' }, sync)
-      .subscribe(async (status) => {
-        if (status !== 'SUBSCRIBED') return
-        await channel.track({
-          user_id: user.id,
-          full_name: user.full_name,
-          avatar_url: user.avatar_url,
-          role: user.role,
-          online_at: new Date().toISOString(),
-        } satisfies PresenceUser)
+    // Safari 26+ throws "WebSocket not available: The operation is insecure"
+    // synchronously inside supabase.channel(...).subscribe(). Wrap the whole
+    // setup + subscribe so a realtime failure degrades to "empty presence
+    // bar" instead of blowing up the whole project detail page.
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase.channel(`project-presence:${projectId}`, {
+        config: { presence: { key: user.id } },
       })
 
+      const ch = channel
+      const sync = () => {
+        try {
+          const state = ch.presenceState() as Record<string, PresenceUser[]>
+          const seen = new Set<string>()
+          const list: PresenceUser[] = []
+          for (const [key, metas] of Object.entries(state)) {
+            if (key === user.id) continue
+            const meta = metas?.[0]
+            if (!meta) continue
+            if (seen.has(meta.user_id)) continue
+            seen.add(meta.user_id)
+            list.push(meta)
+          }
+          list.sort((a, b) => a.online_at.localeCompare(b.online_at))
+          setOthers(list)
+        } catch { /* noop */ }
+      }
+
+      ch.on('presence', { event: 'sync' }, sync)
+        .on('presence', { event: 'join' }, sync)
+        .on('presence', { event: 'leave' }, sync)
+        .subscribe(async (status) => {
+          if (status !== 'SUBSCRIBED') return
+          try {
+            await ch.track({
+              user_id: user.id,
+              full_name: user.full_name,
+              avatar_url: user.avatar_url,
+              role: user.role,
+              online_at: new Date().toISOString(),
+            } satisfies PresenceUser)
+          } catch { /* noop */ }
+        })
+    } catch (err) {
+      console.warn('[useProjectPresence] realtime unavailable — presence bar disabled', err)
+    }
+
     return () => {
-      // untrack is async but we don't need to await — removeChannel will
-      // close the socket regardless.
-      channel.untrack().catch(() => {})
-      supabase.removeChannel(channel)
+      try { channel?.untrack().catch(() => {}) } catch { /* noop */ }
+      try { if (channel) supabase.removeChannel(channel) } catch { /* noop */ }
     }
   }, [projectId, user])
 
