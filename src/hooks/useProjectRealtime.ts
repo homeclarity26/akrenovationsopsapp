@@ -43,39 +43,37 @@ export function useProjectRealtime(projectId: string | undefined | null) {
   useEffect(() => {
     if (!projectId) return
 
-    const channel = supabase.channel(`project:${projectId}`)
-
-    for (const [table, keyPrefixes] of Object.entries(TABLE_TO_QUERY_KEYS)) {
-      channel.on(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'postgres_changes' as any,
-        {
-          event: '*',
-          schema: 'public',
-          table,
-          // `projects` row's project_id is its own id, so we can't use the same
-          // filter. Special-case it: filter by id instead.
-          filter: table === 'projects'
-            ? `id=eq.${projectId}`
-            : `project_id=eq.${projectId}`,
-        },
-        () => {
-          for (const prefix of keyPrefixes) {
-            // Invalidate both the unscoped key (e.g. ['messages']) and the
-            // project-scoped key (['project_messages', projectId]). We don't
-            // know at runtime which shape the consumer used; invalidating a
-            // prefix of length 1 or 2 is cheap and matches either.
-            queryClient.invalidateQueries({ queryKey: [prefix] })
-            queryClient.invalidateQueries({ queryKey: [prefix, projectId] })
-          }
-        },
-      )
+    // Safari 26+ throws "WebSocket not available: The operation is insecure"
+    // synchronously on subscribe(). Swallow so live updates failing doesn't
+    // break the page.
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase.channel(`project:${projectId}`)
+      for (const [table, keyPrefixes] of Object.entries(TABLE_TO_QUERY_KEYS)) {
+        channel.on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          'postgres_changes' as any,
+          {
+            event: '*', schema: 'public', table,
+            filter: table === 'projects'
+              ? `id=eq.${projectId}`
+              : `project_id=eq.${projectId}`,
+          },
+          () => {
+            for (const prefix of keyPrefixes) {
+              queryClient.invalidateQueries({ queryKey: [prefix] })
+              queryClient.invalidateQueries({ queryKey: [prefix, projectId] })
+            }
+          },
+        )
+      }
+      channel.subscribe()
+    } catch (err) {
+      console.warn('[useProjectRealtime] subscribe failed; live updates disabled', err)
     }
 
-    channel.subscribe()
-
     return () => {
-      supabase.removeChannel(channel)
+      try { if (channel) supabase.removeChannel(channel) } catch { /* noop */ }
     }
   }, [projectId, queryClient])
 }

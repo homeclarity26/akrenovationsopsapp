@@ -82,24 +82,27 @@ export function useProjectActivity(
   useEffect(() => {
     if (!projectId) return
 
-    const channel = supabase.channel(`project-activity:${projectId}`)
-    channel.on(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      'postgres_changes' as any,
-      {
-        event: 'INSERT',
-        schema: 'public',
-        table: 'project_activity',
-        filter: `project_id=eq.${projectId}`,
-      },
-      () => {
-        queryClient.invalidateQueries({ queryKey: ['project_activity', projectId] })
-      },
-    )
-    channel.subscribe()
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase.channel(`project-activity:${projectId}`)
+      channel.on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        {
+          event: 'INSERT', schema: 'public', table: 'project_activity',
+          filter: `project_id=eq.${projectId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['project_activity', projectId] })
+        },
+      )
+      channel.subscribe()
+    } catch (err) {
+      console.warn('[useProjectActivity] subscribe failed; live updates disabled', err)
+    }
 
     return () => {
-      supabase.removeChannel(channel)
+      try { if (channel) supabase.removeChannel(channel) } catch { /* noop */ }
     }
   }, [projectId, queryClient])
 

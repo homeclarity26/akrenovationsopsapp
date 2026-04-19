@@ -31,6 +31,8 @@ export interface CommandContext {
   user: AppUser | null
   /** Route params — e.g. `{ projectId: '...' }` extracted by caller */
   params: Record<string, string | undefined>
+  /** Current UI mode — admin/super_admin in Field mode should see employee commands */
+  currentMode?: 'admin' | 'field'
 }
 
 export interface CommandResult {
@@ -990,12 +992,20 @@ export const COMMANDS: Command[] = [
 // Lookup helpers
 // ---------------------------------------------------------------------------
 
-/** Return commands visible to the current user/role. */
+/** Return commands visible to the current user/role.
+ * When an admin or super_admin is operating in Field mode, they should see
+ * employee commands (and vice-versa they should NOT see super-admin platform
+ * commands). Effective role substitutes 'employee' in that case.
+ */
 export function getVisibleCommands(ctx: CommandContext): Command[] {
   const role = ctx.user?.role
   if (!role) return []
+  const effectiveRole: CommandRole =
+    (role === 'admin' || role === 'super_admin') && ctx.currentMode === 'field'
+      ? 'employee'
+      : role
   return COMMANDS.filter(
-    (c) => c.roles.includes(role) && c.when(ctx),
+    (c) => c.roles.includes(effectiveRole) && c.when({ ...ctx, user: ctx.user && { ...ctx.user, role: effectiveRole } }),
   )
 }
 

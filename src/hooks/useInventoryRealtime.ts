@@ -36,39 +36,35 @@ export function useInventoryRealtime() {
   const queryClient = useQueryClient()
 
   useEffect(() => {
-    const channel = supabase.channel(`inventory-realtime`)
+    // Safari 26+ throws "WebSocket not available: The operation is insecure"
+    // synchronously on channel.subscribe(). Catch everything so a realtime
+    // failure doesn't break the page — live updates just won't happen; the
+    // user can refresh to pick up changes.
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase.channel(`inventory-realtime`)
 
-    for (const [table, keyPrefixes] of Object.entries(TABLE_TO_QUERY_KEYS)) {
-      channel.on(
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        'postgres_changes' as any,
-        {
-          event: '*',
-          schema: 'public',
-          table,
-        },
-        () => {
-          for (const prefix of keyPrefixes) {
-            // NOTE (PR 15): React Query's `invalidateQueries({ queryKey })`
-            // defaults to `exact: false`, which does PREFIX matching. Passing
-            // `[prefix]` here matches every cache key that starts with
-            // `[prefix]` — e.g. `['inventory_stock', companyId]`,
-            // `['inventory_location_items', companyId, locationId]`. That's
-            // exactly what every consumer in the app uses (verified during
-            // the Wave A review). Do NOT split this into per-scope
-            // invalidations unless a NEW consumer's cache key shape changes
-            // how it's rooted, in which case add a new prefix to
-            // TABLE_TO_QUERY_KEYS above.
-            queryClient.invalidateQueries({ queryKey: [prefix] })
-          }
-        },
-      )
+      for (const [table, keyPrefixes] of Object.entries(TABLE_TO_QUERY_KEYS)) {
+        channel.on(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          'postgres_changes' as any,
+          { event: '*', schema: 'public', table },
+          () => {
+            for (const prefix of keyPrefixes) {
+              queryClient.invalidateQueries({ queryKey: [prefix] })
+            }
+          },
+        )
+      }
+
+      channel.subscribe()
+    } catch (err) {
+      // Realtime unavailable (common on Safari with strict security). Non-fatal.
+      console.warn('[useInventoryRealtime] subscribe failed; live updates disabled', err)
     }
 
-    channel.subscribe()
-
     return () => {
-      supabase.removeChannel(channel)
+      try { if (channel) supabase.removeChannel(channel) } catch { /* noop */ }
     }
   }, [queryClient])
 }

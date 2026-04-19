@@ -98,24 +98,27 @@ export function useProjectSuggestions(
   useEffect(() => {
     if (!projectId) return
 
-    const channel = supabase.channel(`project-suggestions:${projectId}`)
-    channel.on(
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      'postgres_changes' as any,
-      {
-        event: '*',
-        schema: 'public',
-        table: 'ai_project_suggestions',
-        filter: `project_id=eq.${projectId}`,
-      },
-      () => {
-        queryClient.invalidateQueries({ queryKey: ['project_suggestions', projectId] })
-      },
-    )
-    channel.subscribe()
+    let channel: ReturnType<typeof supabase.channel> | null = null
+    try {
+      channel = supabase.channel(`project-suggestions:${projectId}`)
+      channel.on(
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        'postgres_changes' as any,
+        {
+          event: '*', schema: 'public', table: 'ai_project_suggestions',
+          filter: `project_id=eq.${projectId}`,
+        },
+        () => {
+          queryClient.invalidateQueries({ queryKey: ['project_suggestions', projectId] })
+        },
+      )
+      channel.subscribe()
+    } catch (err) {
+      console.warn('[useProjectSuggestions] subscribe failed; live updates disabled', err)
+    }
 
     return () => {
-      supabase.removeChannel(channel)
+      try { if (channel) supabase.removeChannel(channel) } catch { /* noop */ }
     }
   }, [projectId, queryClient])
 

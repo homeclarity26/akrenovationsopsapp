@@ -10,6 +10,7 @@ import { useMemo } from 'react'
 import { useLocation, useParams } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 import { type Command, getVisibleCommands, type CommandContext, type CommandRole } from '@/lib/commands'
+import { useMode } from '@/context/ModeContext'
 
 export interface ContextChip {
   id: string
@@ -30,17 +31,23 @@ export function useContextChips(): ContextChip[] {
   const { pathname } = useLocation()
   const params = useParams()
   const { user } = useAuth()
+  const { currentMode } = useMode()
 
   return useMemo(() => {
     const ctx: CommandContext = {
       pathname,
       user,
       params: params as Record<string, string | undefined>,
+      currentMode,
     }
 
     const visible = getVisibleCommands(ctx)
-    const role = user?.role
-    if (!role) return []
+    // Effective role for scoring follows the same rule as getVisibleCommands.
+    const rawRole = user?.role
+    if (!rawRole) return []
+    const role: CommandRole = (rawRole === 'admin' || rawRole === 'super_admin') && currentMode === 'field'
+      ? 'employee'
+      : rawRole
 
     // Score each command for contextual relevance
     const scored = visible.map((cmd) => ({
@@ -58,7 +65,7 @@ export function useContextChips(): ContextChip[] {
       icon: cmd.icon,
       commandId: cmd.id,
     }))
-  }, [pathname, params, user])
+  }, [pathname, params, user, currentMode])
 }
 
 // ---------------------------------------------------------------------------

@@ -23,6 +23,7 @@ import { useRecentActivity } from '@/hooks/useRecentActivity'
 import { useEntitySearch } from '@/hooks/useEntitySearch'
 import { type AgentOverlayState } from '@/hooks/useAgentOverlay'
 import { findCommand, searchCommands, type CommandContext } from '@/lib/commands'
+import { useMode } from '@/context/ModeContext'
 import { matchVoiceIntent } from '@/lib/voiceIntents'
 import { VoiceInput, isSpeechRecognitionAvailable } from '@/components/ui/VoiceInput'
 import { AttachmentSheet } from '@/components/ui/AttachmentSheet'
@@ -50,6 +51,7 @@ export function AgentOverlay({ overlay }: AgentOverlayProps) {
   const { user } = useAuth()
   const { pathname } = useLocation()
   const params = useParams()
+  const { currentMode } = useMode()
 
   // Data hooks
   const chips = useContextChips()
@@ -96,7 +98,8 @@ export function AgentOverlay({ overlay }: AgentOverlayProps) {
     pathname,
     user,
     params: params as Record<string, string | undefined>,
-  }), [pathname, user, params])
+    currentMode,
+  }), [pathname, user, params, currentMode])
 
   // ---- Send text to meta-agent-chat ----
   const sendToAgent = useCallback(
