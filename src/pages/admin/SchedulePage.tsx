@@ -4,7 +4,7 @@ import { Card } from '@/components/ui/Card'
 import { SectionHeader } from '@/components/ui/SectionHeader'
 import { PageHeader } from '@/components/ui/PageHeader'
 import { Button } from '@/components/ui/Button'
-import { MapPin, CalendarDays, Grid3x3, Sparkles, ChevronLeft, ChevronRight, X, Plus } from 'lucide-react'
+import { MapPin, CalendarDays, Grid3x3, Sparkles, ChevronLeft, ChevronRight, X, Plus, CalendarPlus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { supabase } from '@/lib/supabase'
 
@@ -71,6 +71,51 @@ function formatEventTime(event: Record<string, unknown>): string {
   if (event.all_day) return 'All Day'
   if (event.start_time) return event.start_time as string
   return ''
+}
+
+// Google Calendar accepts a template URL with the event pre-filled. This is the
+// simplest "link to Google Calendar" path — no OAuth, no service account: user
+// clicks, GCal opens in a new tab with the event ready to save on their own
+// calendar. Returns null if the event doesn't have enough info to render.
+function buildGoogleCalendarUrl(event: Record<string, unknown>): string | null {
+  const title = String(event.title ?? '').trim()
+  const startDate = String(event.start_date ?? '').trim()
+  if (!title || !startDate) return null
+
+  // GCal date format: 20260419T090000/20260419T100000 for a timed event,
+  // or 20260419/20260420 for an all-day event (end is exclusive).
+  const isoDate = (d: string) => d.replace(/-/g, '')
+  const isoTime = (t: string) => t.replace(/:/g, '').padEnd(6, '0').slice(0, 6)
+
+  let dates: string
+  if (event.all_day) {
+    const start = isoDate(startDate)
+    // All-day end is exclusive — add one day.
+    const endParts = startDate.split('-').map(Number)
+    const endDate = new Date(endParts[0], endParts[1] - 1, endParts[2] + 1)
+    const end = `${endDate.getFullYear()}${String(endDate.getMonth() + 1).padStart(2, '0')}${String(endDate.getDate()).padStart(2, '0')}`
+    dates = `${start}/${end}`
+  } else {
+    const startTime = event.start_time ? isoTime(String(event.start_time)) : '090000'
+    const endTime = event.end_time ? isoTime(String(event.end_time)) : '100000'
+    dates = `${isoDate(startDate)}T${startTime}/${isoDate(String(event.end_date ?? startDate))}T${endTime}`
+  }
+
+  const project = event.projects as Record<string, unknown> | null
+  const location = String(event.location ?? project?.address ?? '')
+  const details = [
+    event.description ? String(event.description) : null,
+    project?.title ? `Project: ${String(project.title)}` : null,
+  ].filter(Boolean).join('\n\n')
+
+  const params = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates,
+  })
+  if (location) params.set('location', location)
+  if (details) params.set('details', details)
+  return `https://calendar.google.com/calendar/render?${params.toString()}`
 }
 
 // Group schedule events by date label
@@ -251,6 +296,7 @@ export function SchedulePage() {
                   <Card padding="none">
                     {day.items.map((item) => {
                       const project = item.projects as Record<string, unknown> | null
+                      const gcalUrl = buildGoogleCalendarUrl(item)
                       return (
                         <div key={item.id as string} className="flex gap-3 p-4 border-b border-[var(--border-light)] last:border-0">
                           <div className="w-16 flex-shrink-0">
@@ -269,7 +315,24 @@ export function SchedulePage() {
                                 </p>
                               </div>
                             )}
+                            {!!project?.title && (
+                              <p className="text-[11px] text-[var(--text-tertiary)] mt-1">
+                                Project: {String(project.title)}
+                              </p>
+                            )}
                           </div>
+                          {gcalUrl && (
+                            <a
+                              href={gcalUrl}
+                              target="_blank"
+                              rel="noreferrer"
+                              title="Add to Google Calendar"
+                              className="flex-shrink-0 inline-flex items-center gap-1 text-[11px] font-semibold text-[var(--navy)] border border-[var(--border)] px-2 py-1.5 rounded-lg hover:bg-[var(--bg)]"
+                            >
+                              <CalendarPlus size={12} />
+                              Add to GCal
+                            </a>
+                          )}
                         </div>
                       )
                     })}
