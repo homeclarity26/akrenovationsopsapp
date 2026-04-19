@@ -106,18 +106,27 @@ const results = []
 async function sweepRoute(page, route) {
   const errors = []
   const onPageError = e => errors.push(`pageerror: ${e.message}`)
-  const onConsole = m => { if (m.type() === 'error') errors.push(`console: ${m.text().slice(0, 240)}`) }
+  const onConsole = m => { if (m.type() === 'error' || m.type() === 'warning') errors.push(`${m.type()}: ${m.text().slice(0, 280)}`) }
   page.on('pageerror', onPageError)
   page.on('console', onConsole)
   let url = APP + route
   let crashed = false
   let sawWs = false
+  let sawCsp = false
+  let stuckLoading = false
   let splash = false
   try {
     await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 25_000 })
-    await page.waitForTimeout(2500) // let realtime subscribes fire
+    await page.waitForTimeout(3000) // let realtime subscribes fire + first data paint
     splash = await page.locator('h2', { hasText: /Something went wrong/i }).count() > 0
     sawWs = errors.some(e => /WebSocket not available: The operation is insecure/i.test(e))
+    // CSP violation catches: "Refused to connect ..." from Safari, also "Content Security Policy".
+    sawCsp = errors.some(e => /Refused to (connect|load)|Content Security Policy/i.test(e))
+    // Stuck-loading heuristic: page text contains "Loading" but no actual content past the header,
+    // and has been sitting past the 3s settle window.
+    const bodyLen = await page.evaluate(() => document.body.innerText.length)
+    const hasLoading = await page.evaluate(() => /\bLoading\b/.test(document.body.innerText))
+    stuckLoading = hasLoading && bodyLen < 400
   } catch (e) {
     crashed = true
     errors.push(`goto: ${e.message}`)
@@ -125,11 +134,17 @@ async function sweepRoute(page, route) {
     page.off('pageerror', onPageError)
     page.off('console', onConsole)
   }
-  const status = splash || sawWs || crashed ? 'FAIL' : 'PASS'
-  const detail = splash ? 'ErrorBoundary splash' : sawWs ? 'Safari WebSocket-insecure' : crashed ? 'navigation threw' : ''
-  results.push({ route, status, detail, firstError: errors.find(e => /WebSocket|Error|pageerror/.test(e))?.substring(0, 160) ?? '' })
+  const status = splash || sawWs || sawCsp || crashed || stuckLoading ? 'FAIL' : 'PASS'
+  const detail =
+    splash ? 'ErrorBoundary splash' :
+    sawWs ? 'Safari WebSocket-insecure' :
+    sawCsp ? 'CSP violation' :
+    stuckLoading ? 'Stuck on Loading…' :
+    crashed ? 'navigation threw' : ''
+  const firstRelevant = errors.find(e => /Refused|WebSocket|pageerror|goto:/.test(e))?.substring(0, 220) ?? ''
+  results.push({ route, status, detail, firstError: firstRelevant })
   const badge = status === 'PASS' ? '\x1b[32m✓\x1b[0m' : '\x1b[31m✗\x1b[0m'
-  console.log(`  ${badge} ${route}${detail ? ' — ' + detail : ''}`)
+  console.log(`  ${badge} ${route}${detail ? ' — ' + detail : ''}${status === 'FAIL' && firstRelevant ? '\n        ' + firstRelevant : ''}`)
 }
 
 (async () => {
@@ -162,6 +177,22 @@ async function sweepRoute(page, route) {
   console.log('\n── Employee / Field routes ──')
   // Same user is super_admin so has employee mode access via ModeToggle; direct-URL works.
   for (const r of EMPLOYEE_ROUTES) await sweepRoute(page, r)
+
+  // Project-detail routes — these mount ProjectPresenceBar + ProjectBalanceCard
+  // which the list-level routes don't. Fetch the first project id from the DB
+  // and sweep its admin + employee detail pages.
+  console.log('\n── Project detail routes ──')
+  const keysRes2 = await fetch(`https://api.supabase.com/v1/projects/mebzqfeeiciayxdetteb/api-keys?reveal=true`, {
+    headers: { Authorization: `Bearer ${PAT}` },
+  })
+  const sr2 = (await keysRes2.json()).find(k => k.name === 'service_role' && k.type === 'legacy').api_key
+  const projs = await (await fetch(`${SUPABASE_URL}/rest/v1/projects?select=id&order=created_at.desc&limit=1`, {
+    headers: { apikey: sr2, Authorization: `Bearer ${sr2}` },
+  })).json()
+  if (projs?.[0]?.id) {
+    await sweepRoute(page, `/admin/projects/${projs[0].id}`)
+    await sweepRoute(page, `/employee/projects/${projs[0].id}`)
+  }
 
   await browser.close()
 

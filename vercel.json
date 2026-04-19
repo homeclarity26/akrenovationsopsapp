@@ -9,7 +9,7 @@
       "headers": [
         {
           "key": "Content-Security-Policy",
-          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.vercel.app https://images.unsplash.com https://*.unsplash.com https://oaidalleapiprodscus.blob.core.windows.net; connect-src 'self' https://*.supabase.co https://api.anthropic.com https://api.twilio.com https://api.resend.com https://api.stripe.com https://api.openai.com https://api.deepgram.com https://api.gusto.com https://api.github.com; frame-src 'self' https://js.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'"
+          "value": "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' data: https://fonts.gstatic.com; img-src 'self' data: blob: https://*.supabase.co https://*.vercel.app https://images.unsplash.com https://*.unsplash.com https://oaidalleapiprodscus.blob.core.windows.net; media-src 'self' blob: https://*.supabase.co; connect-src 'self' blob: https://*.supabase.co wss://*.supabase.co https://api.anthropic.com https://api.twilio.com https://api.resend.com https://api.stripe.com https://api.openai.com https://api.deepgram.com https://api.gusto.com https://api.github.com https://*.ingest.us.sentry.io https://*.ingest.sentry.io; frame-src 'self' https://js.stripe.com; object-src 'none'; base-uri 'self'; form-action 'self'"
         },
         {
           "key": "X-Frame-Options",
