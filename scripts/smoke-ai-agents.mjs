@@ -57,9 +57,9 @@ async function getAdminJwt(sr) {
   return decodeURIComponent(m[1])
 }
 
-// NOTE: agent-site-walk was in the Job #2 starter but is NOT deployed as an
-// edge function — verified via `ls supabase/functions`. Dropped from the
-// smoke matrix; flagged in the WEBKIT_DEEP_E2E report as a missing function.
+// NOTE: the starter's "agent-site-walk" is really the /admin/walkthrough
+// UI, which talks to `generate-estimate` — that's the edge function that
+// turns walkthrough answers into line items via Claude. Aliased here.
 const COMPANY_ID = '1e62cd50-c5a5-447d-a981-a47829c634e6'
 const PROJECT_ID = 'c4667c34-87ac-47f5-b682-155fff3e93f3'
 const ADMIN_USER_ID = '8d4c129e-cdff-4f0a-90d8-ab81eafe2086'
@@ -87,6 +87,22 @@ const AGENTS = [
     },
   },
   { name: 'agent-schedule-optimizer',  auth: 'admin_jwt',    body: { company_id: COMPANY_ID } },
+  {
+    // "Site walk" in the starter == the AI walkthrough → generate-estimate
+    name: 'generate-estimate',
+    auth: 'admin_jwt',
+    body: {
+      project_type: 'bathroom',
+      walkthrough_answers: [
+        { question: 'What is the square footage?', answer: 'Approx 60 sq ft, small primary bath.' },
+        { question: 'Any layout changes?', answer: 'No, keep the same footprint.' },
+        { question: 'Tile or LVP on the floor?', answer: 'Large-format porcelain tile.' },
+        { question: 'Vanity width?', answer: '48 inch single-sink vanity with quartz top.' },
+        { question: 'Shower or tub?', answer: 'Walk-in tile shower with glass door.' },
+      ],
+      client_name: 'WebKit E2E Smoke',
+    },
+  },
   { name: 'agent-inventory-alerts',    auth: 'service_role', body: {} },
   { name: 'notify-inventory-alerts',   auth: 'service_role', body: {} },
   { name: 'ai-inventory-query',        auth: 'admin_jwt',    body: { query: 'How many bathroom vanities in stock?', company_id: COMPANY_ID } },
