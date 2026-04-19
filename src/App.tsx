@@ -93,6 +93,7 @@ const ClientInfoPage = lazy(() => import('./pages/employee/ClientInfoPage').then
 const PaystubsPage = lazy(() => import('./pages/employee/PaystubsPage').then(m => ({ default: m.PaystubsPage })))
 const EmployeeChecklistsPage = lazy(() => import('./pages/employee/EmployeeChecklistsPage').then(m => ({ default: m.EmployeeChecklistsPage })))
 const ToolRequestPage = lazy(() => import('./pages/employee/ToolRequestPage').then(m => ({ default: m.ToolRequestPage })))
+const FlagChangeOrderPage = lazy(() => import('./pages/employee/FlagChangeOrderPage').then(m => ({ default: m.FlagChangeOrderPage })))
 const EmployeeProjectsPage = lazy(() => import('./pages/employee/EmployeeProjectsPage').then(m => ({ default: m.EmployeeProjectsPage })))
 const EmployeeProjectDetailPage = lazy(() => import('./pages/employee/EmployeeProjectDetailPage').then(m => ({ default: m.EmployeeProjectDetailPage })))
 // PR 9 — employee stocktake flow
@@ -335,6 +336,7 @@ function AppRoutes() {
           <Route path="checklists" element={<EmployeeChecklistsPage />} />
           {/* Phase K — sub-route */}
           <Route path="tool-request" element={<ToolRequestPage />} />
+          <Route path="change-order" element={<FlagChangeOrderPage />} />
           {/* PR 5 — field-mode project detail */}
           <Route path="projects" element={<EmployeeProjectsPage />} />
           <Route path="projects/:id" element={<EmployeeProjectDetailPage />} />

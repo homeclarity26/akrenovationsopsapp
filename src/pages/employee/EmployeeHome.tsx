@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
   ShoppingCart, Clock, Calendar, Receipt, Camera,
-  Gift, FileText, MessageCircle, Wallet, CheckSquare, Wrench
+  Gift, FileText, MessageCircle, Wallet, CheckSquare, Wrench, AlertTriangle,
 } from 'lucide-react'
 import { Badge } from '@/components/ui/Badge'
 import { FirstVisitWizard } from '@/components/onboarding/FirstVisitWizard'
@@ -141,6 +141,7 @@ export function EmployeeHome() {
     { label: 'My Paystubs',   icon: Wallet,       to: '/employee/paystubs',   badge: 0, desc: 'Earnings & taxes',     iconBg: 'bg-[var(--success-bg)]',       iconColor: 'text-[var(--success)]' },
     { label: 'Checklists',    icon: CheckSquare,  to: '/employee/checklists', badge: checklistsPending, desc: checklistsPending > 0 ? `${checklistsPending} items pending` : 'All clear', iconBg: 'bg-[var(--rust-subtle)]', iconColor: 'text-[var(--rust)]' },
     { label: 'Request Tool',  icon: Wrench,       to: '/employee/tool-request', badge: 0, desc: 'Need a tool?',       iconBg: 'bg-[var(--cream-light)]',      iconColor: 'text-[var(--navy)]' },
+    { label: 'Flag Change',   icon: AlertTriangle, to: '/employee/change-order', badge: 0, desc: 'Changes admin needs to price', iconBg: 'bg-[var(--warning-bg)]', iconColor: 'text-[var(--warning)]' },
   ]
 
   const dateLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
