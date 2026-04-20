@@ -396,6 +396,60 @@ function AppRoutes() {
   )
 }
 
+// Stale-chunk detection. When the user has an old bundle loaded and we
+// ship a new deploy, any route change that triggers a React.lazy() import
+// will try to fetch a chunk whose hash has changed. Vercel's SPA fallback
+// serves index.html instead of the missing JS, and the browser errors
+// with "'text/html' is not a valid JavaScript MIME type" (Safari) or
+// "Failed to fetch dynamically imported module" (Chrome/Firefox).
+//
+// isStaleChunkError returns true for any of those signatures. Callers use
+// it to trigger a one-time hard reload — with a sessionStorage sentinel
+// so a deterministic error (not caused by stale chunks) can't reload-loop.
+const STALE_CHUNK_RELOAD_SENTINEL = 'tradeoffice_stale_chunk_reloaded'
+function isStaleChunkError(err: unknown): boolean {
+  const msg = (err as Error | undefined)?.message ?? String(err ?? '')
+  return (
+    /is not a valid JavaScript MIME type/i.test(msg) ||
+    /Failed to fetch dynamically imported module/i.test(msg) ||
+    /Importing a module script failed/i.test(msg) ||
+    /Loading chunk \d+ failed/i.test(msg) ||
+    /error loading dynamically imported module/i.test(msg)
+  )
+}
+function reloadForStaleChunkOnce(): boolean {
+  try {
+    if (typeof window === 'undefined') return false
+    if (sessionStorage.getItem(STALE_CHUNK_RELOAD_SENTINEL) === '1') {
+      // Already reloaded this session — the error isn't actually stale-
+      // chunk, show the real error UI so we can diagnose.
+      return false
+    }
+    sessionStorage.setItem(STALE_CHUNK_RELOAD_SENTINEL, '1')
+    window.location.reload()
+    return true
+  } catch {
+    return false
+  }
+}
+
+// Register a window-level handler for unhandled-promise stale-chunk errors.
+// Happens when a dynamic import rejects but the rejection isn't caught by
+// React's Suspense + ErrorBoundary path (e.g. during a setState handler
+// triggered by a navigation that kicks off the import). We reload once.
+if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    if (isStaleChunkError(event.reason)) {
+      if (reloadForStaleChunkOnce()) event.preventDefault()
+    }
+  })
+  window.addEventListener('error', (event) => {
+    if (isStaleChunkError(event.error ?? event.message)) {
+      reloadForStaleChunkOnce()
+    }
+  })
+}
+
 // Wraps Sentry.ErrorBoundary with a `key` tied to the current pathname. If a
 // crash happens on /employee/notes and the user navigates to /employee, the
 // boundary unmounts + remounts — the errored state clears instead of sticking
@@ -403,10 +457,32 @@ function AppRoutes() {
 // splash on every subsequent route change until a full page refresh.
 function RouteScopedErrorBoundary({ children }: { children: React.ReactNode }) {
   const location = useLocation()
+  // If the app has been running for 3 seconds without tripping a chunk
+  // error, clear the one-reload sentinel so a later chunk error can
+  // reload again. Keeps us safe from an infinite reload loop while still
+  // letting us recover from multiple deploys in one long session.
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try { sessionStorage.removeItem(STALE_CHUNK_RELOAD_SENTINEL) } catch {}
+    }, 3000)
+    return () => clearTimeout(t)
+  }, [])
   return (
     <Sentry.ErrorBoundary
       key={location.pathname}
       fallback={({ error, componentStack }) => {
+        // Intercept stale-chunk crashes and hard-reload once instead of
+        // showing the bug screen. After reload the new bundle is loaded
+        // and the route renders normally.
+        if (isStaleChunkError(error)) {
+          if (reloadForStaleChunkOnce()) {
+            return (
+              <div style={{ padding: '2rem', textAlign: 'center', fontFamily: 'system-ui, -apple-system, sans-serif', color: '#444' }}>
+                Updating to the latest version…
+              </div>
+            )
+          }
+        }
         const err = error as Error
         const name = err?.name ?? 'Error'
         const message = err?.message ?? String(err ?? 'Unknown error')
