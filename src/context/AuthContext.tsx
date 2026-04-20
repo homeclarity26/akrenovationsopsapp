@@ -48,10 +48,15 @@ interface StoredAccessToken {
   access_token: string
   refresh_token?: string
   expires_at: number
+  /** True when expires_at is in the past — caller must refresh before using. */
+  expired: boolean
+  /** The localStorage key, so we can rewrite it after a refresh. */
+  storageKey: string
 }
 
 function readStoredAccessToken(): StoredAccessToken | null {
   try {
+    const now = Math.floor(Date.now() / 1000)
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i) ?? ''
       if (key.startsWith('sb-') && key.endsWith('-auth-token')) {
@@ -59,8 +64,15 @@ function readStoredAccessToken(): StoredAccessToken | null {
         if (!raw) continue
         try {
           const parsed = JSON.parse(raw) as { access_token?: string; refresh_token?: string; expires_at?: number }
-          if (parsed?.access_token && (parsed.expires_at ?? 0) > Math.floor(Date.now() / 1000)) {
-            return { access_token: parsed.access_token, refresh_token: parsed.refresh_token, expires_at: parsed.expires_at ?? 0 }
+          if (parsed?.access_token) {
+            const expiresAt = parsed.expires_at ?? 0
+            return {
+              access_token: parsed.access_token,
+              refresh_token: parsed.refresh_token,
+              expires_at: expiresAt,
+              expired: expiresAt <= now,
+              storageKey: key,
+            }
           }
         } catch {
           // Legacy string-token format — can't parse.
@@ -71,6 +83,79 @@ function readStoredAccessToken(): StoredAccessToken | null {
     // localStorage unavailable.
   }
   return null
+}
+
+/** Attempts to refresh an expired access token via the Supabase auth REST API.
+ *  Does NOT go through supabase-js, because that client can wedge during
+ *  hydration. Returns the refreshed token payload on success, null on failure
+ *  (in which case the caller should clear localStorage and show /login). */
+async function refreshAccessTokenRaw(refreshToken: string): Promise<StoredAccessToken | null> {
+  const url = (import.meta.env.VITE_SUPABASE_URL as string) ?? ''
+  const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ?? ''
+  if (!url || !anon || !refreshToken) return null
+  try {
+    const res = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, {
+      method: 'POST',
+      headers: {
+        apikey: anon,
+        Authorization: `Bearer ${anon}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+    if (!res.ok) {
+      console.warn('[auth] refresh token HTTP', res.status)
+      return null
+    }
+    const j = (await res.json()) as { access_token?: string; refresh_token?: string; expires_at?: number; expires_in?: number }
+    if (!j?.access_token) return null
+    const expiresAt = j.expires_at ?? (Math.floor(Date.now() / 1000) + (j.expires_in ?? 3600))
+    return {
+      access_token: j.access_token,
+      refresh_token: j.refresh_token ?? refreshToken,
+      expires_at: expiresAt,
+      expired: false,
+      storageKey: '',
+    }
+  } catch (e) {
+    console.warn('[auth] refreshAccessTokenRaw threw:', e)
+    return null
+  }
+}
+
+/** Writes a refreshed token back to localStorage under the same key format
+ *  supabase-js uses, so onAuthStateChange events still see a valid session. */
+function writeStoredAccessToken(storageKey: string, token: StoredAccessToken) {
+  try {
+    const existing = localStorage.getItem(storageKey)
+    let parsed: Record<string, unknown> = {}
+    if (existing) {
+      try { parsed = JSON.parse(existing) as Record<string, unknown> } catch {}
+    }
+    parsed.access_token = token.access_token
+    parsed.refresh_token = token.refresh_token
+    parsed.expires_at = token.expires_at
+    parsed.expires_in = Math.max(0, token.expires_at - Math.floor(Date.now() / 1000))
+    parsed.token_type = 'bearer'
+    localStorage.setItem(storageKey, JSON.stringify(parsed))
+  } catch {
+    // localStorage unavailable.
+  }
+}
+
+/** Nuke every sb-*-auth-token key. Used when refresh fails — otherwise we'd
+ *  keep retrying the same dead refresh_token on every page load. */
+function clearStoredAuthTokens() {
+  try {
+    const toRemove: string[] = []
+    for (let i = 0; i < localStorage.length; i++) {
+      const k = localStorage.key(i) ?? ''
+      if (k.startsWith('sb-') && k.endsWith('-auth-token')) toRemove.push(k)
+    }
+    for (const k of toRemove) localStorage.removeItem(k)
+  } catch {
+    // localStorage unavailable.
+  }
 }
 
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
@@ -126,34 +211,11 @@ async function fetchProfileWithToken(userId: string, accessToken: string, fallba
   }
 }
 
-async function fetchProfile(userId: string, fallbackEmail?: string): Promise<AppUser | null> {
-  const { data, error } = await supabase
-    .from('profiles')
-    .select('id, role, full_name, email, avatar_url, company_id, platform_onboarding_complete, company_onboarding_complete, field_onboarding_complete')
-    .eq('id', userId)
-    .maybeSingle()
-
-  if (error) {
-    console.warn('[auth] fetchProfile error:', error.message)
-    return null
-  }
-
-  if (data) {
-    return {
-      id: data.id,
-      email: data.email ?? fallbackEmail ?? '',
-      role: (data.role as Role) ?? 'client',
-      full_name: data.full_name ?? (fallbackEmail?.split('@')[0] ?? 'User'),
-      avatar_url: data.avatar_url,
-      company_id: data.company_id ?? null,
-      platform_onboarding_complete: data.platform_onboarding_complete ?? false,
-      company_onboarding_complete: data.company_onboarding_complete ?? false,
-      field_onboarding_complete: data.field_onboarding_complete ?? false,
-    }
-  }
-
-  return null
-}
+// NOTE: the supabase-js based fetchProfile() used to live here. It was
+// removed because every caller now goes through fetchProfileWithToken
+// (raw REST) — supabase-js's wedge during hydration was causing 12s
+// spinner hangs when the stored token was expired or right after
+// SIGNED_IN. See the repro in scripts/webkit-repro-stale-token.mjs.
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null)
@@ -180,36 +242,50 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const storedAtMount = readStoredAccessToken()
 
-    // Safety net — unblock /login if literally nothing resolves.
+    // Safety net — unblock /login if literally nothing resolves within 6s.
+    // Dropped from 12s to 6s now that both the cold-start and the expired-
+    // token paths below avoid supabase-js's hanging getSession().
     const timeout = setTimeout(() => {
       if (mounted) setLoading(false)
-    }, 12000)
+    }, 6000)
 
     const hydrate = async () => {
-      // ── No stored token → let supabase-js handle the cold-start flow.
+      // ── No stored token → skip supabase-js.auth.getSession() entirely.
+      //    That call wedges on WebKit during cold-start (see the history at
+      //    the top of this file). If localStorage is empty, the user needs
+      //    to log in; unblock immediately and route to /login.
       if (!storedAtMount) {
-        try {
-          const { data } = await supabase.auth.getSession()
-          if (!mounted) return
-          if (data.session?.user) {
-            setSession(data.session)
-            const profile = await fetchProfile(data.session.user.id, data.session.user.email)
-            if (mounted && profile) setUser(profile)
-          }
-        } catch {
-          // ignore
-        } finally {
-          if (mounted) {
-            clearTimeout(timeout)
-            setLoading(false)
-          }
+        if (mounted) {
+          clearTimeout(timeout)
+          setLoading(false)
         }
         return
       }
 
-      // ── Stored token exists → bypass supabase-js and hydrate the user
-      //    ourselves so the UI unblocks immediately.
-      const jwt = decodeJwtPayload(storedAtMount.access_token)
+      // ── Expired token → attempt a raw-REST refresh. If it succeeds,
+      //    rewrite localStorage so the next cold-start is fast, and fall
+      //    through to the fresh-token path. If refresh fails, nuke the
+      //    stored keys and land on /login (beats spinning for 12s).
+      let token = storedAtMount
+      if (token.expired) {
+        if (!token.refresh_token) {
+          clearStoredAuthTokens()
+          if (mounted) { clearTimeout(timeout); setLoading(false) }
+          return
+        }
+        const refreshed = await refreshAccessTokenRaw(token.refresh_token)
+        if (!refreshed) {
+          clearStoredAuthTokens()
+          if (mounted) { clearTimeout(timeout); setLoading(false) }
+          return
+        }
+        writeStoredAccessToken(storedAtMount.storageKey, refreshed)
+        token = { ...refreshed, storageKey: storedAtMount.storageKey }
+      }
+
+      // ── Fresh token → bypass supabase-js and hydrate the user ourselves
+      //    so the UI unblocks immediately.
+      const jwt = decodeJwtPayload(token.access_token)
       const userId = typeof jwt?.sub === 'string' ? jwt.sub : null
       const emailFromJwt = typeof jwt?.email === 'string' ? jwt.email : undefined
 
@@ -221,11 +297,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Raw REST call with the stored token — does not block on supabase-js
       // being "ready".
-      const profile = await fetchProfileWithToken(userId, storedAtMount.access_token, emailFromJwt)
+      const profile = await fetchProfileWithToken(userId, token.access_token, emailFromJwt)
       if (!mounted) return
       if (profile) setUser(profile)
       // Stash session so `useAuth().session?.access_token` reads correctly.
-      setSession({ access_token: storedAtMount.access_token, refresh_token: storedAtMount.refresh_token ?? '' } as unknown as Session)
+      setSession({ access_token: token.access_token, refresh_token: token.refresh_token ?? '' } as unknown as Session)
       clearTimeout(timeout)
       setLoading(false)
     }
@@ -235,12 +311,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Subscribe to auth state changes so explicit sign-in / sign-out events
     // still work. Only a genuine SIGNED_OUT clears the user — other
     // null-session events during hydration are ignored (see history above).
+    //
+    // Post-login profile fetch goes through the raw-REST helper (same path
+    // used during hydration). The supabase-js client can still be in a
+    // half-hydrated state the moment SIGNED_IN fires; hitting PostgREST
+    // directly with the new session's access_token sidesteps that.
     const { data: subscription } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (!mounted) return
 
       if (newSession?.user) {
         setSession(newSession)
-        const profile = await fetchProfile(newSession.user.id, newSession.user.email)
+        const profile = await fetchProfileWithToken(
+          newSession.user.id,
+          newSession.access_token,
+          newSession.user.email,
+        )
         if (!mounted) return
         if (profile) setUser(profile)
         clearTimeout(timeout)
@@ -290,8 +375,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const refreshProfile = async () => {
-    if (!session?.user) return
-    const profile = await fetchProfile(session.user.id, session.user.email)
+    if (!session?.access_token) return
+    // Raw REST — avoids supabase-js hang, same rationale as hydrate + SIGNED_IN.
+    const jwt = decodeJwtPayload(session.access_token)
+    const userId = typeof jwt?.sub === 'string' ? jwt.sub : null
+    if (!userId) return
+    const profile = await fetchProfileWithToken(userId, session.access_token)
     if (profile) setUser(profile)
   }
 
