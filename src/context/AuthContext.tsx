@@ -158,6 +158,57 @@ function clearStoredAuthTokens() {
   }
 }
 
+/** If the current URL has a supabase magic-link / OAuth fragment
+ *  (`#access_token=…&refresh_token=…&expires_at=…`), parse it synchronously,
+ *  write it to localStorage in the shape supabase-js uses, and clear the
+ *  fragment from the URL. That way our cold-start hydrate path finds the
+ *  token immediately rather than waiting on supabase-js's built-in
+ *  detectSessionInUrl, which hangs during client init on WebKit.
+ *
+ *  The localStorage key format is `sb-<project-ref>-auth-token`, derived
+ *  from VITE_SUPABASE_URL. */
+function consumeUrlHashSessionIntoStorage() {
+  try {
+    if (typeof window === 'undefined') return
+    const hash = window.location.hash
+    if (!hash || !hash.includes('access_token=')) return
+    const params = new URLSearchParams(hash.replace(/^#/, ''))
+    const accessToken = params.get('access_token')
+    const refreshToken = params.get('refresh_token')
+    const expiresAtRaw = params.get('expires_at')
+    const expiresInRaw = params.get('expires_in')
+    if (!accessToken) return
+    const expiresAt = expiresAtRaw
+      ? parseInt(expiresAtRaw, 10)
+      : Math.floor(Date.now() / 1000) + (expiresInRaw ? parseInt(expiresInRaw, 10) : 3600)
+
+    // Derive the storage key supabase-js expects.
+    const url = (import.meta.env.VITE_SUPABASE_URL as string) ?? ''
+    const refMatch = url.match(/https?:\/\/([^.]+)\.supabase\.co/)
+    const projectRef = refMatch?.[1] ?? ''
+    if (!projectRef) return
+    const storageKey = `sb-${projectRef}-auth-token`
+
+    const stored = {
+      access_token: accessToken,
+      refresh_token: refreshToken ?? '',
+      expires_at: expiresAt,
+      expires_in: Math.max(0, expiresAt - Math.floor(Date.now() / 1000)),
+      token_type: 'bearer',
+    }
+    localStorage.setItem(storageKey, JSON.stringify(stored))
+
+    // Strip the fragment so back-button / refresh doesn't re-process it.
+    try {
+      history.replaceState(null, '', window.location.pathname + window.location.search)
+    } catch {
+      // Not critical — the fragment is harmless if it stays.
+    }
+  } catch {
+    // Any failure is non-fatal — fall through to whatever storage already has.
+  }
+}
+
 function decodeJwtPayload(token: string): Record<string, unknown> | null {
   try {
     const parts = token.split('.')
@@ -239,6 +290,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Five previous AuthContext iterations (#70 #72 #73 #74 #75 #76) tried
     // to reconcile with supabase-js's hydration and each hit a different
     // edge. This version simply doesn't wait on it.
+
+    // If this is a magic-link landing (URL has #access_token=…), extract
+    // the session ourselves and write it to localStorage in the exact shape
+    // supabase-js uses. This avoids waiting on supabase-js's URL-hash
+    // detection (which hangs during cold-start on WebKit — same wedge that
+    // getSession() hits). After this runs, readStoredAccessToken() below
+    // will find the token as if it had always been there.
+    consumeUrlHashSessionIntoStorage()
 
     const storedAtMount = readStoredAccessToken()
 
