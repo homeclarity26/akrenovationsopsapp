@@ -12,6 +12,70 @@ import { UserPlus, Check, Loader } from 'lucide-react'
 import { supabase } from '@/lib/supabase'
 import { Button } from '@/components/ui/Button'
 
+// Copy + Text-it success block shared with the employee invite flow. Parent
+// handles the 'email' / 'manual' / 'sms' variants; all three now surface the
+// magic link with a Copy button so the admin can always grab it, and a
+// SMS deep-link button when we have a phone hint or the user chose 'sms'.
+function InviteResultCard({
+  result,
+  clientName,
+  method,
+}: {
+  result: { kind: 'ok'; sent_via: string; link: string }
+  clientName: string
+  method: 'email' | 'sms'
+}) {
+  const copy = async () => {
+    try {
+      if (navigator.clipboard?.writeText) await navigator.clipboard.writeText(result.link)
+      else {
+        const ta = document.createElement('textarea')
+        ta.value = result.link
+        document.body.appendChild(ta)
+        ta.select()
+        document.execCommand('copy')
+        ta.remove()
+      }
+      // eslint-disable-next-line no-alert
+      alert('Invite link copied. Paste it into Messages / iMessage.')
+    } catch {
+      // ignore — user can long-press the link block below to select it
+    }
+  }
+  const smsBody = `Hi ${clientName}, your AK Renovations project portal is ready. Tap to sign in (link is single-use): ${result.link}`
+  const smsHref = `sms:&body=${encodeURIComponent(smsBody)}`
+  const headline =
+    result.sent_via === 'email' ? 'Invite email sent.'
+      : method === 'sms' ? 'Share this link with the client:'
+      : 'Email could not be sent — share this link with the client:'
+  return (
+    <div className="text-xs p-2 rounded-md bg-[var(--success-bg)] text-[var(--success)] border border-[var(--success)]/20 space-y-2">
+      <p className="font-semibold">{headline}</p>
+      <div className="flex gap-2 flex-wrap">
+        <button
+          type="button"
+          onClick={copy}
+          className="px-2.5 py-1 rounded bg-[var(--navy)] text-white font-semibold"
+        >
+          Copy link
+        </button>
+        <a
+          href={smsHref}
+          className="px-2.5 py-1 rounded bg-[var(--rust)] text-white font-semibold no-underline"
+        >
+          Text it
+        </a>
+      </div>
+      <div className="text-[10px] text-[var(--text-secondary)] break-all bg-white rounded p-2 font-mono border border-[var(--border-light)]">
+        {result.link}
+      </div>
+      <p className="text-[10px] text-[var(--text-tertiary)]">
+        Single-use link. If it expires before they open it, re-invite and a new one is generated.
+      </p>
+    </div>
+  )
+}
+
 interface Props {
   projectId: string
   clientUserId: string | null
@@ -146,29 +210,7 @@ export function InviteClientToPortal({ projectId, clientUserId, clientName, clie
         </Button>
       </div>
 
-      {result?.kind === 'ok' && (
-        <div className="text-xs p-2 rounded-md bg-[var(--success-bg)] text-[var(--success)] border border-[var(--success)]/20">
-          {result.sent_via === 'email' && <p>Invite email sent to {email}.</p>}
-          {result.sent_via === 'manual' && (
-            <div className="space-y-1">
-              <p>
-                {method === 'sms'
-                  ? 'SMS not yet wired — send this link to the client:'
-                  : 'Email failed to send — share this link manually:'}
-              </p>
-              <a
-                href={result.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="underline break-all block"
-              >
-                {result.link}
-              </a>
-            </div>
-          )}
-          {result.sent_via === 'sms' && <p>SMS sent to {email}.</p>}
-        </div>
-      )}
+      {result?.kind === 'ok' && <InviteResultCard result={result} clientName={name} method={method} />}
       {result?.kind === 'err' && (
         <p className="text-xs p-2 rounded-md bg-[var(--danger-bg)] text-[var(--danger)] border border-[var(--danger)]/20">
           {result.message}
