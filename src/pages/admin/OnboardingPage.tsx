@@ -607,6 +607,11 @@ function EmployeeWizard({ onDone }: { onDone: () => void }) {
   const [errors, setErrors] = useState<Partial<Record<keyof EmployeeForm, string>>>({})
   const [loading, setLoading] = useState(false)
   const [done, setDone] = useState(false)
+  // invite-team-member returns a magic link regardless of whether the
+  // Resend email delivered. Capture it so we can show the admin a
+  // Copy-link / SMS / iMessage fallback on the success screen.
+  const [inviteLink, setInviteLink] = useState<string | null>(null)
+  const [sentViaEmail, setSentViaEmail] = useState(false)
 
   function set<K extends keyof EmployeeForm>(k: K, v: EmployeeForm[K]) {
     setForm((f) => ({ ...f, [k]: v }))
@@ -648,9 +653,12 @@ function EmployeeWizard({ onDone }: { onDone: () => void }) {
         },
       })
       if (error) throw error
-      if ((data as { ok?: boolean } | null)?.ok === false) {
-        throw new Error((data as { error?: string }).error ?? 'Invite failed')
+      const resp = data as { ok?: boolean; link?: string; sent_via?: string; error?: string } | null
+      if (resp?.ok === false) {
+        throw new Error(resp.error ?? 'Invite failed')
       }
+      if (typeof resp?.link === 'string') setInviteLink(resp.link)
+      setSentViaEmail(resp?.sent_via === 'email')
       setDone(true)
       setStep(4)
     } catch (err) {
@@ -676,6 +684,30 @@ function EmployeeWizard({ onDone }: { onDone: () => void }) {
   }
 
   if (step === 4 && done) {
+    const smsBody = `Hi ${form.fullName}, you've been added to AK Renovations. Tap this link on your iPhone to sign in — it only works once so don't reply-forward: ${inviteLink ?? ''}`
+    const smsHref = form.phone && inviteLink
+      ? `sms:${form.phone.replace(/[^\d+]/g, '')}&body=${encodeURIComponent(smsBody)}`
+      : null
+    const copy = async () => {
+      if (!inviteLink) return
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(inviteLink)
+        } else {
+          const ta = document.createElement('textarea')
+          ta.value = inviteLink
+          document.body.appendChild(ta)
+          ta.select()
+          document.execCommand('copy')
+          ta.remove()
+        }
+        // eslint-disable-next-line no-alert
+        alert('Invite link copied. Paste it into Messages / iMessage.')
+      } catch {
+        // ignore
+      }
+    }
+
     return (
       <SuccessScreen
         viewPath="/admin/payroll/workers"
@@ -712,6 +744,41 @@ function EmployeeWizard({ onDone }: { onDone: () => void }) {
                 <div className="flex justify-between">
                   <span className="text-[var(--text-tertiary)]">Start Date</span>
                   <span className="text-[var(--text)]">{form.startDate}</span>
+                </div>
+              )}
+              {/* Magic-link share. Until Resend's domain is verified the
+                  invite email won't deliver, so the admin has to hand the
+                  link off themselves. Even after Resend is verified this
+                  is a useful fallback. */}
+              {inviteLink && (
+                <div className="pt-3 border-t border-[var(--border-light)] space-y-2">
+                  <div>
+                    <p className="text-xs font-semibold text-[var(--text)]">
+                      {sentViaEmail ? 'Email sent.' : 'Email could not be sent — share this link with them:'}
+                    </p>
+                    <p className="text-[10px] text-[var(--text-tertiary)]">
+                      Single-use magic link. They open it on their phone and they're in. Works best on iPhone Safari.
+                    </p>
+                  </div>
+                  <div className="flex gap-2 flex-wrap">
+                    <button
+                      onClick={copy}
+                      className="px-3 py-2 rounded-lg bg-[var(--navy)] text-white text-xs font-semibold"
+                    >
+                      Copy link
+                    </button>
+                    {smsHref && (
+                      <a
+                        href={smsHref}
+                        className="px-3 py-2 rounded-lg bg-[var(--rust)] text-white text-xs font-semibold no-underline"
+                      >
+                        Text it
+                      </a>
+                    )}
+                  </div>
+                  <div className="text-[10px] text-[var(--text-tertiary)] break-all bg-[var(--bg-muted,#f5f5f5)] rounded p-2 font-mono">
+                    {inviteLink}
+                  </div>
                 </div>
               )}
               <div className="pt-2 border-t border-[var(--border-light)]">
