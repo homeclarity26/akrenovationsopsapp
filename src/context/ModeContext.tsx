@@ -2,11 +2,10 @@ import {
   createContext,
   useCallback,
   useContext,
-  useEffect,
   useState,
   type ReactNode,
 } from 'react'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '@/context/AuthContext'
 
 type AppMode = 'admin' | 'field'
@@ -17,20 +16,19 @@ interface ModeContextValue {
   canToggle: boolean
 }
 
-const STORAGE_KEYS = {
-  mode: 'tradeoffice_mode',
-  adminRoute: 'tradeoffice_admin_route',
-  fieldRoute: 'tradeoffice_field_route',
-  adminScroll: 'tradeoffice_admin_scroll',
-  fieldScroll: 'tradeoffice_field_scroll',
-} as const
+// Only the persisted user preference across sessions (admin starts in admin
+// mode unless they last used field). Scroll/last-route restoration was
+// removed 2026-04-19 after Adam reported toggling to Field and landing on
+// a stale /employee/notes instead of /employee home, then finding the
+// sub-page Back arrow escaping to /admin because the push-navigation
+// left /admin in history.
+const STORAGE_KEY_MODE = 'tradeoffice_mode'
 
 const ModeContext = createContext<ModeContextValue | null>(null)
 
 export function ModeProvider({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
 
   // Admin↔Field toggle is scoped to a single company. platform_owner does
   // NOT get it — they run a separate UI at /platform.
@@ -38,60 +36,23 @@ export function ModeProvider({ children }: { children: ReactNode }) {
 
   const [currentMode, setCurrentMode] = useState<AppMode>(() => {
     if (!canToggle) return 'admin'
-    const stored = localStorage.getItem(STORAGE_KEYS.mode) as AppMode | null
+    const stored = localStorage.getItem(STORAGE_KEY_MODE) as AppMode | null
     return stored === 'field' ? 'field' : 'admin'
   })
-
-  // Track current route into localStorage so we can restore it on toggle-back
-  useEffect(() => {
-    if (!canToggle) return
-    const path = location.pathname
-    if (currentMode === 'admin' && path.startsWith('/admin')) {
-      localStorage.setItem(STORAGE_KEYS.adminRoute, path)
-    } else if (currentMode === 'field' && path.startsWith('/employee')) {
-      localStorage.setItem(STORAGE_KEYS.fieldRoute, path)
-    }
-  }, [location.pathname, currentMode, canToggle])
 
   const toggleMode = useCallback(() => {
     if (!canToggle) return
 
-    // Save scroll position for current mode
-    const scrollY = window.scrollY
-    if (currentMode === 'admin') {
-      localStorage.setItem(STORAGE_KEYS.adminScroll, String(scrollY))
-    } else {
-      localStorage.setItem(STORAGE_KEYS.fieldScroll, String(scrollY))
-    }
-
     const nextMode: AppMode = currentMode === 'admin' ? 'field' : 'admin'
+    const targetRoute = nextMode === 'field' ? '/employee' : '/admin'
 
-    // Determine target route
-    let targetRoute: string
-    if (nextMode === 'field') {
-      targetRoute = localStorage.getItem(STORAGE_KEYS.fieldRoute) || '/employee'
-    } else {
-      targetRoute = localStorage.getItem(STORAGE_KEYS.adminRoute) || '/admin'
-    }
-
-    // Persist mode
-    localStorage.setItem(STORAGE_KEYS.mode, nextMode)
+    localStorage.setItem(STORAGE_KEY_MODE, nextMode)
     setCurrentMode(nextMode)
 
-    // Navigate, then restore scroll after the page renders
-    navigate(targetRoute)
-
-    const savedScroll = nextMode === 'field'
-      ? localStorage.getItem(STORAGE_KEYS.fieldScroll)
-      : localStorage.getItem(STORAGE_KEYS.adminScroll)
-
-    if (savedScroll) {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => {
-          window.scrollTo(0, Number(savedScroll))
-        })
-      })
-    }
+    // replace:true so /admin doesn't sit in history when user is now on
+    // /employee — a sub-page Back arrow (useBackNavigation) should bounce
+    // the user to /employee home, not escape back to admin.
+    navigate(targetRoute, { replace: true })
   }, [canToggle, currentMode, navigate])
 
   return (
