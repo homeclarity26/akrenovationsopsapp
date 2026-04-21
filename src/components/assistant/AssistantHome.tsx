@@ -19,7 +19,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Send, Plus, Camera, FileText, Clock as ClockIcon, MoreHorizontal, Volume2, VolumeX, History } from 'lucide-react'
+import { Send, Plus, Volume2, VolumeX, History } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import { useThread } from '@/lib/assistant/useThread'
@@ -28,10 +28,12 @@ import { VoiceButton } from './VoiceButton'
 import type { AIMessage } from '@/lib/assistant/types'
 import { supabase } from '@/lib/supabase'
 
+// Only the input bar sits above the 64px layout nav. The old quick-action
+// row was dropped because the nav itself is now the 5-button action bar
+// (Home / Clock / Photo / Note / More). One row, no duplicates.
 const NAV_H = 64
 const INPUT_H = 56
-const QUICK_H = 76
-const BOTTOM_RESERVED = NAV_H + INPUT_H + QUICK_H + 16
+const BOTTOM_RESERVED = NAV_H + INPUT_H + 24
 
 interface SmartContext {
   text: string
@@ -50,7 +52,6 @@ export function AssistantHome() {
   const [pendingTranscript, setPendingTranscript] = useState('')
   const [ttsEnabled, setTtsEnabled] = useState(user?.ai_tts_enabled ?? false)
   const [smartCtx, setSmartCtx] = useState<SmartContext | null>(null)
-  const [isClockedIn, setIsClockedIn] = useState<boolean | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -77,8 +78,6 @@ export function AssistantHome() {
         .limit(1)
         .maybeSingle()
       if (cancelled) return
-      const clockedIn = !!open
-      setIsClockedIn(clockedIn)
 
       if (open) {
         const elapsedMin = Math.floor((Date.now() - new Date(open.clock_in).getTime()) / 60000)
@@ -138,13 +137,6 @@ export function AssistantHome() {
   const onSubmit = useCallback(() => { void send(input) }, [input, send])
 
   // ── Quick actions ──
-  const fireQuickAction = useCallback((intent: 'clock_in' | 'clock_out' | 'photo' | 'note' | 'more') => {
-    if (intent === 'more') { navigate('/employee/tools'); return }
-    if (intent === 'photo') { fileInputRef.current?.click(); return }
-    const phrase = intent === 'clock_in' ? 'Clock me in.' : intent === 'clock_out' ? 'Clock me out.' : 'Add a daily note.'
-    void send(phrase)
-  }, [send, navigate])
-
   // ── Voice ──
   const onTranscript = useCallback((text: string, isFinal: boolean) => {
     setPendingTranscript(isFinal ? '' : text)
@@ -303,14 +295,14 @@ export function AssistantHome() {
         <div ref={messagesEndRef} />
       </main>
 
-      {/* Budget banner */}
+      {/* Budget banner — sits just above the input bar when active. */}
       {(thread.monthly_cost_so_far / thread.monthly_cost_cap >= 0.8 || thread.blocked) && (
         <div
           className={cn(
             'fixed left-0 right-0 px-3 py-2 text-xs z-30',
             thread.blocked ? 'bg-red-50 text-red-700 border-t border-red-200' : 'bg-amber-50 text-amber-800 border-t border-amber-200',
           )}
-          style={{ bottom: NAV_H + INPUT_H + QUICK_H + 8 }}
+          style={{ bottom: NAV_H + INPUT_H + 8 }}
         >
           {thread.blocked
             ? `AI budget reached ($${thread.monthly_cost_cap.toFixed(2)}). Tap buttons still work.`
@@ -318,25 +310,8 @@ export function AssistantHome() {
         </div>
       )}
 
-      {/* Quick action row — fixed above input bar, above bottom nav */}
-      <div
-        className="fixed left-0 right-0 px-3 py-2 flex gap-2 overflow-x-auto bg-white border-t border-[var(--border-light)] z-30"
-        style={{ bottom: NAV_H + INPUT_H }}
-      >
-        <QuickButton
-          icon={ClockIcon}
-          label={isClockedIn ? 'Clock out' : 'Clock in'}
-          onClick={() => fireQuickAction(isClockedIn ? 'clock_out' : 'clock_in')}
-          disabled={thread.isSending}
-        />
-        <QuickButton icon={Camera} label="Photo" onClick={() => fireQuickAction('photo')} disabled={thread.isSending} />
-        <QuickButton icon={FileText} label="Note" onClick={() => fireQuickAction('note')} disabled={thread.isSending} />
-        <QuickButton icon={MoreHorizontal} label="More" onClick={() => fireQuickAction('more')} />
-      </div>
-
-      {/* Input bar — fixed above bottom nav. Mic button is sized larger so
-          it reads as the primary action (matches the design intent of a
-          voice-first field tool). */}
+      {/* Input bar — sits above the 5-button layout nav. Mic is the
+          primary action; attach + send are support. */}
       <div
         className="fixed left-0 right-0 px-3 py-2 flex items-center gap-2 bg-white border-t border-[var(--border-light)] z-30"
         style={{ bottom: NAV_H }}
@@ -358,7 +333,6 @@ export function AssistantHome() {
           disabled={thread.isSending || thread.blocked}
           className="flex-1 px-3.5 py-2 rounded-full border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:border-[var(--navy)] min-h-[40px]"
         />
-        {/* Voice — visually larger to read as the primary action. */}
         <VoiceButton onTranscript={onTranscript} onFinal={onFinal} className="shrink-0 scale-110" />
         <button
           onClick={onSubmit}
@@ -379,21 +353,5 @@ export function AssistantHome() {
         className="hidden"
       />
     </div>
-  )
-}
-
-function QuickButton({ icon: Icon, label, onClick, disabled }: { icon: typeof Camera; label: string; onClick: () => void; disabled?: boolean }) {
-  return (
-    <button
-      onClick={onClick}
-      disabled={disabled}
-      className={cn(
-        'flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-2xl bg-[var(--cream-light,#f5efe6)] hover:bg-[var(--cream,#ede4d2)]',
-        'min-w-[80px] shrink-0 transition-colors disabled:opacity-40',
-      )}
-    >
-      <Icon size={18} className="text-[var(--navy)]" />
-      <span className="text-[11px] font-semibold text-[var(--text)]">{label}</span>
-    </button>
   )
 }
