@@ -7,19 +7,26 @@
 import type { ToolDef } from './aiV2Tools.ts'
 
 // ─── Tool: clock_in (canary, Phase 0) ────────────────────────────────
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 const clock_in: ToolDef = {
   name: 'clock_in',
   description:
-    "Start a time entry for the user on a specific project. If the user is " +
-    "assigned to multiple active projects and didn't specify which, return " +
-    "quick_replies asking which project. Returns the new time entry's id and " +
-    "a confirmation line with the project name and clock-in time.",
+    "Start a time entry for the user on a specific project. " +
+    "When the user mentions a project by name (e.g. 'Thompson kitchen'), pass it as " +
+    "project_name — DO NOT invent a project_id slug. project_id should only be set " +
+    "when you have a real UUID from a previous tool result. If neither is given and " +
+    "the user has multiple active projects, the tool returns quick_replies asking " +
+    "which one. Returns a confirmation line with the project name and time.",
   input_schema: {
     type: 'object',
     properties: {
       project_id: {
         type: 'string',
-        description: 'The UUID of the project to clock in to. Omit if unknown.',
+        description: 'A real project UUID from a previous tool result. Omit unless you have a UUID. Never invent a slug.',
+      },
+      project_name: {
+        type: 'string',
+        description: 'A free-text project name the user mentioned. The tool fuzzy-matches this against the user\'s active projects.',
       },
       work_type: {
         type: 'string',
@@ -40,9 +47,12 @@ const clock_in: ToolDef = {
   personas: ['employee', 'admin'],
   async execute(args, ctx) {
     const work_type = (args.work_type as string) ?? 'field_carpentry'
+    const projectIdArg = (args.project_id as string | undefined)?.trim() || undefined
+    const projectNameArg = (args.project_name as string | undefined)?.trim() || undefined
 
-    // 1. If they have an open time entry, refuse (use clock_out first).
-    const { data: open } = await ctx.asUser
+    // 1. If they have an open time entry, refuse with quick-reply for clock_out.
+    //    Use admin client for safety — we trust ctx.user_id (verified from JWT).
+    const { data: open } = await ctx.admin
       .from('time_entries')
       .select('id, project_id, clock_in')
       .eq('user_id', ctx.user_id)
@@ -51,8 +61,7 @@ const clock_in: ToolDef = {
       .limit(1)
       .maybeSingle()
     if (open) {
-      // Look up project name for the message.
-      const { data: openProject } = await ctx.asUser
+      const { data: openProject } = await ctx.admin
         .from('projects')
         .select('title')
         .eq('id', open.project_id)
@@ -69,30 +78,69 @@ const clock_in: ToolDef = {
       }
     }
 
-    // 2. Resolve project_id. If not provided, look at assignments.
-    let project_id = args.project_id as string | undefined
-    if (!project_id) {
-      const { data: assigns } = await ctx.asUser
-        .from('project_assignments')
-        .select('project_id, projects(id, title, status)')
-        .eq('employee_id', ctx.user_id)
-        .eq('active', true)
-      const activeProjects =
-        (assigns ?? [])
-          .map((r: Record<string, unknown>) => r.projects as { id: string; title: string; status: string } | null)
-          .filter((p): p is { id: string; title: string; status: string } =>
-            !!p && (p.status === 'active' || p.status === 'pending'),
-          )
+    // 2. Pull the user's active assignments (admin client — RLS bypass is OK
+    //    because we already verified user_id from the JWT and we're
+    //    explicitly scoping by employee_id).
+    const { data: assigns } = await ctx.admin
+      .from('project_assignments')
+      .select('project_id, projects(id, title, status)')
+      .eq('employee_id', ctx.user_id)
+      .eq('active', true)
+    const activeProjects =
+      (assigns ?? [])
+        .map((r: Record<string, unknown>) => r.projects as { id: string; title: string; status: string } | null)
+        .filter((p): p is { id: string; title: string; status: string } =>
+          !!p && (p.status === 'active' || p.status === 'pending'),
+        )
 
+    // 3. Resolve which project to clock in to.
+    let project_id: string | undefined
+    if (projectIdArg && UUID_RE.test(projectIdArg)) {
+      // Validate against user's assignments.
+      const match = activeProjects.find((p) => p.id === projectIdArg)
+      if (!match) {
+        return {
+          message: "I can't find that project on your active assignments. Pick one?",
+          quick_replies: {
+            options: activeProjects.map((p) => ({ label: p.title, value: `project:${p.id}` })),
+            custom_placeholder: 'Or type the project name…',
+          },
+        }
+      }
+      project_id = match.id
+    } else if (projectNameArg) {
+      // Fuzzy match on title — case-insensitive substring, then word overlap.
+      const needle = projectNameArg.toLowerCase()
+      const exact = activeProjects.find((p) => p.title.toLowerCase() === needle)
+      const sub = activeProjects.find((p) => p.title.toLowerCase().includes(needle))
+      const tokens = needle.split(/\s+/).filter(Boolean)
+      const overlap = activeProjects.find((p) => {
+        const t = p.title.toLowerCase()
+        return tokens.length > 0 && tokens.every((tk) => t.includes(tk))
+      })
+      const match = exact ?? sub ?? overlap
+      if (match) {
+        project_id = match.id
+      } else if (activeProjects.length > 0) {
+        return {
+          message: `I couldn't match "${projectNameArg}". Did you mean one of these?`,
+          quick_replies: {
+            options: activeProjects.map((p) => ({ label: p.title, value: `project:${p.id}` })),
+            custom_placeholder: 'Or type the project name…',
+          },
+        }
+      }
+    }
+
+    if (!project_id) {
       if (activeProjects.length === 0) {
         return {
-          message: "You're not assigned to any active projects. Ask Adam to assign you, or pick from your company's projects.",
+          message: "You're not assigned to any active projects. Ask the admin to assign you to one.",
         }
       }
       if (activeProjects.length === 1) {
         project_id = activeProjects[0].id
       } else {
-        // Ask back via quick replies.
         return {
           message: 'Which project are you clocking in to?',
           quick_replies: {
@@ -103,9 +151,10 @@ const clock_in: ToolDef = {
       }
     }
 
-    // 3. Insert the time entry.
+    // 4. Insert the time entry. Use admin client to bypass any RLS quirks —
+    //    we set user_id explicitly so the inserted row is correctly attributed.
     const clock_in_iso = new Date().toISOString()
-    const { data: inserted, error } = await ctx.asUser
+    const { data: inserted, error } = await ctx.admin
       .from('time_entries')
       .insert({
         user_id: ctx.user_id,
