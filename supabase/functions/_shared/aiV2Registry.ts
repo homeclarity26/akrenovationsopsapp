@@ -721,7 +721,16 @@ const submit_receipt: ToolDef = {
       }
     }
 
-    const date = (args.date as string) ?? new Date().toISOString().slice(0, 10)
+    // Date sanity: if Claude returned a clearly wrong (>14 days off) date,
+    // fall back to today. Claude can hallucinate "today" as old year.
+    let date = (args.date as string) ?? new Date().toISOString().slice(0, 10)
+    if (date) {
+      const parsed = new Date(date + 'T00:00:00Z')
+      const daysOff = Math.abs((Date.now() - parsed.getTime()) / 86_400_000)
+      if (Number.isNaN(parsed.getTime()) || daysOff > 14) {
+        date = new Date().toISOString().slice(0, 10)
+      }
+    }
     const { data: inserted, error } = await ctx.admin
       .from('expenses')
       .insert({
@@ -732,7 +741,8 @@ const submit_receipt: ToolDef = {
         category: args.category ?? null,
         receipt_image_url: args.receipt_image_url ?? null,
         entered_by: ctx.user_id,
-        entry_method: args.receipt_image_url ? 'photo' : 'voice',
+        // expenses.entry_method CHECK only accepts manual/receipt_scan/purchase_order.
+        entry_method: args.receipt_image_url ? 'receipt_scan' : 'manual',
       })
       .select('id')
       .maybeSingle()

@@ -377,8 +377,15 @@ function buildSystemPrompt(opts: { persona: Persona; full_name: string; pathname
     client: `You are a homeowner's AI assistant for their renovation project with AK Renovations. Be friendly, plain-spoken, never reveal cost margins or internal data.`,
     platform_owner: `You are the platform owner's AI assistant. You manage the multi-tenant platform — companies, users, audit logs. You do NOT have access to any company's tenant data.`,
   }
+  // Inject the current date so Claude doesn't hallucinate "today" — the
+  // model's training cutoff means it has no clue what year it is otherwise.
+  const today = new Date()
+  const todayIso = today.toISOString().slice(0, 10)
+  const todayHuman = today.toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })
   return [
     personaIntro[persona],
+    ``,
+    `Today is ${todayHuman} (${todayIso}). Use this for any "today/tomorrow/this week" reasoning. Never guess the date.`,
     ``,
     `RULES:`,
     `- Prefer tool calls over text answers when the user wants something done.`,
