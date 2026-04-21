@@ -27,6 +27,10 @@ export interface AppUser {
   platform_onboarding_complete: boolean
   company_onboarding_complete: boolean
   field_onboarding_complete: boolean
+  /** Phase 0 feature flag — true = chat-first AssistantHome, false = legacy tile UI. */
+  ai_v2_enabled: boolean
+  /** Optional voice-out for assistant replies (Web SpeechSynthesis). */
+  ai_tts_enabled: boolean
 }
 
 interface AuthContextValue {
@@ -229,7 +233,7 @@ async function fetchProfileWithToken(userId: string, accessToken: string, fallba
   const anon = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) ?? ''
   try {
     const res = await fetch(
-      `${url}/rest/v1/profiles?select=id,role,full_name,email,avatar_url,company_id,platform_onboarding_complete,company_onboarding_complete,field_onboarding_complete&id=eq.${encodeURIComponent(userId)}&limit=1`,
+      `${url}/rest/v1/profiles?select=id,role,full_name,email,avatar_url,company_id,platform_onboarding_complete,company_onboarding_complete,field_onboarding_complete,ai_v2_enabled,ai_tts_enabled&id=eq.${encodeURIComponent(userId)}&limit=1`,
       {
         headers: {
           apikey: anon,
@@ -255,6 +259,8 @@ async function fetchProfileWithToken(userId: string, accessToken: string, fallba
       platform_onboarding_complete: Boolean(data.platform_onboarding_complete),
       company_onboarding_complete: Boolean(data.company_onboarding_complete),
       field_onboarding_complete: Boolean(data.field_onboarding_complete),
+      ai_v2_enabled: Boolean(data.ai_v2_enabled),
+      ai_tts_enabled: Boolean(data.ai_tts_enabled),
     }
   } catch (e) {
     console.warn('[auth] fetchProfileWithToken threw:', e)
