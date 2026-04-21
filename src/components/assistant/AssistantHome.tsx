@@ -1,43 +1,35 @@
-// AssistantHome — chat-first home screen for the field worker (Phase 1).
+// AssistantHome — chat-first home screen for the field worker (Phase 1 v2).
 //
-// Layout (mobile-first):
+// Layout (mobile, sits inside EmployeeLayout):
+//   * Layout owns:  fixed top header (44px), fixed bottom nav (64px).
+//   * AssistantHome owns the space between, with two FIXED bars at the
+//     bottom (above the nav): quick-action buttons (~64px) and input bar
+//     (~64px including safe-area). Body scrolls between top header and
+//     these two bars.
 //
-//   ┌──────────────── header ───────────────┐
-//   │ Good morning, Jane.   ☰ history       │
-//   ├───────────────────────────────────────┤
-//   │ • SuggestionCards (only on empty)     │
-//   │ • Chat thread (user/assistant/tool)   │
-//   │   * QuickReplyChips beneath tool msgs │
-//   │   * Live transcript while listening   │
-//   ├───────────────────────────────────────┤
-//   │ Quick: Clock-in/out · Photo · Note ·  │
-//   │        More                           │
-//   ├───────────────────────────────────────┤
-//   │ [+] Ask me anything…  [🎤] [→]        │
-//   └───────────────────────────────────────┘
+// Empty state: a compact greeting + horizontal chip row of suggestions
+// (instead of a stack of one lonely card).
 //
-// Voice: TAP-to-talk (not hold). Live transcript streams into chat as a
-// pending user bubble, finalizing on stop. Sends to agent-tool-call.
+// Voice: TAP-to-talk. Live transcript streams into chat as a pending
+// bubble. Wraps multi-line — no horizontal-scroll cutoff.
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Send, Plus, Camera, FileText, Clock as ClockIcon, MoreHorizontal, Volume2, VolumeX, History } from 'lucide-react'
+import { Send, Plus, Camera, FileText, Clock as ClockIcon, MoreHorizontal, Volume2, VolumeX, History, Sparkles } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import { useThread } from '@/lib/assistant/useThread'
 import { useSuggestions } from '@/lib/assistant/useSuggestions'
 import { ChatMessage } from './ChatMessage'
-import { SuggestionCards } from './SuggestionCards'
-import { VoiceButton, isSpeechRecognitionAvailable } from './VoiceButton'
+import { VoiceButton } from './VoiceButton'
 import type { AIMessage, SuggestionItem } from '@/lib/assistant/types'
 import { supabase } from '@/lib/supabase'
 
-const QUICK_BUTTON_LABEL: Record<string, { label: string; icon: typeof Camera }> = {
-  clock_in: { label: 'Clock in', icon: ClockIcon },
-  clock_out: { label: 'Clock out', icon: ClockIcon },
-  photo: { label: 'Photo', icon: Camera },
-  note: { label: 'Note', icon: FileText },
-}
+// EmployeeLayout's bottom nav is h-16 (64px). Our two bars (quick + input)
+// stack above that. Total bottom space we reserve for body padding:
+//   nav (64) + input row (~64) + quick row (~76) = ~204px on tight screens.
+// Use safe value with breathing room.
+const BOTTOM_RESERVED = 220 // px
 
 export function AssistantHome() {
   const { user } = useAuth()
@@ -55,16 +47,13 @@ export function AssistantHome() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  // Persist TTS toggle to profile.
   const onToggleTts = useCallback(async () => {
     const next = !ttsEnabled
     setTtsEnabled(next)
-    if (user?.id) {
-      await supabase.from('profiles').update({ ai_tts_enabled: next }).eq('id', user.id)
-    }
+    if (user?.id) await supabase.from('profiles').update({ ai_tts_enabled: next }).eq('id', user.id)
   }, [ttsEnabled, user?.id])
 
-  // Detect clocked-in status to swap quick button label between Clock in / Clock out.
+  // Detect clocked-in status to auto-swap Clock in/out label.
   useEffect(() => {
     let cancelled = false
     async function check() {
@@ -83,7 +72,6 @@ export function AssistantHome() {
     return () => { cancelled = true; clearInterval(t) }
   }, [user?.id, thread.messages.length])
 
-  // Scroll to bottom on new messages.
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [thread.messages.length, pendingTranscript])
@@ -95,27 +83,24 @@ export function AssistantHome() {
     return `${time}, ${first}.`
   }, [user?.full_name])
 
-  // ── Send helpers ──
+  // ── Send ──
   const send = useCallback(async (text: string) => {
     if (!text.trim() || thread.isSending) return
     setInput('')
     setPendingTranscript('')
     await thread.send(text, { context: { pathname } })
   }, [thread, pathname])
+  const onSubmit = useCallback(() => { void send(input) }, [input, send])
 
-  const onSubmit = useCallback(() => {
-    void send(input)
-  }, [input, send])
-
-  // ── Quick action: tap-execute via direct sendMessage with imperative phrasing ──
-  const fireQuickAction = useCallback(async (intent: 'clock_in' | 'clock_out' | 'photo' | 'note' | 'more') => {
+  // ── Quick actions ──
+  const fireQuickAction = useCallback((intent: 'clock_in' | 'clock_out' | 'photo' | 'note' | 'more') => {
     if (intent === 'more') { navigate('/employee/tools'); return }
     if (intent === 'photo') { fileInputRef.current?.click(); return }
     const phrase = intent === 'clock_in' ? 'Clock me in.' : intent === 'clock_out' ? 'Clock me out.' : 'Add a daily note.'
     void send(phrase)
   }, [send, navigate])
 
-  // Voice handlers.
+  // ── Voice ──
   const onTranscript = useCallback((text: string, isFinal: boolean) => {
     setPendingTranscript(isFinal ? '' : text)
   }, [])
@@ -124,10 +109,8 @@ export function AssistantHome() {
     void send(text)
   }, [send])
 
-  // ── Quick reply / custom reply handlers from ChatMessage ──
+  // ── Quick reply chips from a tool result ──
   const onQuickReply = useCallback((value: string, label: string) => {
-    // Project-pick chip pattern: "project:UUID|action:name". Re-issue the
-    // same intent with the resolved project_id so Claude can complete it.
     const m = value.match(/^project:([0-9a-f-]+)\|action:(\w+)$/)
     if (m) {
       const [, project_id, action] = m
@@ -152,7 +135,7 @@ export function AssistantHome() {
     inputRef.current?.focus()
   }, [])
 
-  // ── Suggestion card pick: directly fire the tool via natural-language phrase ──
+  // ── Suggestion-card pick → natural-language phrase to fire the tool ──
   const onPickSuggestion = useCallback((s: SuggestionItem) => {
     const phrases: Record<string, string> = {
       clock_in: 'Clock me in.',
@@ -161,88 +144,134 @@ export function AssistantHome() {
       add_shopping_item: 'Add an item to the shopping list.',
       my_schedule: "What's on my schedule?",
       message_admin: 'Message the admin.',
-      view_my_progress: 'Show my project progress.',
-      send_message_to_contractor: 'Send a message to AK Renovations.',
     }
     const phrase = phrases[s.tool] ?? s.label
     void send(phrase)
   }, [send])
 
-  // ── Photo flow ──
+  // ── Photo upload → take_photo tool ──
   const onPhotoSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file || !user?.id) return
     e.target.value = ''
-    // Upload first, then call take_photo via natural-language prompt with the URL.
     const path = `${user.id}/${crypto.randomUUID()}-${file.name.replace(/[^a-z0-9.-]+/gi, '_')}`
     const { data: up, error: upErr } = await supabase.storage.from('project-photos').upload(path, file, {
-      cacheControl: '3600',
-      upsert: false,
-      contentType: file.type,
+      cacheControl: '3600', upsert: false, contentType: file.type,
     })
-    if (upErr) {
-      void send(`Couldn't upload photo: ${upErr.message}`)
-      return
-    }
+    if (upErr) { void send(`Couldn't upload photo: ${upErr.message}`); return }
     const { data: pub } = supabase.storage.from('project-photos').getPublicUrl(up.path)
     void send(`Save this photo to my project: ${pub.publicUrl}`)
   }, [user?.id, send])
 
-  const showSuggestions = thread.messages.length === 0
+  // ── Always-available baseline chip set for the empty state, blended
+  //     with whatever agent-suggestions returned. Covers the case where
+  //     the rule engine produces 0-1 contextual hits (evening, no open
+  //     items) — body still feels alive instead of one lonely card. ──
+  const baselineChips: SuggestionItem[] = useMemo(() => [
+    { id: 'b_clockin', icon: '⏰', label: isClockedIn ? 'Clock out' : 'Clock in', tool: isClockedIn ? 'clock_out' : 'clock_in' },
+    { id: 'b_shopping', icon: '🛒', label: 'Shopping list', tool: 'check_shopping_list' },
+    { id: 'b_schedule', icon: '📅', label: "What's on today?", tool: 'my_schedule' },
+    { id: 'b_note', icon: '📝', label: 'Add a note', tool: 'add_daily_log' },
+    { id: 'b_message', icon: '💬', label: 'Message admin', tool: 'message_admin' },
+  ], [isClockedIn])
+
+  // Merge contextual suggestions FIRST (de-duped by tool name) with baselines.
+  const emptyStateChips: SuggestionItem[] = useMemo(() => {
+    const seen = new Set<string>()
+    const out: SuggestionItem[] = []
+    for (const s of [...suggestions, ...baselineChips]) {
+      if (seen.has(s.tool)) continue
+      seen.add(s.tool)
+      out.push(s)
+      if (out.length === 6) break
+    }
+    return out
+  }, [suggestions, baselineChips])
+
+  const showEmptyState = thread.messages.length === 0
 
   return (
-    <div className="flex flex-col h-svh bg-[var(--bg)]">
-      {/* Header */}
-      <header className="px-4 pt-3 pb-2 flex items-center justify-between border-b border-[var(--border-light)] bg-white">
-        <div>
-          <p className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-semibold">Assistant</p>
-          <h1 className="font-display text-lg text-[var(--navy)] leading-tight">{greeting}</h1>
-        </div>
+    <div className="flex flex-col" style={{ minHeight: 'calc(100svh - 44px - 64px)' }}>
+      {/* Mini control row — TTS + history. Sits flush under the layout's
+          top bar. No redundant greeting eyebrow (the body greeting is the
+          hero on empty state). */}
+      <div className="flex items-center justify-between px-3 pt-1 pb-1">
+        <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-semibold">Assistant</span>
         <div className="flex items-center gap-1">
-          {isSpeechRecognitionAvailable() && (
-            <button
-              onClick={onToggleTts}
-              className="p-2 rounded-full hover:bg-gray-50 min-w-[40px] min-h-[40px] flex items-center justify-center"
-              aria-label={ttsEnabled ? 'Mute voice replies' : 'Enable voice replies'}
-            >
-              {ttsEnabled ? <Volume2 size={16} className="text-[var(--navy)]" /> : <VolumeX size={16} className="text-[var(--text-tertiary)]" />}
-            </button>
-          )}
+          <button
+            onClick={onToggleTts}
+            className="p-1.5 rounded-full hover:bg-gray-100 min-w-[32px] min-h-[32px] flex items-center justify-center"
+            aria-label={ttsEnabled ? 'Mute voice' : 'Enable voice'}
+          >
+            {ttsEnabled ? <Volume2 size={14} className="text-[var(--navy)]" /> : <VolumeX size={14} className="text-[var(--text-tertiary)]" />}
+          </button>
           <button
             onClick={() => navigate('/employee/tools')}
-            className="p-2 rounded-full hover:bg-gray-50 min-w-[40px] min-h-[40px] flex items-center justify-center"
+            className="p-1.5 rounded-full hover:bg-gray-100 min-w-[32px] min-h-[32px] flex items-center justify-center"
             aria-label="More tools"
           >
-            <History size={16} className="text-[var(--text-secondary)]" />
+            <History size={14} className="text-[var(--text-secondary)]" />
           </button>
         </div>
-      </header>
+      </div>
 
       {/* Body */}
-      <main className="flex-1 overflow-y-auto px-3 py-3 space-y-3">
-        {showSuggestions && (
-          <>
-            <p className="text-sm text-[var(--text-secondary)] px-2">
-              Tell me what you need, or pick one below.
+      <main
+        className="flex-1 overflow-y-auto px-3"
+        style={{ paddingBottom: BOTTOM_RESERVED }}
+      >
+        {showEmptyState && (
+          <div className="pt-6 pb-2">
+            <h1 className="font-display text-[26px] leading-tight text-[var(--navy)]">
+              {greeting}
+            </h1>
+            <p className="text-sm text-[var(--text-secondary)] mt-1.5 mb-5">
+              Tell me what you need, or tap one of these.
             </p>
-            <SuggestionCards suggestions={suggestions} onPick={onPickSuggestion} />
-          </>
+            <div className="flex flex-wrap gap-2">
+              {emptyStateChips.map((s) => (
+                <button
+                  key={s.id}
+                  onClick={() => onPickSuggestion(s)}
+                  className={cn(
+                    'flex items-center gap-1.5 px-3.5 py-2 rounded-full',
+                    'bg-white border border-[var(--border-light)] hover:border-[var(--navy)]',
+                    'text-sm font-medium text-[var(--text)] transition-colors',
+                    'min-h-[40px]',
+                  )}
+                >
+                  <span>{s.icon}</span>
+                  <span>{s.label}</span>
+                </button>
+              ))}
+            </div>
+            {/* Subtle hint — voice + mic */}
+            <div className="mt-8 flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
+              <Sparkles size={12} />
+              <span>Tap the mic to talk. Tap the buttons below for one-tap actions.</span>
+            </div>
+          </div>
         )}
 
-        {thread.messages.map((m: AIMessage, i: number) => (
-          <ChatMessage
-            key={m.id ?? i}
-            message={m}
-            ttsEnabled={ttsEnabled}
-            onQuickReply={onQuickReply}
-            onCustomReply={onCustomReply}
-            autoSpeak={i === thread.messages.length - 1 && (m.role === 'assistant' || m.role === 'tool')}
-          />
-        ))}
+        {/* Chat */}
+        {!showEmptyState && (
+          <div className="pt-3 space-y-3">
+            {thread.messages.map((m: AIMessage, i: number) => (
+              <ChatMessage
+                key={m.id ?? i}
+                message={m}
+                ttsEnabled={ttsEnabled}
+                onQuickReply={onQuickReply}
+                onCustomReply={onCustomReply}
+                autoSpeak={i === thread.messages.length - 1 && (m.role === 'assistant' || m.role === 'tool')}
+              />
+            ))}
+          </div>
+        )}
 
-        {/* Live transcript bubble while voice is recording. */}
+        {/* Live transcript bubble while voice is recording */}
         {pendingTranscript && (
-          <div className="flex justify-end opacity-70">
+          <div className="flex justify-end mt-2 opacity-70">
             <div className="max-w-[85%] px-3.5 py-2.5 rounded-2xl rounded-br-sm bg-[var(--navy)]/60 text-white text-sm">
               <p className="whitespace-pre-wrap break-words">{pendingTranscript}…</p>
             </div>
@@ -250,7 +279,7 @@ export function AssistantHome() {
         )}
 
         {thread.isSending && (
-          <div className="flex justify-start">
+          <div className="flex justify-start mt-2">
             <div className="bg-[var(--cream-light,#f5efe6)] rounded-2xl rounded-bl-sm px-3.5 py-2.5">
               <span className="inline-flex gap-1">
                 <span className="w-1.5 h-1.5 rounded-full bg-[var(--text-tertiary)] animate-bounce" />
@@ -262,7 +291,7 @@ export function AssistantHome() {
         )}
 
         {thread.errorMessage && !thread.blocked && (
-          <div className="px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
+          <div className="px-3 py-2 mt-2 rounded-lg bg-red-50 border border-red-200 text-xs text-red-700">
             {thread.errorMessage}
           </div>
         )}
@@ -270,55 +299,49 @@ export function AssistantHome() {
         <div ref={messagesEndRef} />
       </main>
 
-      {/* Budget banner */}
+      {/* Budget banner — always above quick action row when active */}
       {(thread.monthly_cost_so_far / thread.monthly_cost_cap >= 0.8 || thread.blocked) && (
-        <div className={cn(
-          'px-3 py-2 text-xs',
-          thread.blocked ? 'bg-red-50 text-red-700 border-t border-red-200' : 'bg-amber-50 text-amber-800 border-t border-amber-200',
-        )}>
+        <div
+          className={cn(
+            'fixed left-0 right-0 px-3 py-2 text-xs z-30',
+            thread.blocked ? 'bg-red-50 text-red-700 border-t border-red-200' : 'bg-amber-50 text-amber-800 border-t border-amber-200',
+          )}
+          style={{ bottom: 64 + 64 + 64 + 8 }} // above quick + input + nav
+        >
           {thread.blocked
-            ? `Monthly AI budget reached ($${thread.monthly_cost_cap.toFixed(2)}). Tap buttons still work.`
-            : `Used $${thread.monthly_cost_so_far.toFixed(2)} of $${thread.monthly_cost_cap.toFixed(2)} this month. Consider tap buttons where possible.`}
+            ? `AI budget reached ($${thread.monthly_cost_cap.toFixed(2)}). Tap buttons still work.`
+            : `Used $${thread.monthly_cost_so_far.toFixed(2)} of $${thread.monthly_cost_cap.toFixed(2)} this month.`}
         </div>
       )}
 
-      {/* Quick actions row */}
-      <div className="px-3 pt-2 pb-1 flex gap-2 overflow-x-auto bg-white border-t border-[var(--border-light)]">
+      {/* Quick action row — fixed above input bar, above bottom nav */}
+      <div
+        className="fixed left-0 right-0 px-3 py-2 flex gap-2 overflow-x-auto bg-white border-t border-[var(--border-light)] z-30"
+        style={{ bottom: 64 + 64 }} // 64 (input bar) + 64 (nav)
+      >
         <QuickButton
-          icon={QUICK_BUTTON_LABEL[isClockedIn ? 'clock_out' : 'clock_in'].icon}
-          label={QUICK_BUTTON_LABEL[isClockedIn ? 'clock_out' : 'clock_in'].label}
+          icon={isClockedIn ? ClockIcon : ClockIcon}
+          label={isClockedIn ? 'Clock out' : 'Clock in'}
           onClick={() => fireQuickAction(isClockedIn ? 'clock_out' : 'clock_in')}
           disabled={thread.isSending}
         />
-        <QuickButton
-          icon={QUICK_BUTTON_LABEL.photo.icon}
-          label={QUICK_BUTTON_LABEL.photo.label}
-          onClick={() => fireQuickAction('photo')}
-          disabled={thread.isSending}
-        />
-        <QuickButton
-          icon={QUICK_BUTTON_LABEL.note.icon}
-          label={QUICK_BUTTON_LABEL.note.label}
-          onClick={() => fireQuickAction('note')}
-          disabled={thread.isSending}
-        />
-        <QuickButton
-          icon={MoreHorizontal}
-          label="More"
-          onClick={() => fireQuickAction('more')}
-        />
+        <QuickButton icon={Camera} label="Photo" onClick={() => fireQuickAction('photo')} disabled={thread.isSending} />
+        <QuickButton icon={FileText} label="Note" onClick={() => fireQuickAction('note')} disabled={thread.isSending} />
+        <QuickButton icon={MoreHorizontal} label="More" onClick={() => fireQuickAction('more')} />
       </div>
 
-      {/* Input bar */}
-      <div className="px-3 py-3 flex items-center gap-2 bg-white border-t border-[var(--border-light)] safe-area-bottom">
+      {/* Input bar — fixed above bottom nav */}
+      <div
+        className="fixed left-0 right-0 px-3 py-2 flex items-center gap-2 bg-white border-t border-[var(--border-light)] z-30"
+        style={{ bottom: 64 }} // above the 64px nav
+      >
         <button
           onClick={() => fileInputRef.current?.click()}
-          className="p-2.5 rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-gray-50 min-w-[44px] min-h-[44px] flex items-center justify-center"
+          className="p-2 rounded-full border border-[var(--border)] text-[var(--text-secondary)] hover:bg-gray-50 min-w-[40px] min-h-[40px] flex items-center justify-center"
           aria-label="Attach"
         >
           <Plus size={18} />
         </button>
-
         <input
           ref={inputRef}
           type="text"
@@ -327,15 +350,13 @@ export function AssistantHome() {
           onKeyDown={(e) => e.key === 'Enter' && !thread.isSending && onSubmit()}
           placeholder="Ask me anything…"
           disabled={thread.isSending || thread.blocked}
-          className="flex-1 px-3.5 py-2.5 rounded-full border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:border-[var(--navy)] min-h-[44px]"
+          className="flex-1 px-3.5 py-2 rounded-full border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:border-[var(--navy)] min-h-[40px]"
         />
-
         <VoiceButton onTranscript={onTranscript} onFinal={onFinal} className="shrink-0" />
-
         <button
           onClick={onSubmit}
           disabled={!input.trim() || thread.isSending || thread.blocked}
-          className="p-2.5 rounded-full bg-[var(--navy)] text-white disabled:opacity-40 min-w-[44px] min-h-[44px] flex items-center justify-center"
+          className="p-2 rounded-full bg-[var(--navy)] text-white disabled:opacity-40 min-w-[40px] min-h-[40px] flex items-center justify-center"
           aria-label="Send"
         >
           <Send size={16} />
@@ -360,7 +381,7 @@ function QuickButton({ icon: Icon, label, onClick, disabled }: { icon: typeof Ca
       onClick={onClick}
       disabled={disabled}
       className={cn(
-        'flex flex-col items-center justify-center gap-1 px-4 py-2 rounded-2xl bg-[var(--cream-light,#f5efe6)] hover:bg-[var(--cream,#ede4d2)]',
+        'flex flex-col items-center justify-center gap-0.5 px-4 py-2 rounded-2xl bg-[var(--cream-light,#f5efe6)] hover:bg-[var(--cream,#ede4d2)]',
         'min-w-[80px] shrink-0 transition-colors disabled:opacity-40',
       )}
     >

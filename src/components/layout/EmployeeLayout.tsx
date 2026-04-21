@@ -1,4 +1,4 @@
-import { NavLink, Navigate, Outlet } from 'react-router-dom'
+import { NavLink, Navigate, Outlet, useLocation } from 'react-router-dom'
 import {
   Home, ShoppingCart, Clock, Calendar,
   MessageCircle, FolderOpen, Package
@@ -28,6 +28,7 @@ const NAV = [
 export function EmployeeLayout() {
   const { user } = useAuth()
   const { data: company } = useCompanyProfile()
+  const { pathname } = useLocation()
 
   // Onboarding guard — only force the field wizard for actual employees.
   // Admins previewing the field view (via ModeToggle) don't need to
@@ -36,9 +37,16 @@ export function EmployeeLayout() {
     return <Navigate to="/onboard/field" replace />
   }
 
+  // When the AI v2 chat-first home owns the screen, hide the duplicate
+  // chrome (old AgentBar pill, PoweredByFooter, the route-list scroll
+  // padding). Chat IS the app; we keep only the slim top bar (mode
+  // toggle + bell) and the bottom nav so the user can still leave the
+  // chat for direct-data views (Projects, List, Stock, etc.).
+  const aiChatHome = !!user?.ai_v2_enabled && pathname === '/employee'
+
   return (
     <div className="flex flex-col min-h-svh bg-[var(--bg)]">
-      {/* Top bar — slim, mode toggle for admins + AI button */}
+      {/* Top bar — slim, mode toggle for admins + notification bell */}
       <header className="fixed top-0 left-0 right-0 h-11 bg-[var(--bg)] border-b border-[var(--border-light)] flex items-center justify-between px-3 z-40">
         <div className="flex items-center gap-2">
           <ModeToggle />
@@ -49,10 +57,15 @@ export function EmployeeLayout() {
         <SafeBoundary label="NotificationBell.employee"><NotificationBell viewAllHref="/employee/reminders" /></SafeBoundary>
       </header>
 
-      <main className="flex-1 pt-11 pb-20 overflow-x-hidden">
-        <AgentBar />
+      <main className={cn(
+        'flex-1 overflow-x-hidden',
+        aiChatHome ? 'pt-11 pb-16' : 'pt-11 pb-20',
+      )}>
+        {/* Old AgentBar pill — dropped on the AI chat-first home (chat is
+            the AI surface). Kept for legacy tile-grid users. */}
+        {!aiChatHome && <AgentBar />}
         <Outlet />
-        <PoweredByFooter />
+        {!aiChatHome && <PoweredByFooter />}
       </main>
 
       {/* Bottom nav */}
