@@ -1,46 +1,55 @@
-// AssistantHome — chat-first home screen for the field worker (Phase 1 v2).
+// AssistantHome — chat-first home for the field worker.
 //
-// Layout (mobile, sits inside EmployeeLayout):
-//   * Layout owns:  fixed top header (44px), fixed bottom nav (64px).
-//   * AssistantHome owns the space between, with two FIXED bars at the
-//     bottom (above the nav): quick-action buttons (~64px) and input bar
-//     (~64px including safe-area). Body scrolls between top header and
-//     these two bars.
+// Design principles after Adam's first-look feedback:
+//   * No duplicate surfaces. Every common action has ONE place to do it:
+//     - Voice / text → input bar at bottom (with a prominent mic).
+//     - Clock in / Photo / Note → 4 quick-action buttons above the input.
+//     - Projects / List / Stock / Schedule / Messages → bottom nav (layout).
+//   * Empty state is a clean greeting + at most ONE smart contextual line
+//     (not a chip cloud — those duplicated the quick buttons + nav).
+//   * Once a chat starts, the body becomes the conversation. No chrome
+//     competing for attention.
 //
-// Empty state: a compact greeting + horizontal chip row of suggestions
-// (instead of a stack of one lonely card).
-//
-// Voice: TAP-to-talk. Live transcript streams into chat as a pending
-// bubble. Wraps multi-line — no horizontal-scroll cutoff.
+// Layout reservations:
+//   * EmployeeLayout fixed top header: 44px
+//   * EmployeeLayout fixed bottom nav: 64px
+//   * Quick-action row (fixed): ~64px above nav
+//   * Input bar (fixed): ~56px above quick-action row
+//   * Body padding bottom: 200px to clear all of the above
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { Send, Plus, Camera, FileText, Clock as ClockIcon, MoreHorizontal, Volume2, VolumeX, History, Sparkles } from 'lucide-react'
+import { Send, Plus, Camera, FileText, Clock as ClockIcon, MoreHorizontal, Volume2, VolumeX, History } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useAuth } from '@/context/AuthContext'
 import { useThread } from '@/lib/assistant/useThread'
-import { useSuggestions } from '@/lib/assistant/useSuggestions'
 import { ChatMessage } from './ChatMessage'
 import { VoiceButton } from './VoiceButton'
-import type { AIMessage, SuggestionItem } from '@/lib/assistant/types'
+import type { AIMessage } from '@/lib/assistant/types'
 import { supabase } from '@/lib/supabase'
 
-// EmployeeLayout's bottom nav is h-16 (64px). Our two bars (quick + input)
-// stack above that. Total bottom space we reserve for body padding:
-//   nav (64) + input row (~64) + quick row (~76) = ~204px on tight screens.
-// Use safe value with breathing room.
-const BOTTOM_RESERVED = 220 // px
+const NAV_H = 64
+const INPUT_H = 56
+const QUICK_H = 76
+const BOTTOM_RESERVED = NAV_H + INPUT_H + QUICK_H + 16
+
+interface SmartContext {
+  text: string
+  /** Optional inline link/action description, e.g. "Clock out". */
+  action_label?: string
+  action_phrase?: string  // sent to send() if action_label is tapped
+}
 
 export function AssistantHome() {
   const { user } = useAuth()
   const { pathname } = useLocation()
   const navigate = useNavigate()
   const thread = useThread()
-  const { suggestions } = useSuggestions({ pathname })
 
   const [input, setInput] = useState('')
   const [pendingTranscript, setPendingTranscript] = useState('')
   const [ttsEnabled, setTtsEnabled] = useState(user?.ai_tts_enabled ?? false)
+  const [smartCtx, setSmartCtx] = useState<SmartContext | null>(null)
   const [isClockedIn, setIsClockedIn] = useState<boolean | null>(null)
 
   const inputRef = useRef<HTMLInputElement>(null)
@@ -53,22 +62,58 @@ export function AssistantHome() {
     if (user?.id) await supabase.from('profiles').update({ ai_tts_enabled: next }).eq('id', user.id)
   }, [ttsEnabled, user?.id])
 
-  // Detect clocked-in status to auto-swap Clock in/out label.
+  // Single smart-context line — at most ONE thing surfaced inline.
+  // Priority: clocked-in status > shopping list count > nothing.
   useEffect(() => {
     let cancelled = false
-    async function check() {
+    async function compute() {
       if (!user?.id) return
-      const { data } = await supabase
+      const { data: open } = await supabase
         .from('time_entries')
-        .select('id')
+        .select('id, clock_in, projects(title)')
         .eq('user_id', user.id)
         .is('clock_out', null)
+        .order('clock_in', { ascending: false })
         .limit(1)
         .maybeSingle()
-      if (!cancelled) setIsClockedIn(!!data)
+      if (cancelled) return
+      const clockedIn = !!open
+      setIsClockedIn(clockedIn)
+
+      if (open) {
+        const elapsedMin = Math.floor((Date.now() - new Date(open.clock_in).getTime()) / 60000)
+        const h = Math.floor(elapsedMin / 60)
+        const m = elapsedMin % 60
+        const dur = h === 0 ? `${m}m` : m === 0 ? `${h}h` : `${h}h ${m}m`
+        const proj = (open as Record<string, unknown> & { projects?: { title?: string } }).projects?.title ?? 'a project'
+        setSmartCtx({
+          text: `You're clocked in to ${proj} · ${dur}`,
+          action_label: 'Clock out',
+          action_phrase: 'Clock me out.',
+        })
+        return
+      }
+
+      // Shopping list count (across user's company).
+      const { count } = await supabase
+        .from('shopping_list_items')
+        .select('id', { count: 'exact', head: true })
+        .eq('status', 'needed')
+      if (cancelled) return
+      const sc = count ?? 0
+      if (sc > 0) {
+        setSmartCtx({
+          text: `${sc} item${sc === 1 ? '' : 's'} on the shopping list`,
+          action_label: 'Show me',
+          action_phrase: 'Show me the shopping list.',
+        })
+        return
+      }
+
+      setSmartCtx(null)
     }
-    check()
-    const t = setInterval(check, 60_000)
+    compute()
+    const t = setInterval(compute, 60_000)
     return () => { cancelled = true; clearInterval(t) }
   }, [user?.id, thread.messages.length])
 
@@ -135,20 +180,6 @@ export function AssistantHome() {
     inputRef.current?.focus()
   }, [])
 
-  // ── Suggestion-card pick → natural-language phrase to fire the tool ──
-  const onPickSuggestion = useCallback((s: SuggestionItem) => {
-    const phrases: Record<string, string> = {
-      clock_in: 'Clock me in.',
-      clock_out: 'Clock me out.',
-      check_shopping_list: 'Show me the shopping list.',
-      add_shopping_item: 'Add an item to the shopping list.',
-      my_schedule: "What's on my schedule?",
-      message_admin: 'Message the admin.',
-    }
-    const phrase = phrases[s.tool] ?? s.label
-    void send(phrase)
-  }, [send])
-
   // ── Photo upload → take_photo tool ──
   const onPhotoSelected = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -163,38 +194,11 @@ export function AssistantHome() {
     void send(`Save this photo to my project: ${pub.publicUrl}`)
   }, [user?.id, send])
 
-  // ── Always-available baseline chip set for the empty state, blended
-  //     with whatever agent-suggestions returned. Covers the case where
-  //     the rule engine produces 0-1 contextual hits (evening, no open
-  //     items) — body still feels alive instead of one lonely card. ──
-  const baselineChips: SuggestionItem[] = useMemo(() => [
-    { id: 'b_clockin', icon: '⏰', label: isClockedIn ? 'Clock out' : 'Clock in', tool: isClockedIn ? 'clock_out' : 'clock_in' },
-    { id: 'b_shopping', icon: '🛒', label: 'Shopping list', tool: 'check_shopping_list' },
-    { id: 'b_schedule', icon: '📅', label: "What's on today?", tool: 'my_schedule' },
-    { id: 'b_note', icon: '📝', label: 'Add a note', tool: 'add_daily_log' },
-    { id: 'b_message', icon: '💬', label: 'Message admin', tool: 'message_admin' },
-  ], [isClockedIn])
-
-  // Merge contextual suggestions FIRST (de-duped by tool name) with baselines.
-  const emptyStateChips: SuggestionItem[] = useMemo(() => {
-    const seen = new Set<string>()
-    const out: SuggestionItem[] = []
-    for (const s of [...suggestions, ...baselineChips]) {
-      if (seen.has(s.tool)) continue
-      seen.add(s.tool)
-      out.push(s)
-      if (out.length === 6) break
-    }
-    return out
-  }, [suggestions, baselineChips])
-
   const showEmptyState = thread.messages.length === 0
 
   return (
     <div className="flex flex-col" style={{ minHeight: 'calc(100svh - 44px - 64px)' }}>
-      {/* Mini control row — TTS + history. Sits flush under the layout's
-          top bar. No redundant greeting eyebrow (the body greeting is the
-          hero on empty state). */}
+      {/* Slim control row: small label + TTS + history. Sits under layout's top bar. */}
       <div className="flex items-center justify-between px-3 pt-1 pb-1">
         <span className="text-[10px] uppercase tracking-wider text-[var(--text-tertiary)] font-semibold">Assistant</span>
         <div className="flex items-center gap-1">
@@ -217,39 +221,39 @@ export function AssistantHome() {
 
       {/* Body */}
       <main
-        className="flex-1 overflow-y-auto px-3"
+        className="flex-1 overflow-y-auto px-5"
         style={{ paddingBottom: BOTTOM_RESERVED }}
       >
         {showEmptyState && (
-          <div className="pt-6 pb-2">
-            <h1 className="font-display text-[26px] leading-tight text-[var(--navy)]">
+          <div className="pt-12 pb-2">
+            <h1 className="font-display text-[28px] leading-tight text-[var(--navy)] mb-2">
               {greeting}
             </h1>
-            <p className="text-sm text-[var(--text-secondary)] mt-1.5 mb-5">
-              Tell me what you need, or tap one of these.
+            <p className="text-[15px] text-[var(--text-secondary)] mb-6">
+              What can I help with?
             </p>
-            <div className="flex flex-wrap gap-2">
-              {emptyStateChips.map((s) => (
-                <button
-                  key={s.id}
-                  onClick={() => onPickSuggestion(s)}
-                  className={cn(
-                    'flex items-center gap-1.5 px-3.5 py-2 rounded-full',
-                    'bg-white border border-[var(--border-light)] hover:border-[var(--navy)]',
-                    'text-sm font-medium text-[var(--text)] transition-colors',
-                    'min-h-[40px]',
-                  )}
-                >
-                  <span>{s.icon}</span>
-                  <span>{s.label}</span>
-                </button>
-              ))}
-            </div>
-            {/* Subtle hint — voice + mic */}
-            <div className="mt-8 flex items-center gap-2 text-xs text-[var(--text-tertiary)]">
-              <Sparkles size={12} />
-              <span>Tap the mic to talk. Tap the buttons below for one-tap actions.</span>
-            </div>
+
+            {/* Single smart context line — only when something is timely. No
+                chip cloud. */}
+            {smartCtx && (
+              <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-[var(--cream-light,#f5efe6)] border border-[var(--border-light)] mb-6">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-[var(--text)]">{smartCtx.text}</p>
+                </div>
+                {smartCtx.action_label && smartCtx.action_phrase && (
+                  <button
+                    onClick={() => send(smartCtx.action_phrase!)}
+                    className="px-3 py-1.5 rounded-full bg-[var(--navy)] text-white text-xs font-semibold whitespace-nowrap"
+                  >
+                    {smartCtx.action_label}
+                  </button>
+                )}
+              </div>
+            )}
+
+            <p className="text-[13px] text-[var(--text-tertiary)]">
+              Talk or type below — or use the buttons for one-tap actions.
+            </p>
           </div>
         )}
 
@@ -269,7 +273,7 @@ export function AssistantHome() {
           </div>
         )}
 
-        {/* Live transcript bubble while voice is recording */}
+        {/* Live transcript while recording */}
         {pendingTranscript && (
           <div className="flex justify-end mt-2 opacity-70">
             <div className="max-w-[85%] px-3.5 py-2.5 rounded-2xl rounded-br-sm bg-[var(--navy)]/60 text-white text-sm">
@@ -299,14 +303,14 @@ export function AssistantHome() {
         <div ref={messagesEndRef} />
       </main>
 
-      {/* Budget banner — always above quick action row when active */}
+      {/* Budget banner */}
       {(thread.monthly_cost_so_far / thread.monthly_cost_cap >= 0.8 || thread.blocked) && (
         <div
           className={cn(
             'fixed left-0 right-0 px-3 py-2 text-xs z-30',
             thread.blocked ? 'bg-red-50 text-red-700 border-t border-red-200' : 'bg-amber-50 text-amber-800 border-t border-amber-200',
           )}
-          style={{ bottom: 64 + 64 + 64 + 8 }} // above quick + input + nav
+          style={{ bottom: NAV_H + INPUT_H + QUICK_H + 8 }}
         >
           {thread.blocked
             ? `AI budget reached ($${thread.monthly_cost_cap.toFixed(2)}). Tap buttons still work.`
@@ -317,10 +321,10 @@ export function AssistantHome() {
       {/* Quick action row — fixed above input bar, above bottom nav */}
       <div
         className="fixed left-0 right-0 px-3 py-2 flex gap-2 overflow-x-auto bg-white border-t border-[var(--border-light)] z-30"
-        style={{ bottom: 64 + 64 }} // 64 (input bar) + 64 (nav)
+        style={{ bottom: NAV_H + INPUT_H }}
       >
         <QuickButton
-          icon={isClockedIn ? ClockIcon : ClockIcon}
+          icon={ClockIcon}
           label={isClockedIn ? 'Clock out' : 'Clock in'}
           onClick={() => fireQuickAction(isClockedIn ? 'clock_out' : 'clock_in')}
           disabled={thread.isSending}
@@ -330,10 +334,12 @@ export function AssistantHome() {
         <QuickButton icon={MoreHorizontal} label="More" onClick={() => fireQuickAction('more')} />
       </div>
 
-      {/* Input bar — fixed above bottom nav */}
+      {/* Input bar — fixed above bottom nav. Mic button is sized larger so
+          it reads as the primary action (matches the design intent of a
+          voice-first field tool). */}
       <div
         className="fixed left-0 right-0 px-3 py-2 flex items-center gap-2 bg-white border-t border-[var(--border-light)] z-30"
-        style={{ bottom: 64 }} // above the 64px nav
+        style={{ bottom: NAV_H }}
       >
         <button
           onClick={() => fileInputRef.current?.click()}
@@ -352,7 +358,8 @@ export function AssistantHome() {
           disabled={thread.isSending || thread.blocked}
           className="flex-1 px-3.5 py-2 rounded-full border border-[var(--border)] bg-[var(--bg)] text-sm focus:outline-none focus:border-[var(--navy)] min-h-[40px]"
         />
-        <VoiceButton onTranscript={onTranscript} onFinal={onFinal} className="shrink-0" />
+        {/* Voice — visually larger to read as the primary action. */}
+        <VoiceButton onTranscript={onTranscript} onFinal={onFinal} className="shrink-0 scale-110" />
         <button
           onClick={onSubmit}
           disabled={!input.trim() || thread.isSending || thread.blocked}
