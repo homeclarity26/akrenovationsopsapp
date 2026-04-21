@@ -81,6 +81,8 @@ const FieldOnboarding = lazy(() => import('./pages/onboarding/FieldOnboarding').
 
 // Employee pages
 const EmployeeHome = lazy(() => import('./pages/employee/EmployeeHome').then(m => ({ default: m.EmployeeHome })))
+const EmployeeHomeRouter = lazy(() => import('./pages/employee/EmployeeHomeRouter').then(m => ({ default: m.EmployeeHomeRouter })))
+const QuickActionLanding = lazy(() => import('./pages/employee/QuickActionLanding').then(m => ({ default: m.QuickActionLanding })))
 const TimeClockPage = lazy(() => import('./pages/employee/TimeClockPage').then(m => ({ default: m.TimeClockPage })))
 const ShoppingListPage = lazy(() => import('./pages/employee/ShoppingListPage').then(m => ({ default: m.ShoppingListPage })))
 const SchedulePageEmployee = lazy(() => import('./pages/employee/SchedulePageEmployee').then(m => ({ default: m.SchedulePageEmployee })))
@@ -332,7 +334,13 @@ function AppRoutes() {
 
         {/* Employee */}
         <Route path="/employee" element={<ProtectedRoute role="employee"><EmployeeLayout /></ProtectedRoute>}>
-          <Route index element={<EmployeeHome />} />
+          {/* Index uses EmployeeHomeRouter — picks AssistantHome (chat-first)
+              when ai_v2_enabled=true, else the legacy EmployeeHome tile grid. */}
+          <Route index element={<EmployeeHomeRouter />} />
+          {/* Power-user / fallback tile grid always available at /employee/tools */}
+          <Route path="tools" element={<EmployeeHome />} />
+          {/* iOS Shortcut deep-link landings — see QuickActionLanding doc for setup. */}
+          <Route path="quick/:action" element={<QuickActionLanding />} />
           <Route path="time" element={<TimeClockPage />} />
           <Route path="shopping" element={<ShoppingListPage />} />
           <Route path="schedule" element={<SchedulePageEmployee />} />
