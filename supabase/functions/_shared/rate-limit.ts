@@ -36,6 +36,11 @@ export const RATE_LIMITS: Record<string, { maxRequests: number; windowSeconds: n
   'agent-improvement-analysis':      { maxRequests: 5,   windowSeconds: 86400 },
   'meta-agent-chat':                 { maxRequests: 100, windowSeconds: 3600 },
   'meta-agent-orchestration':        { maxRequests: 5,   windowSeconds: 86400 },
+  // AI v2 chat-first assistant — the user-facing chat. Generous because every
+  // tap on the input fires a request, and tool-use roundtrips add internal
+  // re-calls. The $75/mo budget gate enforces real cost separately.
+  'agent-tool-call':                 { maxRequests: 500, windowSeconds: 3600 },
+  'agent-suggestions':               { maxRequests: 200, windowSeconds: 3600 },
   'generate-improvement-spec':       { maxRequests: 10,  windowSeconds: 3600 },
   'generate-estimate':               { maxRequests: 20,  windowSeconds: 3600 },
   'extract-preferences':             { maxRequests: 100, windowSeconds: 3600 },
